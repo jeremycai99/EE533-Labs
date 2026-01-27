@@ -1,8 +1,3 @@
-// matrix_naive_cuda.cu
-// Minimal naive CUDA matmul + kernel timing (ms) similar to CPU-style reporting.
-// Compile: nvcc -O2 matrix_naive_cuda.cu -o matrix_naive_cuda.exe
-// Run:     matrix_naive_cuda.exe 1024
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <cuda_runtime.h>
@@ -106,4 +101,5 @@ int main(int argc, char** argv) {
     free(hC);
 
     return 0;
+
 }
