@@ -1,8 +1,3 @@
-// matrix_cublas_sgemm.cu
-// Minimal cuBLAS SGEMM (float) + kernel timing (ms)
-// Compile: nvcc -O2 matrix_cublas_sgemm.cu -o matrix_cublas_sgemm.exe -lcublas
-// Run:     matrix_cublas_sgemm.exe 1024
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <cuda_runtime.h>
@@ -112,4 +107,5 @@ int main(int argc, char** argv) {
     free(hC);
 
     return 0;
+
 }
