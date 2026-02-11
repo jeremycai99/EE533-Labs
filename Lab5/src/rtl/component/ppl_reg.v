@@ -13,6 +13,7 @@
 module ppl_reg #(parameter NUM_REG = 32)(
     input wire clk, // Clock signal
     input wire rst_n, // Active low reset signal
+    input wire en, // Enable signal for updating the register
     input wire [NUM_REG-1:0] D, // Data input
     output reg [NUM_REG-1:0] Q // Data output
 );
@@ -20,7 +21,7 @@ module ppl_reg #(parameter NUM_REG = 32)(
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         Q <= 0; // Reset the register output to 0
-    end else begin
+    end else if (en) begin
         Q <= D; // Update the register output with the input data
     end
 end

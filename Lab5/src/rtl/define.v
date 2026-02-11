@@ -9,6 +9,9 @@
 `define DATA_WIDTH 64 //Maximum 64 due to KSA design
 `define ALU_OP_WIDTH 4
 
+//Instruction width definition
+`define INSTR_WIDTH 32
+
 //ALU operation codes (4 bits)
 //Support list: ADD SUB AND OR XNOR CMP LSL LSR SBCMP LSTC RSTC
 `define ALU_OP_ADD 4'b0000
@@ -27,5 +30,8 @@
 //Register file parameters
 `define REG_ADDR_WIDTH 5 //5 bits for 32 registers
 `define REG_DATA_WIDTH 64 //64-bit registers
+
+//Program counter parameters
+`define PC_WIDTH 9 //9-bit program counter
 
 
