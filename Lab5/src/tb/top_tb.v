@@ -17,6 +17,15 @@ initial begin
     clk = 0;
     forever #5 clk = ~clk; // Toggle clock every 5ns
 end
+
+//Initialize registers
+integer i;
+initial begin
+    for (i = 0; i < 32; i = i + 1) begin
+        u_top.u_cpu.u_regfile.regfile[i] = 64'd0;
+    end
+end
+
 // Reset generation: Assert reset for the first 20ns
 initial begin
     rst_n = 0; // Assert reset (active low)
