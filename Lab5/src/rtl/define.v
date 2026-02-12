@@ -12,6 +12,9 @@
 //Instruction width definition
 `define INSTR_WIDTH 32
 
+//Data memory parameters
+`define DMEM_ADDR_WIDTH 9 //9 bits for 512 words of data memory
+
 //ALU operation codes (4 bits)
 //Support list: ADD SUB AND OR XNOR CMP LSL LSR SBCMP LSTC RSTC
 `define ALU_OP_ADD 4'b0000
