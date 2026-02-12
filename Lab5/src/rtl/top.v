@@ -32,11 +32,11 @@ cpu u_cpu (
 );
 
 i_mem u_i_mem (
-    .clka(clk),
-    .dina(), // No writes to instruction memory
-    .addra(i_mem_addr_o), // Address from CPU
-    .wea(1'b0), // Should always be 0 for instruction memory
-    .douta(i_mem_data_i)
+    .clk(clk),
+    .din(), // No writes to instruction memory
+    .addr(i_mem_addr_o), // Address from CPU
+    .we(1'b0), // Should always be 0 for instruction memory
+    .dout(i_mem_data_i)
 );
 
 
