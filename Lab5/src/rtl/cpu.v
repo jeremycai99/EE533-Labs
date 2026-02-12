@@ -22,7 +22,7 @@ module cpu (
 
     // Data memory interface
     input wire [`DATA_WIDTH-1:0] d_mem_data_i, // Data memory data input (from d_mem)
-    output wire [`DATA_WIDTH-1:0] d_mem_addr_o, // Data memory address output (to d_mem)
+    output wire [`DMEM_ADDR_WIDTH-1:0] d_mem_addr_o, // Data memory address output (to d_mem)
     output wire [`DATA_WIDTH-1:0] d_mem_data_o, // Data memory data output (to d_mem)
     output wire d_mem_wen_o // Data memory write enable output (to d_mem)
 );

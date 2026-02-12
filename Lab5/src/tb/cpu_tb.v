@@ -16,7 +16,7 @@ module cpu_tb;
     wire [`INSTR_WIDTH-1:0] i_mem_addr_o;
 
     reg [`DATA_WIDTH-1:0] d_mem_data_i;
-    wire [`DATA_WIDTH-1:0] d_mem_addr_o;
+    wire [`DMEM_ADDR_WIDTH-1:0] d_mem_addr_o;
     wire [`DATA_WIDTH-1:0] d_mem_data_o;
     wire d_mem_wen_o;
 
