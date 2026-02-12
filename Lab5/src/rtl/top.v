@@ -12,7 +12,6 @@ module top (
     input wire rst_n
 );
 
-wire i_mem_wea;
 wire [`PC_WIDTH-1:0] i_mem_addr_o;
 wire [`INSTR_WIDTH-1:0] i_mem_data_i;
 
@@ -24,20 +23,19 @@ wire [`DATA_WIDTH-1:0] d_mem_data_o;
 cpu u_cpu (
     .clk(clk),
     .rst_n(rst_n),
-    .i_mem_wea(i_mem_wea),
-    .i_mem_addr_o(i_mem_addr_o),
     .i_mem_data_i(i_mem_data_i),
-    .d_mem_wea(d_mem_wea),
+    .i_mem_addr_o(i_mem_addr_o),
     .d_mem_addr_o(d_mem_addr_o),
     .d_mem_data_i(d_mem_data_i),
-    .d_mem_data_o(d_mem_data_o)
+    .d_mem_data_o(d_mem_data_o),
+    .d_mem_wen_o(d_mem_wen_o)
 );
 
 i_mem u_i_mem (
     .clka(clk),
-    .dina(`PC_WIDTH'b0), // No writes to instruction memory
+    .dina(), // No writes to instruction memory
     .addra(i_mem_addr_o), // Address from CPU
-    .wea(i_mem_wea), // Should always be 0 for instruction memory
+    .wea(1'b0), // Should always be 0 for instruction memory
     .douta(i_mem_data_i)
 );
 
