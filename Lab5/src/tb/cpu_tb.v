@@ -13,7 +13,7 @@ module cpu_tb;
     always #(CLK_PERIOD/2) clk = ~clk; // Generate clock signal
 
     reg [`INSTR_WIDTH-1:0] i_mem_data_i;
-    wire [`INSTR_WIDTH-1:0] i_mem_addr_o;
+    wire [`PC_WIDTH-1:0] i_mem_addr_o;
 
     reg [`DATA_WIDTH-1:0] d_mem_data_i;
     wire [`DMEM_ADDR_WIDTH-1:0] d_mem_addr_o;
