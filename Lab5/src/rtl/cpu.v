@@ -18,7 +18,7 @@ module cpu (
     input wire rst_n,
     // Instruction memory interface
     input wire [`INSTR_WIDTH-1:0] i_mem_data_i, // Instruction memory data input (from i_mem)
-    output wire [`INSTR_WIDTH-1:0] i_mem_addr_o, // Instruction memory address output (to i_mem)
+    output wire [`PC_WIDTH-1:0] i_mem_addr_o, // Instruction memory address output (to i_mem)
 
     // Data memory interface
     input wire [`DATA_WIDTH-1:0] d_mem_data_i, // Data memory data input (from d_mem)
