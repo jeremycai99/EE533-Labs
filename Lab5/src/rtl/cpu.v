@@ -9,6 +9,9 @@
 `define CPU_V
 
 `include "define.v"
+`include "pc.v"
+`include "ppl_reg.v"
+`include "regfile.v"
 
 module cpu (
     input wire clk,
@@ -121,9 +124,9 @@ regfile u_regfile (
     .r1addr(r1addr_id),
     .waddr(reg_write_addr),
     .wdata(reg_write_data),
-    .wr_en(reg_write_en),
-    .r0_out(r0_out_id),
-    .r1_out(r1_out_id)
+    .wena(reg_write_en),
+    .r0data(r0_out_id),
+    .r1data(r1_out_id)
 );
 
 //ID/EX pipeline register to pass control and data signals from ID stage to EX stage

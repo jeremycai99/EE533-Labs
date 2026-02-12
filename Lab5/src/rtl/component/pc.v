@@ -25,7 +25,7 @@ always @(posedge clk or negedge rst_n) begin
     end else if (en) begin
         pc_out <= pc_out + 1; // Increment PC by 1 each cycle if enabled
     end
-
+end
 
 endmodule
 
