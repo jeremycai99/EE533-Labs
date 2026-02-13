@@ -2,19 +2,6 @@
  * Description: SoC MMIO testbench
  *   Phase A — Write i_mem.coe / d_mem.coe via MMIO, run CPU, verify d_mem
  *   Phase B — Random read/write correctness tests for IMEM & DMEM
- *
- * KEY DESIGN NOTE — cpu_rst_n fix
- *   The current SoC has:  wire cpu_rst_n = rst_n & cpu_rst_n;
- *   This means the CPU free-runs from PC=0 the moment rst_n deasserts,
- *   even before the host has finished loading memory.
- *
- *   Workaround used here:
- *     1. Load IMEM/DMEM via MMIO  (CPU is running NOPs harmlessly)
- *     2. Re-assert SoC reset      (BRAM contents survive)
- *     3. Deassert reset → CPU restarts from PC = 0
- *     4. Immediately issue CTRL write to set cpu_active = 1
- *        (the store at IMEM[5] reaches the MEM stage ≈ cycle 20,
- *         well after cpu_active gates open at ≈ cycle 19)
  */
 
 `timescale 1ns / 1ps
