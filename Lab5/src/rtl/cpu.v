@@ -92,6 +92,8 @@ assign i_mem_addr_o = pc_if;
 assign instr_if = i_mem_data_i;
 
 /* IF/ID pipeline register */
+// create an extra pipeline delay because of the sync-read from instruction memory
+// Will dive deep in next lab with full core design.
 ppl_reg #(.NUM_REG(`INSTR_WIDTH)) if_id_reg (
     .clk(clk),
     .rst_n(rst_n),
@@ -160,7 +162,6 @@ ppl_reg #(.NUM_REG(1+`REG_ADDR_WIDTH)) mem_wb_reg (
 );
 
 /* WB STAGE */
-// SYNC READ FIX:
 // Connect d_mem_data_i directly to register write data.
 // The data requested in MEM stage is available now.
 assign reg_write_data = d_mem_data_i;
