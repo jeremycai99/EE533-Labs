@@ -13,9 +13,12 @@
 // CPU and test memory modules
 // Remove from soc.v when synthesis
 // ---------------------------
-`include "test_i_mem.v"
-`include "test_d_mem.v"
+// `include "test_i_mem.v"
+// `include "test_d_mem.v"
 // ---------------------------
+
+`include "i_mem.v"
+`include "d_mem.v"
 
 `include "cpu.v"
 
