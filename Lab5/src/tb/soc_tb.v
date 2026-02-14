@@ -1,7 +1,9 @@
 /* file: soc_tb.v
  * Description: SoC MMIO testbench
- *   Phase A — Write i_mem.coe / d_mem.coe via MMIO, run CPU, verify d_mem
+ *   Phase A — Write i_mem.coe / d_mem.coe via MMIO, run CPU (MMIO Start), verify d_mem
  *   Phase B — Random read/write correctness tests for IMEM & DMEM
+ *   Phase C — Run CPU via External Start Pin
+ *   Phase D — Verify Merged ILA/Debug Interface
  */
 
 `timescale 1ns / 1ps
@@ -16,6 +18,8 @@ module soc_tb;
     // ================================================================
     reg clk;
     reg rst_n;
+    reg start; // External Start Signal
+
     initial clk = 0;
     always #5 clk = ~clk;                       // 100 MHz, 10 ns period
 
@@ -35,10 +39,13 @@ module soc_tb;
     reg                          resp_rdy;
 
     // ================================================================
-    //  ILA Interface Signals
+    //  ILA Interface Signals (Updated)
     // ================================================================
-    reg  [`REG_ADDR_WIDTH-1:0]  ila_cpu_reg_addr; // Address for registers
-    wire [`REG_DATA_WIDTH-1:0]  ila_cpu_reg_data; // Data from register file
+    // ila_cpu_reg_addr/data removed. 
+    // ila_debug_sel expanded to 5 bits to handle muxing.
+    
+    reg  [4:0]                  ila_debug_sel;
+    wire [`DATA_WIDTH-1:0]      ila_debug_data;
 
     // ================================================================
     //  DUT
@@ -46,6 +53,7 @@ module soc_tb;
     soc u_soc (
         .clk          (clk),
         .rst_n        (rst_n),
+        .start        (start),
         .req_cmd      (req_cmd),
         .req_addr     (req_addr),
         .req_data     (req_data),
@@ -56,9 +64,9 @@ module soc_tb;
         .resp_data    (resp_data),
         .resp_val     (resp_val),
         .resp_rdy     (resp_rdy),
-        // ILA Ports
-        .ila_cpu_reg_addr (ila_cpu_reg_addr),
-        .ila_cpu_reg_data (ila_cpu_reg_data)
+        // Updated ILA Ports
+        .ila_debug_sel    (ila_debug_sel),
+        .ila_debug_data   (ila_debug_data)
     );
 
     // ================================================================
@@ -75,34 +83,20 @@ module soc_tb;
     localparam CPU_TIMEOUT  = 1000;              // cycles before forced reset
 
     // ================================================================
-    //  COE File Contents (hard-coded from the .coe files)
+    //  COE File Contents
     // ================================================================
-    //
-    //  i_mem.coe  (8 × INSTR_WIDTH)
-    //  ┌──────┬────────────┬──────────────────────────────────────────┐
-    //  │ Addr │  Hex       │  Meaning                                 │
-    //  ├──────┼────────────┼──────────────────────────────────────────┤
-    //  │  0   │ 40400000   │  Load  d_mem[R0] → R2                    │
-    //  │  1   │ 40600000   │  Load  d_mem[R0] → R3                    │
-    //  │  2   │ 00000000   │  NOP                                     │
-    //  │  3   │ 00000000   │  NOP   (R2 = 4 available)                │
-    //  │  4   │ 00000000   │  NOP   (R3 = 4 available)                │
-    //  │  5   │ 93000000   │  Store R2 → d_mem[R3]  ⇒ d_mem[4] = 4   │
-    //  │  6   │ 00000000   │  NOP                                     │
-    //  │  7   │ 00000000   │  NOP                                     │
-    //  └──────┴────────────┴──────────────────────────────────────────┘
-    //
-    //  d_mem.coe  (10 × DATA_WIDTH)
-    //    [0]=4  [4]=100(0x64)  rest=0
-    //
-    //  After CPU:  d_mem[0]=4 (unchanged),  d_mem[4]=4 (was 100)
+    //  i_mem.coe logic:
+    //  Load d_mem[0] (4) -> R2
+    //  Load d_mem[0] (4) -> R3
+    //  Store R2 (4) -> d_mem[R3] (d_mem[4])
+    //  Result: d_mem[4] becomes 4.
 
     reg [`MMIO_DATA_WIDTH-1:0] imem_coe      [0:NUM_IMEM_COE-1];
     reg [`MMIO_DATA_WIDTH-1:0] dmem_coe      [0:NUM_DMEM_COE-1];
     reg [`MMIO_DATA_WIDTH-1:0] dmem_post_cpu [0:NUM_DMEM_COE-1];
 
     // ================================================================
-    //  Reference Model (Phase B — random tests)
+    //  Reference Model (Phase B)
     // ================================================================
     reg [`MMIO_DATA_WIDTH-1:0] imem_ref   [0:ADDR_RANGE-1];
     reg                        imem_valid [0:ADDR_RANGE-1];
@@ -121,10 +115,10 @@ module soc_tb;
     reg [`MMIO_DATA_WIDTH-1:0]  twdata;
     reg [7:0]                   toff;
     
-    reg [`REG_DATA_WIDTH-1:0]   ila_expected; // Variable for ILA checking
+    reg [`DATA_WIDTH-1:0]       ila_expected; 
 
     // ================================================================
-    //  MMIO Transaction Task  (~5 clk cycles per call)
+    //  MMIO Transaction Task
     // ================================================================
     task mmio_txn;
         input                          cmd;
@@ -163,30 +157,31 @@ module soc_tb;
     endtask
 
     // ================================================================
-    //  Checker  (=== catches X/Z mismatches)
+    //  Checker
     // ================================================================
     task check;
         input [`MMIO_DATA_WIDTH-1:0]  expected;
         input [`MMIO_DATA_WIDTH-1:0]  actual;
-        input [`MMIO_ADDR_WIDTH-1:0]  addr;
+        input [`MMIO_ADDR_WIDTH-1:0]  addr; // Used as ID/Tag
         input [255:0]                 tag;
         begin
             if (expected === actual)
                 pass_cnt = pass_cnt + 1;
             else begin
                 fail_cnt = fail_cnt + 1;
-                $display("  [FAIL] %0s @ 0x%08h  exp=0x%016h  got=0x%016h",
+                $display("  [FAIL] %0s @ ID 0x%0h  exp=0x%016h  got=0x%016h",
                          tag, addr, expected, actual);
             end
         end
     endtask
 
     // ================================================================
-    //  Reset Helper  (10 clk low + 5 clk settle)
+    //  Reset Helper
     // ================================================================
     task do_reset;
         begin
             rst_n    = 1'b0;
+            start    = 1'b0; 
             req_val  = 1'b0;
             resp_rdy = 1'b0;
             repeat (10) @(posedge clk);
@@ -199,10 +194,9 @@ module soc_tb;
     //  Main Stimulus
     // ================================================================
 
-    //Initialize the register file to 0 to solve X propagation issues
+    // Initialize the register file internals to 0 to prevent X propagation during ILA checks
     integer k;
     initial begin
-        // Wait a small amount to ensure hierarchy is built before poking internals
         #1; 
         for (k = 0; k < 32; k = k + 1)
             u_soc.u_cpu.u_regfile.regfile[k] = 64'd0;
@@ -215,7 +209,8 @@ module soc_tb;
         // ── Initialise ──────────────────────────────────
         rst_n = 0; req_cmd = 0; req_addr = 0; req_data = 0;
         req_val = 0; resp_rdy = 0;
-        ila_cpu_reg_addr = 0; // Init ILA address
+        start = 0; 
+        ila_debug_sel = 0;    
         pass_cnt = 0; fail_cnt = 0; seed = 42;
 
         // i_mem.coe
@@ -256,14 +251,14 @@ module soc_tb;
 
         $display("");
         $display("======================================================");
-        $display("  SoC MMIO Testbench — COE + CPU + ILA + Random");
+        $display("  SoC MMIO Testbench — COE + CPU + Merged ILA + Random");
         $display("======================================================");
 
         // ═══════════════════════════════════════════════════
-        //  PHASE A — Load COE → Run CPU → Verify d_mem
+        //  PHASE A — Load COE → Run CPU (MMIO) → Verify d_mem
         // ═══════════════════════════════════════════════════
         $display("\n──────────────────────────────────────────────────");
-        $display("  PHASE A: COE load → CPU execution → verify");
+        $display("  PHASE A: COE load → CPU execution (MMIO Start) → verify");
         $display("──────────────────────────────────────────────────");
 
         // ── A1: Write IMEM from i_mem.coe ───────────────
@@ -295,21 +290,14 @@ module soc_tb;
         end
 
         // ── A5: Re-reset SoC ───────────────────────────
-        //  BRAM contents survive.  CPU PC restarts at 0.
         $display("[A5] Re-reset SoC (BRAM preserved, CPU PC → 0) ...");
         do_reset();
 
         // ── A6: Start CPU via CTRL write ────────────────
-        //  After do_reset the CPU is already fetching from
-        //  IMEM[0].  The CTRL write sets cpu_active=1 so the
-        //  store instruction's d_mem write is not gated.
         $display("[A6] Starting CPU (CTRL write) ...");
         mmio_wr(CTRL_BASE, 1);
 
         // ── A7: Wait for CPU completion ─────────────────
-        //  req_rdy re-asserts once cpu_active falls back to 0.
-        //  If cpu_done is not implemented, we force-reset after
-        //  the timeout — the store has long since committed.
         $display("[A7] Waiting for CPU (timeout = %0d cycles) ...", CPU_TIMEOUT);
         cycle_cnt = 0;
         @(posedge clk); #1;
@@ -360,15 +348,14 @@ module soc_tb;
                   rd_data, taddr, "IMEM_UNCH");
         end
 
-        // ── A11: Verify ILA (Register File Observation) ──
+        // ── A11: Verify Merged ILA Interface ────────────
         //  The CPU has just finished. 
-        //  Program logic executed: 
-        //    R0 = 0 (Always)
-        //    R2 = d_mem[0] = 4
-        //    R3 = d_mem[0] = 4
-        //    Others = 0 (Initialized to 0, untouched)
-        $display("[A11] Verifying ILA (Register File Observation) - Checking registers ...");
+        //  Expected State: R2 = 4, R3 = 4, others = 0.
+        $display("\n[A11] Verifying Merged ILA Interface ...");
         
+        // 1. Check Register File Access (Bit 4 = 1)
+        //    Selector = 10000 (16) + RegAddr
+        $display("  >> Checking Register File (Selector Bit 4 = 1)");
         for (i = 0; i < 5; i = i + 1) begin
             // Define expected value
             if (i == 2 || i == 3)
@@ -376,14 +363,43 @@ module soc_tb;
             else
                 ila_expected = 64'd0;
 
-            // Drive Address
-            ila_cpu_reg_addr = i;
+            // Drive Selector: 16 + i
+            ila_debug_sel = 16 + i;
             @(posedge clk); #1; // Sync wait
 
             // Print and Check
-            $display("  ILA Read R[%02d] = 0x%016h  | Expected = 0x%016h", i, ila_cpu_reg_data, ila_expected);
-            check(ila_expected, ila_cpu_reg_data, i, "ILA_REG_CHECK");
+            $display("  ILA Sel[%0d] (Reg[%0d]) = 0x%016h | Exp = 0x%016h", 
+                     ila_debug_sel, i, ila_debug_data, ila_expected);
+            check(ila_expected, ila_debug_data, i, "ILA_REG_MUX");
         end
+        
+        // 2. Check System Debug Probes (Bit 4 = 0)
+        $display("  >> Checking System Debug Probes (Selector Bit 4 = 0)");
+        
+        // Check PC (Sel 0)
+        ila_debug_sel = 5'd0; @(posedge clk); #1;
+        $display("  ILA Sel[0] (PC)         = 0x%016h", ila_debug_data);
+
+        // Check Instruction (Sel 1)
+        ila_debug_sel = 5'd1; @(posedge clk); #1;
+        $display("  ILA Sel[1] (Instr)      = 0x%016h", ila_debug_data);
+        
+        // Check Reg Read Data 1 (Sel 2)
+        ila_debug_sel = 5'd2; @(posedge clk); #1;
+        $display("  ILA Sel[2] (RegRead1)   = 0x%016h", ila_debug_data);
+
+        // Check Control Signals (Sel 7)
+        ila_debug_sel = 5'd7; @(posedge clk); #1;
+        $display("  ILA Sel[7] (Controls)   = 0x%016h", ila_debug_data);
+        
+        // Simple assertion: Ensure we don't get X on the bus
+        if (^ila_debug_data === 1'bx) begin
+             $display("  [FAIL] Debug Bus contains X values!");
+             fail_cnt = fail_cnt + 1;
+        end else begin
+             pass_cnt = pass_cnt + 1;
+        end
+
 
         // ═══════════════════════════════════════════════════
         //  PHASE B — Random Read/Write Tests
@@ -534,6 +550,73 @@ module soc_tb;
         check(twdata & {`DATA_WIDTH{1'b1}}, rd_data, taddr, "DMEM_RAR1");
         mmio_rd(taddr, rd_data);
         check(twdata & {`DATA_WIDTH{1'b1}}, rd_data, taddr, "DMEM_RAR2");
+
+        // ═══════════════════════════════════════════════════
+        //  PHASE C — External Start Pin Test
+        // ═══════════════════════════════════════════════════
+        $display("\n──────────────────────────────────────────────────");
+        $display("  PHASE C: External Start Pin Test");
+        $display("──────────────────────────────────────────────────");
+
+        // ── C1: Reset and Reload ───────────────────────
+        $display("[C1] Resetting SoC and Reloading Memory...");
+        do_reset();
+        
+        // Reload IMEM
+        for (i = 0; i < NUM_IMEM_COE; i = i + 1)
+            mmio_wr(IMEM_BASE | i, imem_coe[i]);
+        // Reload DMEM (original values)
+        for (i = 0; i < NUM_DMEM_COE; i = i + 1)
+            mmio_wr(DMEM_BASE | i, dmem_coe[i]);
+
+        // ── C2: Assert External Start ──────────────────
+        $display("[C2] Asserting External Start Pin (High)...");
+        @(posedge clk); 
+        start = 1'b1;
+        #1;
+
+        // Verify req_rdy goes low immediately (system busy)
+        if (req_rdy == 0) 
+            $display("  [PASS] req_rdy is LOW (System Busy as expected)");
+        else begin
+            $display("  [FAIL] req_rdy is HIGH (System should be Busy)");
+            fail_cnt = fail_cnt + 1;
+        end
+
+        // ── C3: Wait for Execution ─────────────────────
+        $display("[C3] Waiting for CPU execution (Start Pin held High)...");
+        repeat (100) @(posedge clk); // Wait arbitrary time for small program
+
+        // ── C4: De-assert Start ────────────────────────
+        $display("[C4] De-asserting Start Pin...");
+        start = 1'b0;
+        @(posedge clk); #1;
+
+        // Wait for req_rdy to return high (CPU should be done by now)
+        cycle_cnt = 0;
+        while (!req_rdy && (cycle_cnt < 100)) begin
+            @(posedge clk); #1;
+            cycle_cnt = cycle_cnt + 1;
+        end
+        
+        if (req_rdy) 
+            $display("  [PASS] req_rdy returned HIGH (System Idle)");
+        else begin
+            $display("  [FAIL] req_rdy remained LOW (System Stuck)");
+            fail_cnt = fail_cnt + 1;
+        end
+
+        // ── C5: Verify Results ─────────────────────────
+        $display("[C5] Verifying Results (DMEM[4] should be 4)...");
+        mmio_rd(DMEM_BASE | 32'd4, rd_data);
+        if (rd_data === (dmem_post_cpu[4] & {`DATA_WIDTH{1'b1}})) begin
+             $display("  [PASS] Data Match: d_mem[4] = %0d", rd_data);
+             pass_cnt = pass_cnt + 1;
+        end else begin
+             $display("  [FAIL] Data Mismatch: d_mem[4] = %0d (Expected %0d)", rd_data, dmem_post_cpu[4]);
+             fail_cnt = fail_cnt + 1;
+        end
+
 
         // ═══════════════════════════════════════════════════
         //  Summary

@@ -1,0 +1,289 @@
+$date
+	Sat Feb 14 11:01:41 2026
+$end
+$version
+	Icarus Verilog
+$end
+$timescale
+	1ps
+$end
+$scope module soc_driver_tb $end
+$var wire 1 ! user_ready $end
+$var wire 64 " user_rdata [63:0] $end
+$var wire 32 # status [31:0] $end
+$var wire 1 $ soc_resp_rdy $end
+$var wire 1 % soc_req_val $end
+$var wire 64 & soc_req_data [63:0] $end
+$var wire 1 ' soc_req_cmd $end
+$var wire 32 ( soc_req_addr [31:0] $end
+$var parameter 32 ) CLK_PERIOD $end
+$var reg 1 * clk $end
+$var reg 1 + rst_n $end
+$var reg 1 , soc_req_rdy $end
+$var reg 32 - soc_resp_addr [31:0] $end
+$var reg 1 . soc_resp_cmd $end
+$var reg 64 / soc_resp_data [63:0] $end
+$var reg 1 0 soc_resp_val $end
+$var reg 1 1 start $end
+$var reg 32 2 user_addr [31:0] $end
+$var reg 1 3 user_cmd $end
+$var reg 1 4 user_valid $end
+$var reg 64 5 user_wdata [63:0] $end
+$scope module u_dut $end
+$var wire 1 * clk $end
+$var wire 1 6 fifo_wr_en $end
+$var wire 1 + rst_n $end
+$var wire 1 , soc_req_rdy $end
+$var wire 32 7 soc_resp_addr [31:0] $end
+$var wire 1 . soc_resp_cmd $end
+$var wire 64 8 soc_resp_data [63:0] $end
+$var wire 1 0 soc_resp_val $end
+$var wire 1 1 start $end
+$var wire 32 9 user_addr [31:0] $end
+$var wire 1 3 user_cmd $end
+$var wire 1 4 user_valid $end
+$var wire 64 : user_wdata [63:0] $end
+$var wire 1 ! user_ready $end
+$var wire 1 ; fifo_full $end
+$var wire 1 < fifo_empty $end
+$var wire 97 = fifo_dout [96:0] $end
+$var wire 97 > fifo_din [96:0] $end
+$var wire 64 ? current_data [63:0] $end
+$var wire 1 @ current_cmd $end
+$var wire 32 A current_addr [31:0] $end
+$var parameter 32 B FIFO_DEPTH $end
+$var parameter 34 C FIFO_WIDTH $end
+$var parameter 2 D STATE_CHECK $end
+$var parameter 2 E STATE_IDLE $end
+$var parameter 2 F STATE_SEND_REQ $end
+$var parameter 2 G STATE_WAIT_RESP $end
+$var reg 32 H active_addr [31:0] $end
+$var reg 1 I active_cmd $end
+$var reg 32 J captured_resp_addr [31:0] $end
+$var reg 1 K captured_resp_cmd $end
+$var reg 2 L current_state [1:0] $end
+$var reg 1 M fifo_rd_en $end
+$var reg 2 N next_state [1:0] $end
+$var reg 32 O soc_req_addr [31:0] $end
+$var reg 1 ' soc_req_cmd $end
+$var reg 64 P soc_req_data [63:0] $end
+$var reg 1 % soc_req_val $end
+$var reg 1 $ soc_resp_rdy $end
+$var reg 32 Q status [31:0] $end
+$var reg 64 R user_rdata [63:0] $end
+$scope module u_fifo $end
+$var wire 1 * clk $end
+$var wire 97 S din [96:0] $end
+$var wire 1 M rd_en $end
+$var wire 1 + rst_n $end
+$var wire 1 6 wr_en $end
+$var wire 1 ; full $end
+$var wire 1 < empty $end
+$var parameter 34 T DATA_WIDTH $end
+$var parameter 32 U DEPTH $end
+$var reg 5 V count [4:0] $end
+$var reg 97 W dout [96:0] $end
+$var reg 4 X rd_ptr [3:0] $end
+$var reg 4 Y wr_ptr [3:0] $end
+$upscope $end
+$upscope $end
+$upscope $end
+$enddefinitions $end
+$comment Show the parameter values. $end
+$dumpall
+b10000 U
+b1100001 T
+b10 G
+b1 F
+b0 E
+b11 D
+b1100001 C
+b10000 B
+b1010 )
+$end
+#0
+$dumpvars
+b0 Y
+b0 X
+b0 W
+b0 V
+b0 S
+b0 R
+b0 Q
+b0 P
+b0 O
+b0 N
+0M
+b0 L
+0K
+b0 J
+0I
+b0 H
+b0 A
+0@
+b0 ?
+b0 >
+b0 =
+1<
+0;
+b0 :
+b0 9
+b0 8
+b0 7
+06
+b0 5
+04
+03
+b0 2
+01
+00
+b0 /
+0.
+b0 -
+0,
+0+
+0*
+b0 (
+0'
+b0 &
+0%
+0$
+b0 #
+b0 "
+1!
+$end
+#5000
+1*
+#10000
+0*
+#15000
+1*
+#20000
+0*
+1+
+#25000
+1*
+#30000
+0*
+#35000
+1*
+#40000
+16
+0*
+b1010101111001101101010111100110110101011110011011010101111001101 5
+b1010101111001101101010111100110110101011110011011010101111001101 :
+b1000000000000 2
+b1000000000000 9
+b1000000000000000000010000000000001010101111001101101010111100110110101011110011011010101111001101 >
+b1000000000000000000010000000000001010101111001101101010111100110110101011110011011010101111001101 S
+13
+14
+#45000
+0<
+b1 V
+b1 Y
+06
+04
+1*
+#50000
+0*
+#55000
+1@
+b1000000000000 A
+b1010101111001101101010111100110110101011110011011010101111001101 ?
+b1000000000000000000010000000000001010101111001101101010111100110110101011110011011010101111001101 =
+b1000000000000000000010000000000001010101111001101101010111100110110101011110011011010101111001101 W
+1*
+#60000
+0*
+#65000
+1*
+#70000
+0*
+#75000
+1*
+#80000
+0*
+#85000
+1*
+#90000
+0*
+#95000
+b1000000000000 H
+1I
+b1010101111001101101010111100110110101011110011011010101111001101 &
+b1010101111001101101010111100110110101011110011011010101111001101 P
+b1000000000000 (
+b1000000000000 O
+1'
+1M
+b1 N
+11
+1*
+#100000
+0*
+#105000
+1M
+b1 L
+1<
+b0 V
+b1 X
+1*
+#110000
+0*
+#115000
+1%
+0M
+1*
+#120000
+0*
+#125000
+0%
+b10 N
+1,
+1*
+#130000
+0*
+#135000
+b10 L
+1%
+b10 N
+0,
+1*
+#140000
+0*
+#145000
+1$
+1*
+#150000
+0*
+#155000
+b1000000000000 J
+1K
+1$
+b11 N
+b1000000000000 -
+b1000000000000 7
+1.
+10
+1*
+#160000
+0*
+#165000
+1$
+b11 L
+b0 N
+00
+1*
+#170000
+0*
+#175000
+b0 L
+b10101010101010101010101010101010 #
+b10101010101010101010101010101010 Q
+0$
+1*
+#180000
+0*
+#185000
+1*
