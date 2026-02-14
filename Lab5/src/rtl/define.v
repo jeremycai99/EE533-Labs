@@ -31,7 +31,7 @@
 `define ALU_OP_RSTC 4'b1010
 
 //Register file parameters
-`define REG_ADDR_WIDTH 5 //5 bits for 32 registers
+`define REG_ADDR_WIDTH 3 //3 bits for 8 registers (lab 5)
 `define REG_DATA_WIDTH 64 //64-bit registers
 
 //Program counter parameters

@@ -35,21 +35,30 @@ module soc_tb;
     reg                          resp_rdy;
 
     // ================================================================
+    //  ILA Interface Signals
+    // ================================================================
+    reg  [`REG_ADDR_WIDTH-1:0]  ila_cpu_reg_addr; // Address for registers
+    wire [`REG_DATA_WIDTH-1:0]  ila_cpu_reg_data; // Data from register file
+
+    // ================================================================
     //  DUT
     // ================================================================
     soc u_soc (
-        .clk      (clk),
-        .rst_n    (rst_n),
-        .req_cmd  (req_cmd),
-        .req_addr (req_addr),
-        .req_data (req_data),
-        .req_val  (req_val),
-        .req_rdy  (req_rdy),
-        .resp_cmd (resp_cmd),
-        .resp_addr(resp_addr),
-        .resp_data(resp_data),
-        .resp_val (resp_val),
-        .resp_rdy (resp_rdy)
+        .clk          (clk),
+        .rst_n        (rst_n),
+        .req_cmd      (req_cmd),
+        .req_addr     (req_addr),
+        .req_data     (req_data),
+        .req_val      (req_val),
+        .req_rdy      (req_rdy),
+        .resp_cmd     (resp_cmd),
+        .resp_addr    (resp_addr),
+        .resp_data    (resp_data),
+        .resp_val     (resp_val),
+        .resp_rdy     (resp_rdy),
+        // ILA Ports
+        .ila_cpu_reg_addr (ila_cpu_reg_addr),
+        .ila_cpu_reg_data (ila_cpu_reg_data)
     );
 
     // ================================================================
@@ -111,6 +120,8 @@ module soc_tb;
     reg [`MMIO_ADDR_WIDTH-1:0]  taddr;
     reg [`MMIO_DATA_WIDTH-1:0]  twdata;
     reg [7:0]                   toff;
+    
+    reg [`REG_DATA_WIDTH-1:0]   ila_expected; // Variable for ILA checking
 
     // ================================================================
     //  MMIO Transaction Task  (~5 clk cycles per call)
@@ -191,6 +202,8 @@ module soc_tb;
     //Initialize the register file to 0 to solve X propagation issues
     integer k;
     initial begin
+        // Wait a small amount to ensure hierarchy is built before poking internals
+        #1; 
         for (k = 0; k < 32; k = k + 1)
             u_soc.u_cpu.u_regfile.regfile[k] = 64'd0;
     end
@@ -202,6 +215,7 @@ module soc_tb;
         // ── Initialise ──────────────────────────────────
         rst_n = 0; req_cmd = 0; req_addr = 0; req_data = 0;
         req_val = 0; resp_rdy = 0;
+        ila_cpu_reg_addr = 0; // Init ILA address
         pass_cnt = 0; fail_cnt = 0; seed = 42;
 
         // i_mem.coe
@@ -242,7 +256,7 @@ module soc_tb;
 
         $display("");
         $display("======================================================");
-        $display("  SoC MMIO Testbench — COE + CPU + Random");
+        $display("  SoC MMIO Testbench — COE + CPU + ILA + Random");
         $display("======================================================");
 
         // ═══════════════════════════════════════════════════
@@ -344,6 +358,31 @@ module soc_tb;
             mmio_rd(taddr, rd_data);
             check(imem_coe[i] & {`INSTR_WIDTH{1'b1}},
                   rd_data, taddr, "IMEM_UNCH");
+        end
+
+        // ── A11: Verify ILA (Register File Observation) ──
+        //  The CPU has just finished. 
+        //  Program logic executed: 
+        //    R0 = 0 (Always)
+        //    R2 = d_mem[0] = 4
+        //    R3 = d_mem[0] = 4
+        //    Others = 0 (Initialized to 0, untouched)
+        $display("[A11] Verifying ILA (Register File Observation) - Checking registers ...");
+        
+        for (i = 0; i < 5; i = i + 1) begin
+            // Define expected value
+            if (i == 2 || i == 3)
+                ila_expected = 64'd4;
+            else
+                ila_expected = 64'd0;
+
+            // Drive Address
+            ila_cpu_reg_addr = i;
+            @(posedge clk); #1; // Sync wait
+
+            // Print and Check
+            $display("  ILA Read R[%02d] = 0x%016h  | Expected = 0x%016h", i, ila_cpu_reg_data, ila_expected);
+            check(ila_expected, ila_cpu_reg_data, i, "ILA_REG_CHECK");
         end
 
         // ═══════════════════════════════════════════════════

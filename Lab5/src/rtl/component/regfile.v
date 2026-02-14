@@ -20,7 +20,11 @@ module regfile(
     input [`REG_DATA_WIDTH-1:0] wdata, // Data to write to the register
 
     output reg [`REG_DATA_WIDTH-1:0] r0data, // Data read from source register 1
-    output reg [`REG_DATA_WIDTH-1:0] r1data // Data read from source register 2
+    output reg [`REG_DATA_WIDTH-1:0] r1data, // Data read from source register 2
+    
+    // ILA probe signals for debugging
+    input [`REG_ADDR_WIDTH-1:0] ila_cpu_reg_addr, // ILA probe address input
+    output reg [`REG_DATA_WIDTH-1:0] ila_cpu_reg_data // ILA probe data output
 );
 
 reg [`REG_DATA_WIDTH-1:0] regfile [0:(1<<`REG_ADDR_WIDTH)-1]; // Register file array
@@ -30,6 +34,7 @@ always @(*) begin
     // do not need to qualify with waddr != 0 since Arm doesn't restrict writes to x0
     r0data = regfile[r0addr]; // Register x0 is hardwired to 0
     r1data = regfile[r1addr]; // Register x0 is hardwired to 0
+    ila_cpu_reg_data = regfile[ila_cpu_reg_addr]; // ILA probe data output
 end
 
 // Register write logic: synchronous write on clock edge
