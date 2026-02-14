@@ -40,5 +40,3 @@
 //MMIO interface parameters
 `define MMIO_ADDR_WIDTH 32 //32 bits for MMIO address space
 `define MMIO_DATA_WIDTH 64 //64 bits for MMIO data width
-
-
