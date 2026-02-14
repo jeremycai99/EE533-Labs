@@ -36,7 +36,11 @@ module soc (
     output wire [`MMIO_ADDR_WIDTH-1:0] resp_addr, //Response address, should match the request address
     output wire [`MMIO_DATA_WIDTH-1:0] resp_data, //Will truncate to 32 bits for instruction responses, but that's fine since instructions are 32 bits
     output wire resp_val,
-    input wire resp_rdy
+    input wire resp_rdy,
+
+    //ILA probe signals for debugging
+    input wire [`REG_ADDR_WIDTH-1:0] ila_cpu_reg_addr, // ILA probe address input
+    output wire [`REG_DATA_WIDTH-1:0] ila_cpu_reg_data // ILA probe data output, can be used to observe register file contents for debugging
 );
 
 //  Address Region Decode — req_addr[31:30]
@@ -228,10 +232,12 @@ cpu u_cpu (
     .d_mem_data_i(dmem_douta),
     .d_mem_data_o(cpu_dmem_wdata),
     .d_mem_wen_o(cpu_dmem_wen),
-    .cpu_done(cpu_done) // Connect CPU done signal to top module for control logic
+    .cpu_done(cpu_done), // Connect CPU done signal to top module for control logic
+    .ila_cpu_reg_addr(ila_cpu_reg_addr), // Tie ILA probe address to 0 for now, can be modified for debugging
+    .ila_cpu_reg_data(ila_cpu_reg_data) // Leave ILA probe data unconnected for now, can be connected to a register for debugging if needed
 );
 
-i_mem u_i_mem (
+test_i_mem u_i_mem (
     .clk(clk),
     .din(imem_din_mux), // No writes to instruction memory
     .addr(imem_addr_mux), // Address from CPU
@@ -239,7 +245,7 @@ i_mem u_i_mem (
     .dout(imem_dout)
 );
 
-d_mem u_d_mem (
+test_d_mem u_d_mem (
     .clka(clk),
     .dina(dmem_din_mux), // Data to write to data memory
     .addra(dmem_addr_mux), // Address from CPU or host

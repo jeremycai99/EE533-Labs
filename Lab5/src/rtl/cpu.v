@@ -25,8 +25,11 @@ module cpu (
     output wire [`DMEM_ADDR_WIDTH-1:0] d_mem_addr_o, // Data memory address output (to d_mem)
     output wire [`DATA_WIDTH-1:0] d_mem_data_o, // Data memory data output (to d_mem)
     output wire d_mem_wen_o, // Data memory write enable output (to d_mem)
-    output wire cpu_done
+    output wire cpu_done, // Signal to indicate CPU has completed execution (for testbench control)
 
+    // ILA probe signals for debugging
+    input wire [`REG_ADDR_WIDTH-1:0] ila_cpu_reg_addr, // ILA probe address input
+    output wire [`REG_DATA_WIDTH-1:0] ila_cpu_reg_data // ILA probe data output
 );
 
 assign cpu_done = (pc_if == {`PC_WIDTH{1'b1}});
@@ -123,7 +126,9 @@ regfile u_regfile (
     .wdata(reg_write_data),
     .wena(reg_write_en),
     .r0data(r0_out_id),
-    .r1data(r1_out_id)
+    .r1data(r1_out_id),
+    .ila_cpu_reg_addr(ila_cpu_reg_addr), // Connect ILA probe address input
+    .ila_cpu_reg_data(ila_cpu_reg_data) // Connect ILA probe data output
 );
 
 //ID/EX pipeline register
