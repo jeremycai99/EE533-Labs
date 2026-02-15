@@ -34,19 +34,18 @@ module cpu (
     // [4] = 0: System Debug (Selects via [3:0])
     // [4] = 1: Register File Debug (Address via [2:0])
     input wire [4:0] ila_debug_sel,
-    output reg [`DATA_WIDTH-1:0] ila_debug_data
+    output wire [`DATA_WIDTH-1:0] ila_debug_data
 );
 
-// CPU Done signal: Active when PC reaches max value (all 1s)
-assign cpu_done = (pc_if == {`PC_WIDTH{1'b1}});
-
 // CPU internal signal definitions
-
 // IF stage signals
 wire [`PC_WIDTH-1:0] pc_if;
 wire pc_en;
 
 assign pc_en = 1'b1;
+
+// CPU Done signal: Active when PC reaches max value (all 1s)
+assign cpu_done = (pc_if == {`PC_WIDTH{1'b1}});
 
 // Instruction memory interface signals
 wire [`INSTR_WIDTH-1:0] instr_if;
