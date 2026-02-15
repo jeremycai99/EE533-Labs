@@ -75,6 +75,8 @@ module top (
 
     assign soc_gated_clk = clk & soc_clk_en_latch;
 
+    wire txn_pending;
+
     soc_driver #(
         .TIMEOUT_THRESHOLD(16'd1000)
     ) u_driver (
@@ -92,6 +94,7 @@ module top (
         .conn_status  (conn_status),
         .txn_quality  (txn_quality),
         .txn_counters (txn_counters),
+        .txn_pending   (txn_pending),
         .clear_stats  (clear_stats),
 
         .soc_req_val  (req_val),
@@ -123,7 +126,9 @@ module top (
         .debug_mode     (debug_mode),
         .soc_clk_en     (soc_clk_en),
 
-        .soc_busy       (driver_busy)
+        .soc_busy       (driver_busy),
+
+        .txn_pending    (txn_pending)
     );
 
     soc u_soc (
