@@ -1,0 +1,140 @@
+$date
+	Sat Feb 14 21:08:10 2026
+$end
+$version
+	Icarus Verilog
+$end
+$timescale
+	1ps
+$end
+$scope module regfile_tb $end
+$var wire 64 ! r1data [63:0] $end
+$var wire 64 " r0data [63:0] $end
+$var wire 64 # ila_cpu_reg_data [63:0] $end
+$var reg 1 $ clk $end
+$var reg 3 % ila_cpu_reg_addr [2:0] $end
+$var reg 3 & r0addr [2:0] $end
+$var reg 3 ' r1addr [2:0] $end
+$var reg 3 ( waddr [2:0] $end
+$var reg 64 ) wdata [63:0] $end
+$var reg 1 * wena $end
+$scope module uut $end
+$var wire 1 $ clk $end
+$var wire 3 + ila_cpu_reg_addr [2:0] $end
+$var wire 64 , ila_cpu_reg_data [63:0] $end
+$var wire 3 - r0addr [2:0] $end
+$var wire 64 . r0data [63:0] $end
+$var wire 3 / r1addr [2:0] $end
+$var wire 64 0 r1data [63:0] $end
+$var wire 3 1 waddr [2:0] $end
+$var wire 64 2 wdata [63:0] $end
+$var wire 1 * wena $end
+$upscope $end
+$upscope $end
+$enddefinitions $end
+$comment Show the parameter values. $end
+$dumpall
+$end
+#0
+$dumpvars
+b0 2
+b0 1
+bx 0
+b0 /
+bx .
+b0 -
+bx ,
+b0 +
+0*
+b0 )
+b0 (
+b0 '
+b0 &
+b0 %
+0$
+bx #
+bx "
+bx !
+$end
+#5000
+1$
+#10000
+0$
+1*
+b11011110101011011011111011101111 )
+b11011110101011011011111011101111 2
+b1 (
+b1 1
+#15000
+1$
+#20000
+0$
+b11011110101011011011111011101111 "
+b11011110101011011011111011101111 .
+b1 &
+b1 -
+0*
+#25000
+1$
+#30000
+0$
+#31000
+1*
+b11001010111111101011101010111110 )
+b11001010111111101011101010111110 2
+b10 (
+b10 1
+#35000
+1$
+#40000
+0$
+#41000
+b11001010111111101011101010111110 !
+b11001010111111101011101010111110 0
+b10 '
+b10 /
+0*
+#45000
+1$
+#50000
+0$
+#52000
+b0 )
+b0 2
+b1 (
+b1 1
+#55000
+1$
+#60000
+0$
+#65000
+1$
+#70000
+0$
+#73000
+b11001010111111101011101010111110 #
+b11001010111111101011101010111110 ,
+b10 %
+b10 +
+#75000
+1$
+#80000
+0$
+#84000
+1*
+b10010001101000101011001111000 )
+b10010001101000101011001111000 2
+b0 (
+b0 1
+#85000
+1$
+#90000
+0$
+#94000
+b10010001101000101011001111000 "
+b10010001101000101011001111000 .
+b0 &
+b0 -
+0*
+#95000
+1$
