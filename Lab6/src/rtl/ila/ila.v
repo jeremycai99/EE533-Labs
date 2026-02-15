@@ -31,28 +31,30 @@
 `include "define.v"
 
 module ila (
-    input  wire        clk,
-    input  wire        rst_n,
+    input  wire clk,
+    input  wire rst_n,
 
     // Register interface
-    input  wire [2:0]                   ila_addr,
-    input  wire [`MMIO_DATA_WIDTH-1:0]  ila_din,
-    input  wire                         ila_we,
-    output reg  [`MMIO_DATA_WIDTH-1:0]  ila_dout,
+    input  wire [2:0] ila_addr,
+    input  wire [`MMIO_DATA_WIDTH-1:0] ila_din,
+    input  wire ila_we,
+    output reg  [`MMIO_DATA_WIDTH-1:0] ila_dout,
 
     // CPU debug probe
-    output wire [4:0]                   cpu_debug_sel,
-    input  wire [`DATA_WIDTH-1:0]       cpu_debug_data,
+    output wire [4:0] cpu_debug_sel,
+    input  wire [`DATA_WIDTH-1:0] cpu_debug_data,
 
     // CPU start control
-    output wire                         soc_start,
+    output wire soc_start,
 
     // Clock gating
-    input  wire                         debug_mode,
-    output wire                         soc_clk_en,
+    input  wire debug_mode,
+    output wire soc_clk_en,
 
     // soc_driver busy — keep clock alive during its transactions
-    input  wire                         soc_busy
+    input  wire soc_busy,
+
+    input wire txn_pending
 );
 
     // Cycle Counter
@@ -84,10 +86,10 @@ module ila (
             clear_pulse   <= 1'b0;
             probe_sel_r   <= 5'd0;
             
-            // NOTE: Defaulting to 1 means CPU runs immediately.
-            // If you need to load memory via MMIO, you must write 0 
+            // NOTE: Defaulting to 0 means CPU is stopped initially.
+            // If you need to start the CPU immediately, you must write 1 
             // to this register first to unblock the SoC req_rdy signal.
-            cpu_run_level <= 1'b1; 
+            cpu_run_level <= 1'b0; 
         end else begin
             // Pulses auto-clear every cycle unless written
             step_pulse    <= 1'b0;
@@ -124,6 +126,7 @@ module ila (
         end else if (clear_pulse) begin
             run_mode    <= 1'b0;
             step_active <= 1'b0;
+            cpu_run_level <= 1'b0; // Ensure CPU is stopped on clear
         end else begin
             // Step Logic: Active for exactly one cycle when requested
             if (step_active)
@@ -141,7 +144,7 @@ module ila (
     // Enabled if:
     // 1. Not in debug mode (normal operation)
     // 2. In debug mode AND (Running OR Stepping OR External Bus Busy)
-    assign soc_clk_en = (!debug_mode) || (run_mode || step_active || soc_busy);
+    assign soc_clk_en = (!debug_mode) || (run_mode || step_active || soc_busy || txn_pending);
 
     // Register Read Logic
     always @(*) begin

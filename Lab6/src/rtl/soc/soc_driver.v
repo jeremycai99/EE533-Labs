@@ -41,13 +41,14 @@ module soc_driver #(
     input wire soc_resp_cmd,
     input wire [`MMIO_ADDR_WIDTH-1:0] soc_resp_addr,
     input wire [`MMIO_DATA_WIDTH-1:0] soc_resp_data,
-    output wire [7:0]                   conn_status,
-    output wire [`MMIO_DATA_WIDTH-1:0]  txn_quality,
-    output wire [`MMIO_DATA_WIDTH-1:0]  txn_counters,
-    input  wire                         clear_stats
+    output wire [7:0] conn_status,
+    output wire [`MMIO_DATA_WIDTH-1:0] txn_quality,
+    output wire [`MMIO_DATA_WIDTH-1:0] txn_counters,
+    // New pending port to prevent cross-clock handshakes and ensure stable transaction tracking
+    output wire txn_pending,
+    input  wire clear_stats
 );
 
-    localparam DW = `MMIO_DATA_WIDTH;
     localparam FIFO_DEPTH = 16;
     localparam FIFO_WIDTH = 1 + `MMIO_ADDR_WIDTH + `MMIO_DATA_WIDTH; 
 
@@ -61,6 +62,8 @@ module soc_driver #(
     assign fifo_din   = {user_cmd, user_addr, user_wdata}; 
     assign fifo_wr_en = user_valid && !fifo_full; 
     assign user_ready = !fifo_full; 
+
+    assign txn_pending = !fifo_empty;
 
     wire current_cmd;
     wire [`MMIO_ADDR_WIDTH-1:0] current_addr;
@@ -146,10 +149,10 @@ module soc_driver #(
             soc_req_val           <= 1'b0;
             soc_req_cmd           <= 1'b0;
             soc_req_addr          <= {`MMIO_ADDR_WIDTH{1'b0}};
-            soc_req_data          <= {DW{1'b0}};
+            soc_req_data          <= {`MMIO_DATA_WIDTH{1'b0}};
             soc_resp_rdy          <= 1'b0;
             status                <= {`MMIO_ADDR_WIDTH{1'b0}};
-            user_rdata            <= {DW{1'b0}};
+            user_rdata            <= {`MMIO_DATA_WIDTH{1'b0}};
             active_cmd            <= 1'b0;
             active_addr           <= {`MMIO_ADDR_WIDTH{1'b0}};
             captured_resp_cmd     <= 1'b0;
@@ -264,12 +267,12 @@ module soc_driver #(
     };
 
     assign txn_quality = {
-        {(DW-48){1'b0}}, timeout_count_r, max_latency_r, 12'd0,
+        {(`MMIO_DATA_WIDTH-48){1'b0}}, timeout_count_r, max_latency_r, 12'd0,
         link_active_r, protocol_error_r, resp_timeout_flag_r, req_timeout_flag_r
     };
 
     assign txn_counters = {
-        {(DW-48){1'b0}}, write_txn_count_r, read_txn_count_r, total_txn_count_r
+        {(`MMIO_DATA_WIDTH-48){1'b0}}, write_txn_count_r, read_txn_count_r, total_txn_count_r
     };
 
     // FIFO Instance

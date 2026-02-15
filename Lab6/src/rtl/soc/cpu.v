@@ -34,7 +34,7 @@ module cpu (
     // [4] = 0: System Debug (Selects via [3:0])
     // [4] = 1: Register File Debug (Address via [2:0])
     input wire [4:0] ila_debug_sel,
-    output wire [`DATA_WIDTH-1:0] ila_debug_data
+    output reg [`DATA_WIDTH-1:0] ila_debug_data
 );
 
 // CPU internal signal definitions
