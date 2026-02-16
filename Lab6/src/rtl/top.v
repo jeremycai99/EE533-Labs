@@ -44,23 +44,23 @@ module top (
     wire soc_gated_clk;
 
     // MMIO Bus: Driver → SoC
-    wire                         req_val;
-    wire                         req_rdy;
-    wire                         req_cmd;
-    wire [`MMIO_ADDR_WIDTH-1:0]  req_addr;
-    wire [`MMIO_DATA_WIDTH-1:0]  req_data;
+    wire req_val;
+    wire req_rdy;
+    wire req_cmd;
+    wire [`MMIO_ADDR_WIDTH-1:0] req_addr;
+    wire [`MMIO_DATA_WIDTH-1:0] req_data;
 
     // MMIO Bus: SoC → Driver
-    wire                         resp_val;
-    wire                         resp_rdy;
-    wire                         resp_cmd;
-    wire [`MMIO_ADDR_WIDTH-1:0]  resp_addr;
-    wire [`MMIO_DATA_WIDTH-1:0]  resp_data;
+    wire resp_val;
+    wire resp_rdy;
+    wire resp_cmd;
+    wire [`MMIO_ADDR_WIDTH-1:0] resp_addr;
+    wire [`MMIO_DATA_WIDTH-1:0] resp_data;
 
     // Debug Interface: ILA ↔ SoC
-    wire [4:0]                   cpu_debug_sel;
-    wire [`DATA_WIDTH-1:0]       cpu_debug_data;
-    wire                         ila_soc_start;
+    wire [4:0] cpu_debug_sel;
+    wire [`DATA_WIDTH-1:0]cpu_debug_data;
+    wire ila_soc_start;
 
     // Busy Signal: Driver → ILA  (keep SoC clock alive during MMIO)
     wire driver_busy;
@@ -70,7 +70,7 @@ module top (
 
     always @(negedge clk or negedge rst_n) begin
         if (!rst_n) soc_clk_en_latch <= 1'b1;   // FIX: was 1'b0
-        else        soc_clk_en_latch <= soc_clk_en;
+        else soc_clk_en_latch <= soc_clk_en;
     end
 
     assign soc_gated_clk = clk & soc_clk_en_latch;
