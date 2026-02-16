@@ -167,9 +167,6 @@ module soc_driver #(
 
             case (current_state)
                 STATE_IDLE: begin
-                    txn_timed_out         <= 1'b0;
-                    txn_req_phase_timeout <= 1'b0;
-                    // Modified: Removed '&& start'
                     if (!fifo_empty) begin
                         fifo_rd_en   <= 1'b1;
                         soc_req_cmd  <= current_cmd;
@@ -206,6 +203,9 @@ module soc_driver #(
                 end
 
                 STATE_CHECK: begin
+                    // Modified to ensure no aditional clock cycles are needed for status update
+                    txn_timed_out <= 1'b0;
+                    txn_req_phase_timeout <= 1'b0;
                     if (txn_timed_out) begin
                         status <= 32'hDEAD_DEAD;
                     end else if ((captured_resp_addr == active_addr) &&
