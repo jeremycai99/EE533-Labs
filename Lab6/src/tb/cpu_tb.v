@@ -2,7 +2,7 @@
  Description: Testbench for the CPU module
  Author: Jeremy Cai
  Date: Feb. 12, 2026
- Version: 1.2
+ Version: 1.3
  */
 
 `timescale 1ns/1ps
@@ -27,9 +27,9 @@ module cpu_tb;
     wire [`DATA_WIDTH-1:0] d_mem_data_o;
     wire d_mem_wen_o;
     
-    // NEW: Debug/ILA Interface Signals (Added declarations)
-    reg  [`REG_ADDR_WIDTH-1:0]  ila_reg_addr;
-    wire [`REG_DATA_WIDTH-1:0]  ila_reg_data;
+    // Debug/ILA Interface Signals
+    reg  [4:0]                  ila_debug_sel;
+    wire [`DATA_WIDTH-1:0]      ila_debug_data;
     wire                        cpu_done;
 
     cpu u_cpu (
@@ -41,8 +41,8 @@ module cpu_tb;
         .d_mem_addr_o(d_mem_addr_o),
         .d_mem_data_o(d_mem_data_o),
         .d_mem_wen_o(d_mem_wen_o),
-        .ila_reg_addr(ila_reg_addr),
-        .ila_reg_data(ila_reg_data),
+        .ila_debug_sel(ila_debug_sel),
+        .ila_debug_data(ila_debug_data),
         .cpu_done(cpu_done)
     );
 
@@ -52,15 +52,12 @@ module cpu_tb;
 
     always @(*) begin
         i_mem_data_i = i_mem[i_mem_addr_o[5:0]]; // Provide instruction data based on address from CPU
-        // Reduced verbosity for cleaner output
-        // $display("Instruction memory read: Address = %h, Data = %h", i_mem_addr_o, i_mem_data_i);
     end
 
     localparam D_MEM_DEPTH = 64; // Depth of data memory
     reg [`DATA_WIDTH-1:0] d_mem [0:D_MEM_DEPTH-1];
     always @(*) begin
         d_mem_data_i = d_mem[d_mem_addr_o[5:0]]; // Provide data based on address from CPU
-        // $display("Data memory read: Address = %h, Data = %h", d_mem_addr_o, d_mem_data_i);
     end
 
     always @(posedge clk) begin
@@ -75,7 +72,7 @@ module cpu_tb;
     localparam [`REG_ADDR_WIDTH-1:0] R2 = 2;
     localparam [`REG_ADDR_WIDTH-1:0] R3 = 3;
 
-    //Instruction builder function for testing
+    // Instruction builder function for testing
     function [`INSTR_WIDTH-1:0] build_instr;
         input mw;
         input rw;
@@ -93,8 +90,8 @@ module cpu_tb;
     // Register file initialization — SEPARATE block
     integer k;
     initial begin
-        for (k = 0; k < 32; k = k + 1) begin
-            u_cpu.u_regfile.regfile[k] = 64'd0;
+        for (k = 0; k < (1 << `REG_ADDR_WIDTH); k = k + 1) begin
+            u_cpu.u_regfile.regs[k] = {`REG_DATA_WIDTH{1'b0}};
         end
     end
 
@@ -102,7 +99,7 @@ module cpu_tb;
     integer cycle_cnt;
     integer error_cnt;
 
-    //Start Test
+    // Start Test
     initial begin
         $display("Initialize testbench...");
         $dumpfile("cpu_tb.vcd");
@@ -111,7 +108,7 @@ module cpu_tb;
         rst_n = 0; // Assert reset
         cycle_cnt = 0;
         error_cnt = 0;
-        ila_reg_addr = 0; // Initialize ILA address
+        ila_debug_sel = 5'd0; // Initialize ILA selector (system debug mode)
 
         for (i = 0; i < I_MEM_DEPTH; i = i + 1) begin
             i_mem[i] = NOP; // Initialize instruction memory with NOPs
@@ -124,7 +121,7 @@ module cpu_tb;
         d_mem[0] = 32'd4;
         d_mem[4] = 32'd100;
 
-        //make and load the instruction sequence for testing
+        // Make and load the instruction sequence for testing
         i_mem[0] = build_instr(1'b0, 1'b1, R2, R0, R0);
         i_mem[1] = build_instr(1'b0, 1'b1, R3, R0, R0);
         i_mem[2] = NOP;
@@ -205,7 +202,7 @@ module cpu_tb;
         end
 
         // =============================================
-        // NEW: Phase 2 Register Interface Verification
+        // Phase 2: Register Interface Verification
         // =============================================
         $display("");
         $display("---------------------------------------------");
@@ -213,33 +210,34 @@ module cpu_tb;
         $display("---------------------------------------------");
         
         // Check R2 (Should contain 4)
-        ila_reg_addr = R2;
+        // ila_debug_sel[4]=1 selects register-file mode; [2:0]=register address
+        ila_debug_sel = {1'b1, 1'b0, R2};
         #1; // Allow combinational logic to propagate
-        if (ila_reg_data !== 64'd4) begin
-            $display("FAIL: ILA Read R2: Expected 4, Got %0d", ila_reg_data);
+        if (ila_debug_data !== 64'd4) begin
+            $display("FAIL: ILA Read R2: Expected 4, Got %0d", ila_debug_data);
             error_cnt = error_cnt + 1;
         end else begin
-            $display("PASS: ILA Read R2: Correctly read %0d", ila_reg_data);
+            $display("PASS: ILA Read R2: Correctly read %0d", ila_debug_data);
         end
 
         // Check R3 (Should contain 4)
-        ila_reg_addr = R3;
+        ila_debug_sel = {1'b1, 1'b0, R3};
         #1; 
-        if (ila_reg_data !== 64'd4) begin
-            $display("FAIL: ILA Read R3: Expected 4, Got %0d", ila_reg_data);
+        if (ila_debug_data !== 64'd4) begin
+            $display("FAIL: ILA Read R3: Expected 4, Got %0d", ila_debug_data);
             error_cnt = error_cnt + 1;
         end else begin
-            $display("PASS: ILA Read R3: Correctly read %0d", ila_reg_data);
+            $display("PASS: ILA Read R3: Correctly read %0d", ila_debug_data);
         end
 
         // Check R0 (Should contain 0)
-        ila_reg_addr = R0;
+        ila_debug_sel = {1'b1, 1'b0, R0};
         #1;
-        if (ila_reg_data !== 64'd0) begin
-            $display("FAIL: ILA Read R0: Expected 0, Got %0d", ila_reg_data);
+        if (ila_debug_data !== 64'd0) begin
+            $display("FAIL: ILA Read R0: Expected 0, Got %0d", ila_debug_data);
             error_cnt = error_cnt + 1;
         end else begin
-            $display("PASS: ILA Read R0: Correctly read %0d", ila_reg_data);
+            $display("PASS: ILA Read R0: Correctly read %0d", ila_debug_data);
         end
 
         $display("");
