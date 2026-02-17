@@ -308,9 +308,10 @@ module sync_fifo #(
 );
 
     reg [DATA_WIDTH-1:0] mem [0:DEPTH-1];
-    reg [$clog2(DEPTH):0] count;
-    reg [$clog2(DEPTH)-1:0] wr_ptr;
-    reg [$clog2(DEPTH)-1:0] rd_ptr;
+    //fixed width due to clog2 depth not supported in synthesis
+    reg [4:0] count;
+    reg [3:0] wr_ptr;
+    reg [3:0] rd_ptr;
 
     assign full  = (count == DEPTH);
     assign empty = (count == 0);
