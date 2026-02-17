@@ -97,7 +97,10 @@ module ila (
             stop_pulse    <= 1'b0;
             clear_pulse   <= 1'b0;
 
-            if (ila_we) begin
+            if (clear_pulse) begin
+                // Clear pulse also resets the CPU control level
+                cpu_run_level <= 1'b0;
+            end else if (ila_we) begin
                 case (ila_addr)
                     3'h0: begin // CTRL Register
                         step_pulse    <= ila_din[0];
@@ -126,7 +129,6 @@ module ila (
         end else if (clear_pulse) begin
             run_mode    <= 1'b0;
             step_active <= 1'b0;
-            cpu_run_level <= 1'b0; // Ensure CPU is stopped on clear
         end else begin
             // Step Logic: Active for exactly one cycle when requested
             if (step_active)
