@@ -11,9 +11,9 @@
 `include "define.v"
 
 module cond_eval (
-    input wire [COND_WIDTH-1:0] cond_code, // Condition code from instruction
+    input wire [`COND_WIDTH-1:0] cond_code, // Condition code from instruction
     input wire [3:0] flags, // Current CPU flags: [N, Z, C, V]
-    output wire cond_met // Output: 1 if condition is met, 0 otherwise
+    output reg cond_met // Output: 1 if condition is met, 0 otherwise
 );
 
 wire n = flags[`FLAG_N]; // Negative flag
