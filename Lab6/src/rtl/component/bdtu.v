@@ -33,25 +33,25 @@ module bdtu (
 
     // Common signals
     input wire [3:0] base_reg, // Base register address for BDT instructions
-    input wire [31:0] base_value, // Base register value for BDT instructions
+    input wire [`DATA_WIDTH-1:0] base_value, // Base register value for BDT instructions
 
     output wire [3:0] rf_rd_addr, // Register file destination register address for SWP instruction
-    input wire [31:0] rf_rd_data, // Register file source register data for SWP instruction
+    input wire [`DATA_WIDTH-1:0] rf_rd_data, // Register file source register data for SWP instruction
 
     output wire [3:0] wr_addr1, // Register file write address for BDT instruction
-    output wire [31:0] wr_data1, // Register file write data for BDT instruction
+    output wire [`DATA_WIDTH-1:0] wr_data1, // Register file write data for BDT instruction
     output wire wr_en1, // Register file write enable for BDT instruction
     output wire [3:0] wr_addr2, // Register file write address for second write port (for multiply instructions)
-    output wire [31:0] wr_data2, // Register file write data for second write port (for multiply instructions)
+    output wire [`DATA_WIDTH-1:0] wr_data2, // Register file write data for second write port (for multiply instructions)
     output wire wr_en2, // Register file write enable for second write port (for multiply instructions)
 
     // Memory interface signals
-    output wire [31:0] mem_addr, // Memory address for load/store operations
-    output wire [31:0] mem_wdata, // Memory write data for store operations
+    output wire [`DMEM_ADDR_WIDTH-1:0] mem_addr, // Memory address for load/store operations
+    output wire [`DATA_WIDTH-1:0] mem_wdata, // Memory write data for store operations
     output wire mem_rd, // Memory read enable signal not needed for our block memory design. Act as placeholder
     output wire mem_wr, // Memory write enable signal
     output wire [1:0] mem_size, // Memory access size: 00 = byte, 01 = halfword, 10 = word
-    input wire [31:0] mem_rdata, // Memory read data for load operations
+    input wire [`DATA_WIDTH-1:0] mem_rdata, // Memory read data for load operations
 
     output wire busy // Signal to indicate BDTU is processing an instruction, used for stalling the pipeline in CU
 );
@@ -69,8 +69,8 @@ localparam [2:0]
 reg [2:0] state;
 
 reg [15:0] remaining; // BDT: unprocessed register bits
-reg [31:0] cur_addr; // Current memory address
-reg [31:0] r_new_base; // Pre-computed new base for writeback
+reg [`DMEM_ADDR_WIDTH-1:0] cur_addr; // Current memory address
+reg [`DATA_WIDTH-1:0] r_new_base; // Pre-computed new base for writeback
 reg r_load; // Latched bdt_load
 reg r_wb; // Latched bdt_wb
 reg r_is_swp; // 1 = SWP operation in progress
@@ -78,7 +78,7 @@ reg r_byte; // Latched swap_byte
 reg [3:0] r_base_reg; // Latched Rn address
 reg [3:0] r_swp_rd; // Latched SWP Rd
 reg [3:0] r_swp_rm; // Latched SWP Rm
-reg [31:0] swp_temp; // SWP: value read from memory
+reg [`DATA_WIDTH-1:0] swp_temp; // SWP: value read from memory
 
 // Sync-read pipeline registers (LDM only)
 reg [3:0] prev_reg; // Register index whose read was issued last cycle
@@ -135,15 +135,15 @@ wire [3:0] cur_reg = remaining[0]  ? 4'd0  :
 //   DA    0  0  Rn − 4(N−1)       Rn − 4N
 //   DB    1  0  Rn − 4N           Rn − 4N
 //
-wire [31:0] total_off = {25'd0, num_regs, 2'b00};    // N × 4
-wire [31:0] base_up   = base_value + total_off;          // Rn + 4N
-wire [31:0] base_dn   = base_value - total_off;          // Rn − 4N
+wire [`DATA_WIDTH-1:0] total_off = {{(`DATA_WIDTH-5){1'b0}}, num_regs, 2'b00};    // N × 4
+wire [`DATA_WIDTH-1:0] base_up   = base_value + total_off;          // Rn + 4N
+wire [`DATA_WIDTH-1:0] base_dn   = base_value - total_off;          // Rn − 4N
 
-wire [31:0] start_addr = up_down
+wire [`DATA_WIDTH-1:0] start_addr = up_down
     ? (pre_index ? base_value + 32'd4 : base_value)          // IB / IA
     : (pre_index ? base_dn          : base_dn + 32'd4);  // DB / DA
 
-wire [31:0] calc_new_base = up_down ? base_up : base_dn;
+wire [`DATA_WIDTH-1:0] calc_new_base = up_down ? base_up : base_dn;
 
 // Detect the last transfer for the multi-cycle instructions
 wire is_last = (remaining != 16'd0) && ((remaining & (remaining - 16'd1)) == 16'd0);
@@ -152,8 +152,8 @@ always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         state      <= S_IDLE;
         remaining  <= 16'd0;
-        cur_addr   <= 32'd0;
-        r_new_base <= 32'd0;
+        cur_addr   <= {`DMEM_ADDR_WIDTH{1'b0}};
+        r_new_base <= {`DATA_WIDTH{1'b0}};
         r_load     <= 1'b0;
         r_wb       <= 1'b0;
         r_is_swp   <= 1'b0;
@@ -161,7 +161,7 @@ always @(posedge clk or negedge rst_n) begin
         r_base_reg <= 4'd0;
         r_swp_rd   <= 4'd0;
         r_swp_rm   <= 4'd0;
-        swp_temp   <= 32'd0;
+        swp_temp   <= {`DATA_WIDTH{1'b0}};
         prev_reg   <= 4'd0;
         rd_pending <= 1'b0;
     end
@@ -270,6 +270,17 @@ always @(posedge clk or negedge rst_n) begin
     end
 end
 
+reg [`DATA_WIDTH-1:0] last_wr_data1;
+
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n)
+        last_wr_data1 <= {`DATA_WIDTH{1'b0}};
+    else if (rd_pending && (state == S_BDT_XFER || state == S_BDT_LAST))
+        last_wr_data1 <= mem_rdata;
+    else if (state == S_SWP_WR)
+        last_wr_data1 <= swp_temp;
+end
+
 // Combinational Output Logic
 // Busy / pipeline stall
 assign busy = (state == S_IDLE) ? start  :
@@ -308,14 +319,17 @@ assign mem_size = (r_is_swp && r_byte) ? 2'b00 : 2'b10;
 //  Active in S_BDT_XFER (cycles 2+) and S_BDT_LAST for LDM,
 //  and S_SWP_WR for SWP.
 assign wr_addr1 = (state == S_SWP_WR) ? r_swp_rd : prev_reg;
-assign wr_data1 = (state == S_SWP_WR) ? swp_temp  : mem_rdata;
+assign wr_data1 = (state == S_DONE)    ? last_wr_data1 :
+                  (state == S_SWP_WR)  ? swp_temp      : mem_rdata;
 assign wr_en1   = (rd_pending && (state == S_BDT_XFER || state == S_BDT_LAST))
-                | (state == S_SWP_WR);
+                | (state == S_SWP_WR)
+                | (state == S_DONE && (r_load || r_is_swp));
 
 // Register write port 2 (base writeback)
 assign wr_addr2 = r_base_reg;
 assign wr_data2 = r_new_base;
-assign wr_en2   = (state == S_BDT_WB);
+assign wr_en2   = (state == S_BDT_WB)
+                | (state == S_DONE && r_wb);
 
 endmodule
 

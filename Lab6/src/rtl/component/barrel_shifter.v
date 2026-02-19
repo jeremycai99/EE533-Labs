@@ -11,11 +11,11 @@
 `include "define.v"
 
 module barrel_shifter (
-    input wire [63:0] din, // Input value to be shifted
+    input wire [`DATA_WIDTH-1:0] din, // Input value to be shifted
     input wire [`SHIFT_AMOUNT_WIDTH-1:0] shamt, // Shift amount (0-63)
     input wire [1:0] shift_type, // 00: LSL, 01: LSR, 10: ASR, 11: ROR
     input wire cin, // Carry in for shift operations (e.g., for ROR, the last bit shifted out becomes the new MSB)
-    output reg [63:0] dout, // Shifted output value
+    output reg [`DATA_WIDTH-1:0] dout, // Shifted output value
     output reg cout // Carry out for shift operations (e.g., for LSL, the last bit shifted out)
 );
 
