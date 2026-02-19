@@ -9,7 +9,7 @@
  */
 
 //Data width definition
-`define DATA_WIDTH 64
+`define DATA_WIDTH 32
 `define ALU_OP_WIDTH 4
 
 //Instruction width definition
@@ -20,11 +20,11 @@
 
 //ALU operation codes (4 bits)
 //Support list: ADD EOR, SUB RSB, AND ADC, SBC RSC, TST TEQ, CMP CMN, ORR MOV, BIC MVN
-`define ALU_OP_ADD  4'b0000
+`define ALU_OP_AND  4'b0000
 `define ALU_OP_EOR  4'b0001
 `define ALU_OP_SUB  4'b0010
 `define ALU_OP_RSB  4'b0011
-`define ALU_OP_AND  4'b0100
+`define ALU_OP_ADD  4'b0100
 `define ALU_OP_ADC  4'b0101
 `define ALU_OP_SBC  4'b0110
 `define ALU_OP_RSC  4'b0111
@@ -84,7 +84,7 @@
 
 //Register file parameters
 `define REG_ADDR_WIDTH 4 //4 bits for 16 registers (lab 6 will use 16 registers to align with Arm's R0-R15)
-`define REG_DATA_WIDTH 64 //64-bit registers
+`define REG_DATA_WIDTH 32 //32-bit registers
 `define REG_DEPTH 16 //16 registers in total
 
 //Program counter parameters
@@ -93,3 +93,17 @@
 //MMIO interface parameters
 `define MMIO_ADDR_WIDTH 32 //32 bits for MMIO address space
 `define MMIO_DATA_WIDTH 64 //64 bits for MMIO data width
+
+// Write-Back Source Select (wb_sel encoding)
+`define WB_ALU   3'b000     // ALU / barrel-shifter result
+`define WB_MEM   3'b001     // Memory load data
+`define WB_LINK  3'b010     // PC+4 for BL return address
+`define WB_PSR   3'b011     // CPSR / SPSR value (MRS)
+`define WB_MUL   3'b100     // MAC unit result
+
+// Forward Mux Encoding
+`define FWD_NONE     3'b000
+`define FWD_EXMEM    3'b001
+`define FWD_MEMWB    3'b010
+`define FWD_BDTU_P1  3'b011
+`define FWD_BDTU_P2  3'b100

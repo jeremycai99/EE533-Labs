@@ -28,14 +28,15 @@ module cpu (
     output wire [`PC_WIDTH-1:0] i_mem_addr_o,   // Instruction memory address output
 
     // Data memory interface
-    input wire [`DATA_WIDTH-1:0] d_mem_data_i,  // Data memory data input (64-bit)
+    input wire [`DATA_WIDTH-1:0] d_mem_data_i,  // Data memory data input (32-bit)
     output wire [`DMEM_ADDR_WIDTH-1:0] d_mem_addr_o, // Data memory address output
-    output wire [`DATA_WIDTH-1:0] d_mem_data_o, // Data memory data output (64-bit)
+    output wire [`DATA_WIDTH-1:0] d_mem_data_o, // Data memory data output (32-bit)
     output wire d_mem_wen_o,                    // Data memory write enable
+    output wire [1:0] d_mem_size_o,             // Data memory access size (00=byte, 01=halfword, 10=word)
     output wire cpu_done,                       // Signal to indicate CPU completion
 
     // ILA Debug Interface
-    // Multiplexed Debug Port (Full 64-bit width)
+    // Multiplexed Debug Port (Full 32-bit width)
     // [4] = 0: System Debug (Selects via [3:0])
     // [4] = 1: Register File Debug (Address via [2:0])
     input wire [4:0] ila_debug_sel,
@@ -51,9 +52,10 @@ module cpu (
 wire stall_if, stall_id, stall_ex, stall_mem;
 wire flush_ifid, flush_idex, flush_exmem;
 wire bdtu_busy;
+wire bdtu_starting;
 
 // Branch control signals
-wire branch_taken_ex; // Branch effective in EX stage
+wire branch_taken_ex; // Branch evaluation result in EX stage
 wire [`PC_WIDTH-1:0] branch_target_ex; // Target address calculated in EX stage
 
 // CPU pipeline stage internal signal definitions
@@ -70,8 +72,8 @@ assign pc_next_if = branch_taken_ex ? branch_target_ex : pc_plus4_if; // Muxing 
 pc u_pc (
     .clk(clk),
     .rst_n(rst_n),
-    .pc_next(pc_next_if),
-    .pc_en(pc_en),
+    .pc_in(pc_next_if),
+    .en(pc_en),
     .pc_out(pc_if)
 );
 
@@ -81,7 +83,23 @@ assign i_mem_addr_o = pc_if; // Instruction memory address is current PC (trunca
 assign cpu_done = (pc_if == {`PC_WIDTH{1'b1}});
 
 /* SPECIAL CONSIDERATION FOR SYNC-READ BEHAVIOR OF INSTRUCTION MEMORY */
-wire [`INSTR_WIDTH-1:0] instr_id = i_mem_data_i; // Instruction fetched in IF stage, available in ID stage due to synchronous read
+reg [`INSTR_WIDTH-1:0] instr_held;
+reg held_valid;
+
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n)
+        held_valid <= 1'b0;
+    else if (flush_ifid)
+        held_valid <= 1'b0;
+    else if (stall_id && !held_valid) begin
+        instr_held <= i_mem_data_i;   // Capture on first stall cycle
+        held_valid <= 1'b1;
+    end
+    else if (!stall_id)
+        held_valid <= 1'b0;
+end
+
+wire [`INSTR_WIDTH-1:0] instr_id = held_valid ? instr_held : i_mem_data_i; // Instruction fetched in IF stage, available in ID stage due to synchronous read
 
 reg [`PC_WIDTH-1:0] pc_plus4_id; // Register to hold PC+4 for ID stage (for branch target calculation and debugging)
 reg ifid_valid; // This valid bit willl be regarded as keeper logic to verify if the instruction output in the consequent clock should
@@ -97,7 +115,6 @@ always @(posedge clk or negedge rst_n) begin
         // On flush, the pc_plus4_id is not determined by the IF stage logic
         ifid_valid <= 1'b0;   // No change
     end else if (!stall_id) begin
-        // On flush, we can choose to clear the valid bit to indicate no valid instruction in ID stage
         pc_plus4_id <= pc_plus4_if; // Optional: Clear PC+4 on flush (not strictly necessary)
         ifid_valid <= 1'b1;   // Mark as invalid instruction due to flush
     end else begin
@@ -114,9 +131,11 @@ reg [3:0] cpsr_flags; // Current Program Status Register flags (N, Z, C, V)
 wire cond_met_raw; // Condition code evaluation result before considering instruction validity
 wire cond_met_id; // Condition code evaluation result for ID stage (considering flush and valid bit)
 
+wire [3:0] effective_flags = cpsr_wen_ex ? new_flags : cpsr_flags;
+
 cond_eval u_cond_eval (
     .cond_code(instr_id[31:28]), // Condition code from instruction
-    .cpsr_flags(cpsr_flags), // Current CPSR flags
+    .flags(effective_flags), // Current CPSR flags
     .cond_met(cond_met_raw) // Condition met output
 );
 
@@ -140,7 +159,7 @@ wire [1:0] shift_type_id;
 wire [`SHIFT_AMOUNT_WIDTH-1:0] shift_amount_id;
 wire shift_src_id; // 0 = immediate shift, 1 = register shift
 
-wire [31:0] imm32_id; // 32-bit immediate value after decoding
+wire [`DATA_WIDTH-1:0] imm32_id; // 32-bit immediate value after decoding
 
 wire mem_read_id; // Memory read enable
 wire mem_write_id; // Memory write enable
@@ -249,16 +268,16 @@ wire [3:0] r3addr_id = use_rd_id ? rd_addr_id : rs_addr_id;
 wire [3:0] bdtu_rf_rd_addr; // Driven by BDTU instance below
 wire [3:0] r3addr_mux = bdtu_busy ? bdtu_rf_rd_addr : r3addr_id;
 
-wire [31:0] rn_data_id, rm_data_id, r3_data_id;
+wire [`DATA_WIDTH-1:0] rn_data_id, rm_data_id, r3_data_id;
 
 // Write-back signals from WB stage
 wire [3:0]  wb_wr_addr1, wb_wr_addr2;
-wire [31:0] wb_wr_data1, wb_wr_data2;
+wire [`DATA_WIDTH-1:0] wb_wr_data1, wb_wr_data2;
 wire wb_wr_en1,   wb_wr_en2;
 
 // BDTU write-back signals
 wire [3:0]  bdtu_wr_addr1, bdtu_wr_addr2;
-wire [31:0] bdtu_wr_data1, bdtu_wr_data2;
+wire [`DATA_WIDTH-1:0] bdtu_wr_data1, bdtu_wr_data2;
 wire bdtu_wr_en1,   bdtu_wr_en2;
 
 // Merged regfile write ports: BDTU has priority when busy.
@@ -266,14 +285,24 @@ wire bdtu_wr_en1,   bdtu_wr_en2;
 // when only one port is active we mirror it to avoid garbage writes.
 wire rf_wr_en = bdtu_busy ? (bdtu_wr_en1 | bdtu_wr_en2) : (wb_wr_en1  | wb_wr_en2);
 
-wire [3:0] rf_wr_addr1 = bdtu_busy ? bdtu_wr_addr1 : (wb_wr_en1 ? wb_wr_addr1 : wb_wr_addr2);
-wire [31:0] rf_wr_data1 = bdtu_busy ? bdtu_wr_data1 : (wb_wr_en1 ? wb_wr_data1 : wb_wr_data2);
+wire [3:0] rf_wr_addr1 = bdtu_busy
+    ? (bdtu_wr_en1 ? bdtu_wr_addr1 : bdtu_wr_addr2)
+    : (wb_wr_en1   ? wb_wr_addr1   : wb_wr_addr2);
 
-wire [3:0] rf_wr_addr2 = bdtu_busy ? bdtu_wr_addr2 : (wb_wr_en2 ? wb_wr_addr2 : rf_wr_addr1);
-wire [31:0] rf_wr_data2 = bdtu_busy ? bdtu_wr_data2 : (wb_wr_en2 ? wb_wr_data2 : rf_wr_data1);
+wire [`DATA_WIDTH-1:0] rf_wr_data1 = bdtu_busy
+    ? (bdtu_wr_en1 ? bdtu_wr_data1 : bdtu_wr_data2)
+    : (wb_wr_en1   ? wb_wr_data1   : wb_wr_data2);
+
+wire [3:0] rf_wr_addr2 = bdtu_busy
+    ? (bdtu_wr_en2 ? bdtu_wr_addr2 : rf_wr_addr1)
+    : (wb_wr_en2   ? wb_wr_addr2   : rf_wr_addr1);
+
+wire [`DATA_WIDTH-1:0] rf_wr_data2 = bdtu_busy
+    ? (bdtu_wr_en2 ? bdtu_wr_data2 : rf_wr_data1)
+    : (wb_wr_en2   ? wb_wr_data2   : rf_wr_data1);
 
 // Debug
-wire [31:0] debug_reg_out;
+wire [`DATA_WIDTH-1:0] debug_reg_out;
 /* End Register File (RF) Signals */
 
 regfile u_regfile (
@@ -296,11 +325,571 @@ regfile u_regfile (
 //When executing an ARM instruction, PC reads as the address of the current instruction plus 8.
 // Reference link: https://developer.arm.com/documentation/ddi0406/c/Application-Level-Architecture/Application-Level-Programmers--Model/ARM-core-registers
 // Provide PC+8 when reading R15 (ARM convention: R15 = PC+8)
-wire [31:0] rn_data_pc_adj = (rn_addr_id == 4'd15) ? (pc_plus4_id + 32'd4) : rn_data_id;
-wire [31:0] rm_data_pc_adj = (rm_addr_id == 4'd15) ? (pc_plus4_id + 32'd4) : rm_data_id;
+wire [`DATA_WIDTH-1:0] rn_data_pc_adj = (rn_addr_id == 4'd15) ? (pc_plus4_id + 32'd4) : rn_data_id;
+wire [`DATA_WIDTH-1:0] rm_data_pc_adj = (rm_addr_id == 4'd15) ? (pc_plus4_id + 32'd4) : rm_data_id;
+
+/*********************************************************
+ ********   ID/EX PIPELINE Register Definition    ********
+ *********************************************************/
+reg [3:0]  alu_op_ex;
+reg alu_src_b_ex;
+reg cpsr_wen_ex;
+reg [1:0] shift_type_ex;
+reg [`SHIFT_AMOUNT_WIDTH-1:0] shift_amount_ex;
+reg shift_src_ex;
+reg [`DATA_WIDTH-1:0] imm32_ex;
+reg mem_read_ex, mem_write_ex;
+reg [1:0] mem_size_ex;
+reg mem_signed_ex;
+reg addr_pre_idx_ex, addr_up_ex, addr_wb_ex;
+reg [2:0] wb_sel_ex;
+reg [3:0] wr_addr1_ex, wr_addr2_ex;
+reg wr_en1_ex, wr_en2_ex;
+reg branch_en_ex, branch_link_ex, branch_exchange_ex;
+reg mul_en_ex, mul_long_ex, mul_signed_ex, mul_accumulate_ex;
+reg use_rn_ex, use_rm_ex, use_rs_ex, use_rd_ex;
+
+// Register addresses (for forwarding)
+reg [3:0]  rn_addr_ex, rm_addr_ex, rs_addr_ex, rd_addr_ex;
+
+// Register data
+reg [`DATA_WIDTH-1:0] rn_data_ex, rm_data_ex, r3_data_ex;
+reg [`DATA_WIDTH-1:0] pc_plus4_ex;
+
+// BDT / multi-cycle
+reg is_multi_cycle_ex;
+reg t_bdt_ex, t_swp_ex;
+reg [15:0] bdt_list_ex;
+reg bdt_load_ex, bdt_s_ex, bdt_wb_ex;
+reg addr_pre_idx_bdt_ex, addr_up_bdt_ex;
+reg swap_byte_ex;
+reg [3:0] base_reg_ex;
+
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n || flush_idex) begin
+        alu_op_ex <= 4'd0;
+        alu_src_b_ex <= 1'b0;
+        cpsr_wen_ex <= 1'b0;
+        shift_type_ex <= 2'd0;
+        shift_amount_ex <= 5'd0;
+        shift_src_ex <= 1'b0;
+        imm32_ex <= 32'd0;
+        mem_read_ex <= 1'b0;
+        mem_write_ex <= 1'b0;
+        mem_size_ex <= 2'd0;
+        mem_signed_ex <= 1'b0;
+        addr_pre_idx_ex <= 1'b0;
+        addr_up_ex <= 1'b0;
+        addr_wb_ex <= 1'b0;
+        wb_sel_ex <= 3'd0;
+        wr_addr1_ex <= 4'd0;
+        wr_addr2_ex <= 4'd0;
+        wr_en1_ex <= 1'b0;
+        wr_en2_ex <= 1'b0;
+        branch_en_ex <= 1'b0;
+        branch_link_ex <= 1'b0;
+        branch_exchange_ex <= 1'b0;
+        mul_en_ex <= 1'b0;
+        mul_long_ex <= 1'b0;
+        mul_signed_ex <= 1'b0;
+        mul_accumulate_ex <= 1'b0;
+        use_rn_ex <= 1'b0;
+        use_rm_ex <= 1'b0;
+        use_rs_ex <= 1'b0;
+        use_rd_ex <= 1'b0;
+        rn_addr_ex <= 4'd0;
+        rm_addr_ex <= 4'd0;
+        rs_addr_ex <= 4'd0;
+        rd_addr_ex <= 4'd0;
+        rn_data_ex <= 32'd0;
+        rm_data_ex <= 32'd0;
+        r3_data_ex <= 32'd0;
+        pc_plus4_ex <= 32'd0;
+        is_multi_cycle_ex <= 1'b0;
+        t_bdt_ex <= 1'b0;
+        t_swp_ex <= 1'b0;
+        bdt_list_ex <= 16'd0;
+        bdt_load_ex <= 1'b0;
+        bdt_s_ex <= 1'b0;
+        bdt_wb_ex <= 1'b0;
+        addr_pre_idx_bdt_ex <= 1'b0;
+        addr_up_bdt_ex <= 1'b0;
+        swap_byte_ex <= 1'b0;
+        base_reg_ex <= 4'd0;
+    end
+    else if (!stall_ex) begin
+        alu_op_ex <= alu_op_id;
+        alu_src_b_ex <= alu_src_b_id;
+        cpsr_wen_ex <= cpsr_wen_id;
+        shift_type_ex <= shift_type_id;
+        shift_amount_ex <= shift_amount_id;
+        shift_src_ex <= shift_src_id;
+        imm32_ex <= imm32_id;
+        mem_read_ex <= mem_read_id;
+        mem_write_ex <= mem_write_id;
+        mem_size_ex <= mem_size_id;
+        mem_signed_ex <= mem_signed_id;
+        addr_pre_idx_ex <= addr_pre_idx_id;
+        addr_up_ex <= addr_up_id;
+        addr_wb_ex <= addr_wb_id;
+        wb_sel_ex <= wb_sel_id;
+        wr_addr1_ex <= wr_addr1_id;
+        wr_addr2_ex <= wr_addr2_id;
+        wr_en1_ex <= wr_en1_id;
+        wr_en2_ex <= wr_en2_id;
+        branch_en_ex <= branch_en_id;
+        branch_link_ex <= branch_link_id;
+        branch_exchange_ex <= branch_exchange_id;
+        mul_en_ex <= mul_en_id;
+        mul_long_ex <= mul_long_id;
+        mul_signed_ex <= mul_signed_id;
+        mul_accumulate_ex <= mul_accumulate_id;
+        use_rn_ex <= use_rn_id;
+        use_rm_ex <= use_rm_id;
+        use_rs_ex <= use_rs_id;
+        use_rd_ex <= use_rd_id;
+        rn_addr_ex <= rn_addr_id;
+        rm_addr_ex <= rm_addr_id;
+        rs_addr_ex <= rs_addr_id;
+        rd_addr_ex <= rd_addr_id;
+        rn_data_ex <= rn_data_pc_adj;
+        rm_data_ex <= rm_data_pc_adj;
+        r3_data_ex <= r3_data_id;
+        pc_plus4_ex <= pc_plus4_id;
+        is_multi_cycle_ex <= is_multi_cycle_id;
+        t_bdt_ex <= t_bdt;
+        t_swp_ex <= t_swp;
+        bdt_list_ex <= bdt_list_id;
+        bdt_load_ex <= bdt_load_id;
+        bdt_s_ex <= bdt_s_id;
+        bdt_wb_ex <= bdt_wb_id;
+        addr_pre_idx_bdt_ex <= addr_pre_idx_id;
+        addr_up_bdt_ex <= addr_up_id;
+        swap_byte_ex <= swap_byte_id;
+        base_reg_ex <= rn_addr_id;
+    end
+end
+
+/*********************************************************
+ ************   EX Stage Signals and Logic    ************
+ *********************************************************/
+
+// Forwarding unit signals
+//exmem meaning the signals from EX/MEM pipeline register,
+//memwb meaning the signals from MEM/WB pipeline register
+wire [3:0] exmem_wr_addr1;
+wire exmem_wr_en1;
+wire exmem_is_load;
+
+wire [3:0] memwb_wr_addr1;
+wire memwb_wr_en1;
+
+wire [2:0] fwd_a, fwd_b, fwd_s, fwd_d;
+
+fu u_fu (
+    .ex_rn (rn_addr_ex),
+    .ex_rm (rm_addr_ex),
+    .ex_rs (rs_addr_ex),
+    .ex_rd_store (rd_addr_ex),
+    .ex_use_rn (use_rn_ex),
+    .ex_use_rm (use_rm_ex),
+    .ex_use_rs (use_rs_ex),
+    .ex_use_rd_st (use_rd_ex),
+    .exmem_wd (exmem_wr_addr1),
+    .exmem_we (exmem_wr_en1),
+    .exmem_is_load (exmem_is_load),
+    .memwb_wd (memwb_wr_addr1),
+    .memwb_we (memwb_wr_en1),
+    .bdtu_wd1 (bdtu_wr_addr1),
+    .bdtu_we1 (bdtu_wr_en1),
+    .bdtu_wd2 (bdtu_wr_addr2),
+    .bdtu_we2 (bdtu_wr_en2),
+    .fwd_a (fwd_a),
+    .fwd_b (fwd_b),
+    .fwd_s (fwd_s),
+    .fwd_d (fwd_d)
+);
+
+wire [`DATA_WIDTH-1:0] exmem_alu_result;   // From EX/MEM register
+wire [`DATA_WIDTH-1:0] wb_result_data;     // From WB mux (final result)
+
+//May need to revise if function is not supported in XILINX ISE 10.1
+// 5-to-1 forward mux
+function [`DATA_WIDTH-1:0] fwd_mux;
+    input [2:0]  sel;
+    input [`DATA_WIDTH-1:0] reg_val;
+    input [`DATA_WIDTH-1:0] exmem_val;
+    input [`DATA_WIDTH-1:0] memwb_val;
+    input [`DATA_WIDTH-1:0] bdtu_p1;
+    input [`DATA_WIDTH-1:0] bdtu_p2;
+    begin
+        case (sel)
+            `FWD_NONE:    fwd_mux = reg_val;
+            `FWD_EXMEM:   fwd_mux = exmem_val;
+            `FWD_MEMWB:   fwd_mux = memwb_val;
+            `FWD_BDTU_P1: fwd_mux = bdtu_p1;
+            `FWD_BDTU_P2: fwd_mux = bdtu_p2;
+            default:      fwd_mux = reg_val;
+        endcase
+    end
+endfunction
+
+wire [`DATA_WIDTH-1:0] rn_fwd = fwd_mux(fwd_a, rn_data_ex, exmem_alu_result, wb_result_data, bdtu_wr_data1, bdtu_wr_data2);
+wire [`DATA_WIDTH-1:0] rm_fwd = fwd_mux(fwd_b, rm_data_ex, exmem_alu_result, wb_result_data, bdtu_wr_data1, bdtu_wr_data2);
+wire [`DATA_WIDTH-1:0] rs_fwd = fwd_mux(fwd_s, r3_data_ex, exmem_alu_result, wb_result_data, bdtu_wr_data1, bdtu_wr_data2);
+wire [`DATA_WIDTH-1:0] rd_store_fwd = fwd_mux(fwd_d, r3_data_ex, exmem_alu_result, wb_result_data, bdtu_wr_data1, bdtu_wr_data2);
+
+// Route correct port-3 data based on usage
+wire [`DATA_WIDTH-1:0] rs_data_ex_fwd = use_rd_ex ? r3_data_ex : rs_fwd;
+wire [`DATA_WIDTH-1:0] rd_data_ex_fwd = use_rd_ex ? rd_store_fwd : {`DATA_WIDTH{1'b0}};
+
+// Barrel Shifter 
+wire [`SHIFT_AMOUNT_WIDTH-1:0] actual_shamt = shift_src_ex ? rs_data_ex_fwd[`SHIFT_AMOUNT_WIDTH-1:0] : shift_amount_ex;
+
+wire [`DATA_WIDTH-1:0] bs_din = rm_fwd;
+
+wire [`DATA_WIDTH-1:0] bs_dout;
+wire shifter_cout;
+
+barrel_shifter u_barrel_shifter (
+    .din (bs_din),
+    .shamt (actual_shamt),
+    .shift_type (shift_type_ex),
+    .cin (cpsr_flags[`FLAG_C]),
+    .dout (bs_dout),
+    .cout (shifter_cout)
+);
+
+wire [`DATA_WIDTH-1:0] shifted_rm = bs_dout;
+
+// ALU signals and instance
+wire [`DATA_WIDTH-1:0] alu_src_b_val = alu_src_b_ex ? imm32_ex : shifted_rm;
+
+wire [`DATA_WIDTH-1:0] alu_result_ex;
+wire [3:0] alu_flags_ex;
+
+alu u_alu (
+    .operand_a (rn_fwd),
+    .operand_b (alu_src_b_val),
+    .alu_op (alu_op_ex),
+    .cin (cpsr_flags[`FLAG_C]),
+    .shift_carry_out (shifter_cout),
+    .result (alu_result_ex),
+    .alu_flags (alu_flags_ex)
+);
+
+// MAC Unit (dummy) signals and instance
+wire [`DATA_WIDTH-1:0] mac_result_lo, mac_result_hi;
+wire [3:0]  mac_flags;
+
+mac u_mac (
+    .rm (rm_fwd),
+    .rs (rs_data_ex_fwd),
+    .rn_acc (rn_fwd),
+    .rdlo_acc (rd_data_ex_fwd),
+    .mul_en (mul_en_ex),
+    .mul_long (mul_long_ex),
+    .mul_signed (mul_signed_ex),
+    .mul_accumulate (mul_accumulate_ex),
+    .result_lo (mac_result_lo),
+    .result_hi (mac_result_hi),
+    .mac_flags (mac_flags)
+);
+
+// B/BL: target = PC+8 + imm32.  pc_plus4_ex = addr_of_branch + 4,
+//        so target = pc_plus4_ex + 4 + imm32.
+// BX:   target = Rm.
+wire [`PC_WIDTH-1:0] branch_target_br = pc_plus4_ex + 32'd4 + imm32_ex;
+wire [`PC_WIDTH-1:0] branch_target_bx = rm_fwd;
+
+assign branch_taken_ex  = branch_en_ex;
+assign branch_target_ex = branch_exchange_ex ? branch_target_bx : branch_target_br;
+
+// Condition flags update logic in EX stage
+wire [3:0] new_flags = mul_en_ex ? mac_flags : alu_flags_ex;
+
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n)
+        cpsr_flags <= 4'b0;
+    else if (cpsr_wen_ex && !stall_ex)
+        cpsr_flags <= new_flags;
+end
+
+wire [`DMEM_ADDR_WIDTH-1:0] mem_addr_ex = addr_pre_idx_ex ? alu_result_ex : rn_fwd;
+wire [`DATA_WIDTH-1:0] store_data_ex = rd_data_ex_fwd;
+
+/*********************************************************
+ ********   EX/MEM PIPELINE Register Definition   ********
+ *********************************************************/
+
+reg [`DATA_WIDTH-1:0] alu_result_mem;
+reg [`DMEM_ADDR_WIDTH-1:0] mem_addr_mem;
+reg [`DATA_WIDTH-1:0] store_data_mem;
+reg mem_read_mem,  mem_write_mem;
+reg [1:0] mem_size_mem;
+reg mem_signed_mem;
+reg [2:0] wb_sel_mem;
+reg [3:0] wr_addr1_mem, wr_addr2_mem;
+reg wr_en1_mem, wr_en2_mem;
+reg [`DATA_WIDTH-1:0] mac_result_lo_mem, mac_result_hi_mem;
+reg [`PC_WIDTH-1:0] pc_plus4_mem;
+
+// BDTU fields
+reg is_multi_cycle_mem;
+reg t_bdt_mem, t_swp_mem;
+reg [15:0] bdt_list_mem;
+reg bdt_load_mem, bdt_s_mem, bdt_wb_mem;
+reg addr_pre_idx_bdt_mem, addr_up_bdt_mem;
+reg swap_byte_mem;
+reg [3:0]  base_reg_mem;
+reg [`DATA_WIDTH-1:0] base_value_mem;
+reg [3:0]  swp_rd_mem, swp_rm_mem;
+
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n || flush_exmem) begin
+        alu_result_mem <= {`DATA_WIDTH{1'b0}};
+        mem_addr_mem <= {`DMEM_ADDR_WIDTH{1'b0}};
+        store_data_mem <= {`DATA_WIDTH{1'b0}};
+        mem_read_mem <= 1'b0;
+        mem_write_mem <= 1'b0;
+        mem_size_mem <= 2'd0;
+        mem_signed_mem <= 1'b0;
+        wb_sel_mem <= 3'd0;
+        wr_addr1_mem <= 4'd0;
+        wr_addr2_mem <= 4'd0;
+        wr_en1_mem <= 1'b0;
+        wr_en2_mem <= 1'b0;
+        mac_result_lo_mem <= {`DATA_WIDTH{1'b0}};
+        mac_result_hi_mem <= {`DATA_WIDTH{1'b0}};
+        pc_plus4_mem <= {`PC_WIDTH{1'b0}};
+        is_multi_cycle_mem <= 1'b0;
+        t_bdt_mem <= 1'b0;
+        t_swp_mem <= 1'b0;
+        bdt_list_mem <= 16'd0;
+        bdt_load_mem <= 1'b0;
+        bdt_s_mem <= 1'b0;
+        bdt_wb_mem <= 1'b0;
+        addr_pre_idx_bdt_mem <= 1'b0;
+        addr_up_bdt_mem <= 1'b0;
+        swap_byte_mem <= 1'b0;
+        base_reg_mem <= 4'd0;
+        base_value_mem <= {`DATA_WIDTH{1'b0}};
+        swp_rd_mem <= 4'd0;
+        swp_rm_mem <= 4'd0;
+    end
+    else if (!stall_mem) begin
+        alu_result_mem <= alu_result_ex;
+        mem_addr_mem <= mem_addr_ex;
+        store_data_mem <= store_data_ex;
+        mem_read_mem <= mem_read_ex;
+        mem_write_mem <= mem_write_ex;
+        mem_size_mem <= mem_size_ex;
+        mem_signed_mem <= mem_signed_ex;
+        wb_sel_mem <= wb_sel_ex;
+        wr_addr1_mem <= wr_addr1_ex;
+        wr_addr2_mem <= wr_addr2_ex;
+        wr_en1_mem <= wr_en1_ex;
+        wr_en2_mem <= wr_en2_ex;
+        mac_result_lo_mem <= mac_result_lo;
+        mac_result_hi_mem <= mac_result_hi;
+        pc_plus4_mem <= pc_plus4_ex;
+        is_multi_cycle_mem <= is_multi_cycle_ex;
+        t_bdt_mem <= t_bdt_ex;
+        t_swp_mem <= t_swp_ex;
+        bdt_list_mem <= bdt_list_ex;
+        bdt_load_mem <= bdt_load_ex;
+        bdt_s_mem <= bdt_s_ex;
+        bdt_wb_mem <= bdt_wb_ex;
+        addr_pre_idx_bdt_mem <= addr_pre_idx_bdt_ex;
+        addr_up_bdt_mem <= addr_up_bdt_ex;
+        swap_byte_mem <= swap_byte_ex;
+        base_reg_mem <= base_reg_ex;
+        base_value_mem <= rn_fwd;
+        swp_rd_mem <= rd_addr_ex;
+        swp_rm_mem <= rm_addr_ex;
+    end
+end
+
+// Expose EX/MEM for forwarding
+assign exmem_wr_addr1 = wr_addr1_mem;
+assign exmem_wr_en1 = wr_en1_mem;
+assign exmem_is_load = mem_read_mem;
+assign exmem_alu_result = alu_result_mem;
+
+/*********************************************************
+ ************   MEM Stage Signals and Logic    ***********
+ *********************************************************/
+wire [`DATA_WIDTH-1:0] bdtu_mem_addr, bdtu_mem_wdata;
+wire        bdtu_mem_rd, bdtu_mem_wr;
+wire [1:0]  bdtu_mem_size;
+
+// BDTU register reads via port 3 (free during BDTU stall)
+wire [`DATA_WIDTH-1:0] bdtu_rf_rd_data = r3_data_id;
+
+bdtu u_bdtu (
+    .clk (clk),
+    .rst_n (rst_n),
+    .start (is_multi_cycle_mem),
+    .op_bdt (t_bdt_mem),
+    .op_swp (t_swp_mem),
+    .reg_list (bdt_list_mem),
+    .bdt_load (bdt_load_mem),
+    .bdt_wb (bdt_wb_mem),
+    .pre_index (addr_pre_idx_bdt_mem),
+    .up_down (addr_up_bdt_mem),
+    .bdt_s (bdt_s_mem),
+    .swap_byte (swap_byte_mem),
+    .swp_rd (swp_rd_mem),
+    .swp_rm (swp_rm_mem),
+    .base_reg (base_reg_mem),
+    .base_value (base_value_mem),
+    .rf_rd_addr (bdtu_rf_rd_addr),
+    .rf_rd_data (bdtu_rf_rd_data),
+    .wr_addr1 (bdtu_wr_addr1),
+    .wr_data1 (bdtu_wr_data1),
+    .wr_en1 (bdtu_wr_en1),
+    .wr_addr2 (bdtu_wr_addr2),
+    .wr_data2 (bdtu_wr_data2),
+    .wr_en2 (bdtu_wr_en2),
+    .mem_addr (bdtu_mem_addr),
+    .mem_wdata (bdtu_mem_wdata),
+    .mem_rd (bdtu_mem_rd),
+    .mem_wr (bdtu_mem_wr),
+    .mem_size (bdtu_mem_size),
+    .mem_rdata (d_mem_data_i),     // Sync: data from previous cycle's address
+    .busy (bdtu_busy)
+);
+
+// Data Memory Interface Mux
+// BDTU has priority over single-cycle memory access
+assign d_mem_addr_o = bdtu_busy ? bdtu_mem_addr  : mem_addr_mem;
+assign d_mem_data_o = bdtu_busy ? bdtu_mem_wdata : store_data_mem;
+assign d_mem_wen_o  = bdtu_busy ? bdtu_mem_wr    : mem_write_mem;
+assign d_mem_size_o = bdtu_busy ? bdtu_mem_size  : mem_size_mem;
+
+/*********************************************************
+ ********   MEM/WB PIPELINE Register Definition   ********
+ *********************************************************/
+
+reg [`DATA_WIDTH-1:0] alu_result_wb;
+reg [`DATA_WIDTH-1:0] mac_result_lo_wb, mac_result_hi_wb;
+reg [`DATA_WIDTH-1:0] pc_plus4_wb;
+reg [2:0]  wb_sel_wb;
+reg [3:0]  wr_addr1_wb, wr_addr2_wb;
+reg        wr_en1_wb,   wr_en2_wb;
+reg [1:0]  mem_size_wb;
+reg        mem_signed_wb;
+
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        alu_result_wb <= `DATA_WIDTH'd0;
+        mac_result_lo_wb <= `DATA_WIDTH'd0;
+        mac_result_hi_wb <= `DATA_WIDTH'd0;
+        pc_plus4_wb <= `DATA_WIDTH'd0;
+        wb_sel_wb <= 3'd0;
+        wr_addr1_wb <= 4'd0;
+        wr_addr2_wb <= 4'd0;
+        wr_en1_wb <= 1'b0;
+        wr_en2_wb <= 1'b0;
+        mem_size_wb <= 2'd0;
+        mem_signed_wb <= 1'b0;
+    end
+    else begin
+        alu_result_wb <= alu_result_mem;
+        mac_result_lo_wb <= mac_result_lo_mem;
+        mac_result_hi_wb <= mac_result_hi_mem;
+        pc_plus4_wb <= pc_plus4_mem;
+        wb_sel_wb <= wb_sel_mem;
+        wr_addr1_wb <= wr_addr1_mem;
+        wr_addr2_wb <= wr_addr2_mem;
+        wr_en1_wb <= wr_en1_mem;
+        wr_en2_wb <= wr_en2_mem;
+        mem_size_wb <= mem_size_mem;
+        mem_signed_wb <= mem_signed_mem;
+    end
+end
+
+// Expose MEM/WB for forwarding
+assign memwb_wr_addr1 = wr_addr1_wb;
+assign memwb_wr_en1 = wr_en1_wb;
 
 
+/*********************************************************
+ ************   WB Stage Signals and Logic    ************
+ *********************************************************/
 
+reg [`DATA_WIDTH-1:0] load_data_wb;
+
+// The definition here is not strictly Arm 32-bit. It has some issue with the 64-bit data width defined in the lab manual.
+always @(*) begin
+    case (mem_size_wb)
+        2'b00: // Byte
+            load_data_wb = mem_signed_wb ? {{(`DATA_WIDTH-8){d_mem_data_i[7]}},  d_mem_data_i[7:0]}
+                                         : {{(`DATA_WIDTH-8){1'b0}}, d_mem_data_i[7:0]};
+        2'b01: // Halfword
+            load_data_wb = mem_signed_wb ? {{(`DATA_WIDTH-16){d_mem_data_i[15]}}, d_mem_data_i[15:0]}
+                                         : {{(`DATA_WIDTH-16){1'b0}}, d_mem_data_i[15:0]};
+        default: // Word
+            load_data_wb = d_mem_data_i;
+    endcase
+end
+
+// ── WB Data Mux ────────────────────────────────────────────────────
+reg [`DATA_WIDTH-1:0] wb_data1;
+
+always @(*) begin
+    case (wb_sel_wb)
+        `WB_ALU:  wb_data1 = alu_result_wb;
+        `WB_MEM:  wb_data1 = load_data_wb;              // From sync DMEM output
+        `WB_LINK: wb_data1 = pc_plus4_wb;               // BL return address
+        `WB_PSR:  wb_data1 = {{(`DATA_WIDTH-4){1'b0}}, cpsr_flags}; // MRS (simplified)
+        `WB_MUL:  wb_data1 = mac_result_lo_wb;          // MUL/MLA low
+        default:  wb_data1 = alu_result_wb;
+    endcase
+end
+
+// Second write data: long multiply RdHi or base writeback
+wire [`DATA_WIDTH-1:0] wb_data2 = (wb_sel_wb == `WB_MUL) ? mac_result_hi_wb : alu_result_wb;
+
+// Route to register file write ports
+assign wb_wr_addr1 = wr_addr1_wb;
+assign wb_wr_data1 = wb_data1;
+assign wb_wr_en1 = wr_en1_wb;
+
+assign wb_wr_addr2 = wr_addr2_wb;
+assign wb_wr_data2 = wb_data2;
+assign wb_wr_en2 = wr_en2_wb;
+
+// WB result for forwarding (used by FWD_MEMWB path in fwd_mux)
+assign wb_result_data = wb_data1;
+
+// HDU signals and instance late declare to include all flushing conditions
+hdu u_hdu (
+    .idex_is_load (mem_read_ex),
+    .idex_wd (wr_addr1_ex),
+    .idex_we (wr_en1_ex),
+
+    .ifid_rn (rn_addr_id),
+    .ifid_rm (rm_addr_id),
+    .ifid_rs (rs_addr_id),
+    .ifid_rd_store (rd_addr_id),
+    .ifid_use_rn (use_rn_id),
+    .ifid_use_rm (use_rm_id),
+    .ifid_use_rs (use_rs_id),
+    .ifid_use_rd_st (use_rd_id),
+
+    .branch_taken (branch_taken_ex),
+    .bdtu_busy (bdtu_busy),
+
+    .stall_if (stall_if),
+    .stall_id (stall_id),
+    .stall_ex (stall_ex),
+    .stall_mem (stall_mem),
+
+    .flush_ifid (flush_ifid),
+    .flush_idex (flush_idex),
+    .flush_exmem (flush_exmem)
+);
 
 // Newly added ILA Debug Interface logic
 // Now using full `DATA_WIDTH` (64 bits) for output.
@@ -308,43 +897,32 @@ wire [31:0] rm_data_pc_adj = (rm_addr_id == 4'd15) ? (pc_plus4_id + 32'd4) : rm_
 always @(*) begin
     if (ila_debug_sel[4]) begin
         // Mode 1: Register File Debug (MSB = 1)
-        // Address is taken from ila_debug_sel[2:0] which is already wired to regfile
         ila_debug_data = debug_reg_out;
     end else begin
         // Mode 0: System Debug (MSB = 0)
         case (ila_debug_sel[3:0])
-            // 0: Program Counter (Fetch) - 9 bits
-            4'd0: ila_debug_data = { {`DATA_WIDTH-`PC_WIDTH{1'b0}}, pc_if };
-            
-            // 1: Instruction (Decode) - 32 bits
-            4'd1: ila_debug_data = { {`DATA_WIDTH-`INSTR_WIDTH{1'b0}}, instr_id };
-            
-            // 2: Register Read Data A (Decode) - Full 64 bits
-            4'd2: ila_debug_data = r0_out_id;
-            
-            // 3: Register Read Data B (Decode) - Full 64 bits
-            4'd3: ila_debug_data = r1_out_id;
-            
-            // 4: EX Stage Result / Address (Execute) - Full 64 bits
-            4'd4: ila_debug_data = r0_out_ex;
-            
-            // 5: EX Stage Write Data (Execute) - Full 64 bits
-            4'd5: ila_debug_data = r1_out_ex;
-            
-            // 6: Writeback Data / Memory Read Data (Writeback) - Full 64 bits
-            4'd6: ila_debug_data = d_mem_data_i;
-            
-            // 7: Control Signals Vector
-            // [0]: Reg Write ID, [1]: Mem Write ID, [2]: Mem Write Mem, [3]: Reg Write WB
-            4'd7: ila_debug_data = { {`DATA_WIDTH-4{1'b0}}, reg_write_wb, mem_write_mem, mem_write_id, reg_write_id };
-
-            // 8: Destination Register Address (Decode) - 3 bits
-            4'd8: ila_debug_data = { {`DATA_WIDTH-`REG_ADDR_WIDTH{1'b0}}, rdaddr_id };
-
-            // 9: Destination Register Address (Writeback) - 3 bits
-            4'd9: ila_debug_data = { {`DATA_WIDTH-`REG_ADDR_WIDTH{1'b0}}, rdaddr_wb };
-
-            default: ila_debug_data = {`DATA_WIDTH{1'b1}}; // All 1s for invalid selection
+            4'd0:  ila_debug_data = pc_if;
+            4'd1:  ila_debug_data = instr_id;
+            4'd2:  ila_debug_data = rn_data_id;
+            4'd3:  ila_debug_data = rm_data_id;
+            4'd4:  ila_debug_data = alu_result_ex;
+            4'd5:  ila_debug_data = store_data_ex;
+            4'd6:  ila_debug_data = wb_data1;
+            4'd7:  ila_debug_data = {{(`DATA_WIDTH-9){1'b0}},
+                                     ifid_valid, bdtu_busy,
+                                     branch_taken_ex, stall_if,
+                                     wr_en1_wb, mem_write_mem,
+                                     mem_write_ex, wr_en1_id,
+                                     mem_write_id};
+            4'd8:  ila_debug_data = {{(`DATA_WIDTH-4){1'b0}}, cpsr_flags};
+            4'd9:  ila_debug_data = {{(`DATA_WIDTH-4){1'b0}}, wr_addr1_wb};
+            4'd10: ila_debug_data = {{(`DATA_WIDTH-4){1'b0}}, wr_addr1_ex};
+            4'd11: ila_debug_data = mac_result_lo_wb;
+            4'd12: ila_debug_data = mac_result_hi_wb;
+            4'd13: ila_debug_data = d_mem_data_i;
+            4'd14: ila_debug_data = d_mem_addr_o;
+            4'd15: ila_debug_data = {{(`DATA_WIDTH-16){1'b0}}, bdt_list_mem};
+            default: ila_debug_data = {`DATA_WIDTH{1'b1}};
         endcase
     end
 end
