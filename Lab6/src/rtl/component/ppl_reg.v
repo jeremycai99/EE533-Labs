@@ -8,6 +8,9 @@
  - v1.1: Updated version with more features for Lab 6 with flush support (Feb. 17, 2026)
  */
 
+// NOTE: EOL DUE TO LARGE NUMBER OF REGISTERS IN THE PIPELINE
+// DO NOT USE
+
 `ifndef PPL_REG_V
 `define PPL_REG_V
 

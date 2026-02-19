@@ -9,7 +9,7 @@
  */
 
 //Data width definition
-`define DATA_WIDTH 64 //Maximum 64 due to KSA design
+`define DATA_WIDTH 64
 `define ALU_OP_WIDTH 4
 
 //Instruction width definition
