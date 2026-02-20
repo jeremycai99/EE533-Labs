@@ -135,7 +135,11 @@ assign stall_mem = bdtu_stall;
 // Flush signals
 assign flush_ifid  = branch_flush;
 assign flush_idex  = branch_flush | lu_stall;
-assign flush_exmem = branch_flush;
+
+// Branch effective in EX stage and flush ex/mem or not doesn't
+// matter so hardcode the flush_exmem to 0 for simplicity.
+// This fix is intended to fix the multiple branch corner cases.
+assign flush_exmem = 1'b0;
 
 endmodule
 

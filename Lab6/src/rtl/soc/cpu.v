@@ -137,7 +137,8 @@ reg [3:0] cpsr_flags;
 wire cond_met_raw;
 wire cond_met_id;
 
-wire [3:0] effective_flags = cpsr_wen_ex ? new_flags : cpsr_flags;
+wire [3:0] effective_flags = psr_wr_flags_ex ? alu_result_ex[31:28] :
+                             cpsr_wen_ex ? new_flags : cpsr_flags;
 
 cond_eval u_cond_eval (
     .cond_code(instr_id[31:28]),
@@ -374,6 +375,10 @@ reg addr_pre_idx_bdt_ex, addr_up_bdt_ex;
 reg swap_byte_ex;
 reg [3:0] base_reg_ex;
 
+reg psr_wr_ex;
+reg [3:0] psr_mask_ex;
+reg psr_field_sel_ex;
+
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n || flush_idex) begin
         alu_op_ex <= 4'd0;
@@ -426,6 +431,9 @@ always @(posedge clk or negedge rst_n) begin
         addr_up_bdt_ex <= 1'b0;
         swap_byte_ex <= 1'b0;
         base_reg_ex <= 4'd0;
+        psr_wr_ex <= 1'b0;
+        psr_mask_ex <= 4'd0;
+        psr_field_sel_ex <= 1'b0;
     end
     else if (!stall_ex) begin
         alu_op_ex <= alu_op_id;
@@ -478,6 +486,9 @@ always @(posedge clk or negedge rst_n) begin
         addr_up_bdt_ex <= addr_up_id;
         swap_byte_ex <= swap_byte_id;
         base_reg_ex <= rn_addr_id;
+        psr_wr_ex <= psr_wr_id;
+        psr_mask_ex <= psr_mask_id;
+        psr_field_sel_ex <= psr_field_sel_id;
     end
 end
 
@@ -659,11 +670,17 @@ assign branch_target_ex = branch_exchange_ex ? branch_target_bx : branch_target_
 // Condition flags update logic
 wire [3:0] new_flags = mul_en_ex ? mac_flags : alu_flags_ex;
 
+wire psr_wr_flags_ex = psr_wr_ex && psr_mask_ex[3] && !psr_field_sel_ex;
+
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n)
         cpsr_flags <= 4'b0;
-    else if (cpsr_wen_ex && !stall_ex)
-        cpsr_flags <= new_flags;
+    else if (!stall_ex) begin
+        if (psr_wr_flags_ex)
+            cpsr_flags <= alu_result_ex[31:28];   // MSR: flags from operand
+        else if (cpsr_wen_ex)
+            cpsr_flags <= new_flags;              // DP/MUL: flags from ALU/MAC
+    end
 end
 
 wire [`DMEM_ADDR_WIDTH-1:0] mem_addr_ex = addr_pre_idx_ex ? alu_result_ex : rn_fwd;
@@ -902,7 +919,8 @@ always @(*) begin
         `WB_ALU:  wb_data1 = alu_result_wb;
         `WB_MEM:  wb_data1 = load_data_wb;
         `WB_LINK: wb_data1 = pc_plus4_wb;
-        `WB_PSR:  wb_data1 = {{(`DATA_WIDTH-4){1'b0}}, cpsr_flags};
+        // Bug fix for CPSR flags write back for MRS
+        `WB_PSR:  wb_data1 = {{cpsr_flags, {(`DATA_WIDTH-4){1'b0}}}};
         `WB_MUL:  wb_data1 = mac_result_lo_wb;
         default:  wb_data1 = alu_result_wb;
     endcase
