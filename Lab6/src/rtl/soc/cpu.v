@@ -1,8 +1,22 @@
 /* file: cpu.v
  Description: Single thread 5-stage pipeline Arm CPU module
  Author: Jeremy Cai
- Date: Feb. 18, 2026
- Version: 1.0
+ Date: Feb. 20, 2026
+ Version: 1.2
+ Revision history:
+    - 1.0: Initial version (Feb. 18, 2026)
+    - 1.1: Added 4th register-file read port to fix port-3 conflict
+            (Feb. 20, 2026).  Rs and Rd now have dedicated read ports,
+            fixing UMLAL/MLA/SMLAL which need both simultaneously.
+    - 1.2: Added secondary write-port (port 2) forwarding through
+            FU and HDU.  EX/MEM and MEM/WB port-2 writeback values
+            (base-writeback / RdHi) are now forwarded, fixing hazards
+            such as LDR Rd,[Rn,#off]! followed by STR Rt,[Rn,#x].
+            (Feb. 20, 2026)
+ */
+
+/*  define.v ADDITIONS REQUIRED for this revision:
+
  */
 
 `ifndef CPU_V
@@ -36,9 +50,6 @@ module cpu (
     output wire cpu_done,                       // Signal to indicate CPU completion
 
     // ILA Debug Interface
-    // Multiplexed Debug Port (Full 32-bit width)
-    // [4] = 0: System Debug (Selects via [3:0])
-    // [4] = 1: Register File Debug (Address via [2:0])
     input wire [4:0] ila_debug_sel,
     output reg [`DATA_WIDTH-1:0] ila_debug_data
 );
@@ -62,12 +73,11 @@ wire [`PC_WIDTH-1:0] branch_target_ex; // Target address calculated in EX stage
 // IF stage signals
 wire [`PC_WIDTH-1:0] pc_if;
 wire [`PC_WIDTH-1:0] pc_next_if;
-wire [`PC_WIDTH-1:0] pc_plus4_if; // Use PC+4 here to match with arm 32bit instruction behavior and assembly
-                                 // Will be truncated to smaller width for our small imem design
-wire pc_en = ~stall_if; // PC enable is inverse of IF stall (stalling IF means holding PC)
+wire [`PC_WIDTH-1:0] pc_plus4_if;
+wire pc_en = ~stall_if;
 
-assign pc_plus4_if = pc_if + 32'd4; // Increment PC by 4 for next instruction (32-bit aligned)
-assign pc_next_if = branch_taken_ex ? branch_target_ex : pc_plus4_if; // Muxing logic for next PC: branch target or PC+4
+assign pc_plus4_if = pc_if + 32'd4;
+assign pc_next_if = branch_taken_ex ? branch_target_ex : pc_plus4_if;
 
 pc u_pc (
     .clk(clk),
@@ -77,10 +87,10 @@ pc u_pc (
     .pc_out(pc_if)
 );
 
-assign i_mem_addr_o = pc_if; // Instruction memory address is current PC (truncated as needed)
+assign i_mem_addr_o = pc_if;
 
 // CPU Done signal: Active when PC reaches max value (all 1s)
-assign cpu_done = (pc_if == {`PC_WIDTH{1'b1}});
+assign cpu_done = (pc_if == `CPU_DONE_PC);
 
 /* SPECIAL CONSIDERATION FOR SYNC-READ BEHAVIOR OF INSTRUCTION MEMORY */
 reg [`INSTR_WIDTH-1:0] instr_held;
@@ -92,33 +102,29 @@ always @(posedge clk or negedge rst_n) begin
     else if (flush_ifid)
         held_valid <= 1'b0;
     else if (stall_id && !held_valid) begin
-        instr_held <= i_mem_data_i;   // Capture on first stall cycle
+        instr_held <= i_mem_data_i;
         held_valid <= 1'b1;
     end
     else if (!stall_id)
         held_valid <= 1'b0;
 end
 
-wire [`INSTR_WIDTH-1:0] instr_id = held_valid ? instr_held : i_mem_data_i; // Instruction fetched in IF stage, available in ID stage due to synchronous read
+wire [`INSTR_WIDTH-1:0] instr_id = held_valid ? instr_held : i_mem_data_i;
 
-reg [`PC_WIDTH-1:0] pc_plus4_id; // Register to hold PC+4 for ID stage (for branch target calculation and debugging)
-reg ifid_valid; // This valid bit willl be regarded as keeper logic to verify if the instruction output in the consequent clock should
-                //be considered as flushed instruction or not.
+reg [`PC_WIDTH-1:0] pc_plus4_id;
+reg ifid_valid;
 
-// Keeper logic to keep 5 stages of pipeline design
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         pc_plus4_id <= `PC_WIDTH'd0;
         ifid_valid <= 1'b0;
     end else if (flush_ifid) begin
-        // Hold the current value (do not update)
-        // On flush, the pc_plus4_id is not determined by the IF stage logic
-        ifid_valid <= 1'b0;   // No change
+        ifid_valid <= 1'b0;
     end else if (!stall_id) begin
-        pc_plus4_id <= pc_plus4_if; // Optional: Clear PC+4 on flush (not strictly necessary)
-        ifid_valid <= 1'b1;   // Mark as invalid instruction due to flush
+        pc_plus4_id <= pc_plus4_if;
+        ifid_valid <= 1'b1;
     end else begin
-        // Normal operation: hold pc_plus4_id and ifid_valid unchanged. Latch infer but no harm for now
+        // Stalled: hold
     end
 end
 
@@ -127,19 +133,19 @@ end
  ************   ID Stage Signals and Logic    ************
  *********************************************************/
 
-reg [3:0] cpsr_flags; // Current Program Status Register flags (N, Z, C, V)
-wire cond_met_raw; // Condition code evaluation result before considering instruction validity
-wire cond_met_id; // Condition code evaluation result for ID stage (considering flush and valid bit)
+reg [3:0] cpsr_flags;
+wire cond_met_raw;
+wire cond_met_id;
 
 wire [3:0] effective_flags = cpsr_wen_ex ? new_flags : cpsr_flags;
 
 cond_eval u_cond_eval (
-    .cond_code(instr_id[31:28]), // Condition code from instruction
-    .flags(effective_flags), // Current CPSR flags
-    .cond_met(cond_met_raw) // Condition met output
+    .cond_code(instr_id[31:28]),
+    .flags(effective_flags),
+    .cond_met(cond_met_raw)
 );
 
-assign cond_met_id = cond_met_raw && ifid_valid; // Condition is met only if raw condition is true, instruction is valid, and not being flushed
+assign cond_met_id = cond_met_raw && ifid_valid;
 
 /* Start Control Unit (CU) Signal Declaration*/
 wire t_dp_reg, t_dp_imm, t_mul, t_mull, t_swp, t_bx;
@@ -152,37 +158,36 @@ wire [3:0] wr_addr1_id, wr_addr2_id;
 wire wr_en1_id, wr_en2_id;
 
 wire [3:0] alu_op_id;
-wire alu_src_b_id; // 0 = register, 1 = immediate
-wire cpsr_wen_id; // CPSR write enable
+wire alu_src_b_id;
+wire cpsr_wen_id;
 
 wire [1:0] shift_type_id;
 wire [`SHIFT_AMOUNT_WIDTH-1:0] shift_amount_id;
-wire shift_src_id; // 0 = immediate shift, 1 = register shift
+wire shift_src_id;
 
-wire [`DATA_WIDTH-1:0] imm32_id; // 32-bit immediate value after decoding
+wire [`DATA_WIDTH-1:0] imm32_id;
 
-wire mem_read_id; // Memory read enable
-wire mem_write_id; // Memory write enable
-wire [1:0] mem_size_id; // Memory access size (00=byte,
-wire mem_signed_id; // Memory access signed (for loads)
+wire mem_read_id;
+wire mem_write_id;
+wire [1:0] mem_size_id;
+wire mem_signed_id;
 
-wire addr_pre_idx_id, addr_up_id, addr_wb_id; // Addressing mode control signals for load/store
+wire addr_pre_idx_id, addr_up_id, addr_wb_id;
 
-wire [2:0] wb_sel_id; // Writeback select signal for choosing what goes to register write data
+wire [2:0] wb_sel_id;
 
-wire branch_en_id, branch_link_id, branch_exchange_id; // Branch control signals
+wire branch_en_id, branch_link_id, branch_exchange_id;
 
-wire mul_en_id, mul_long_id, mul_signed_id, mul_accumulate_id; // Multiply unit control signals
+wire mul_en_id, mul_long_id, mul_signed_id, mul_accumulate_id;
 
-wire psr_rd_id, psr_wr_id, psr_field_sel_id; // PSR access control signals
+wire psr_rd_id, psr_wr_id, psr_field_sel_id;
 
-wire [3:0] psr_mask_id; // Mask for which PSR flags to update (N, Z, C, V)
+wire [3:0] psr_mask_id;
 
-wire [15:0] bdt_list_id; // Block data transfer register list
-wire bdt_load_id, bdt_s_id, bdt_wb_id; // Block data transfer control signals
+wire [15:0] bdt_list_id;
+wire bdt_load_id, bdt_s_id, bdt_wb_id;
 
-
-wire swap_byte_id; // Byte/word control signal for SWP instruction: 1 for byte swap (SWPB), 0 for word swap (SWP)
+wire swap_byte_id;
 wire swi_en_id;
 
 wire use_rn_id, use_rd_id, use_rs_id, use_rm_id;
@@ -216,9 +221,9 @@ cu u_cu (
     .rs_addr(rs_addr_id),
     .rm_addr(rm_addr_id),
     .wr_addr1(wr_addr1_id),
-    .wr_en1(wr_en1_id), // Primary writeback register and enable
+    .wr_en1(wr_en1_id),
     .wr_addr2(wr_addr2_id),
-    .wr_en2(wr_en2_id), // Secondary writeback register and enable (for long multiply)
+    .wr_en2(wr_en2_id),
     .alu_op(alu_op_id),
     .alu_src_b(alu_src_b_id),
     .cpsr_wen(cpsr_wen_id),
@@ -260,15 +265,17 @@ cu u_cu (
 
 /* Start Register File (RF) Signals */
 
-// Port 3 is shared: Rd (store data / MLA accum) or Rs (shift reg /
-// MUL multiplier).  When BDTU is busy the ID stage is stalled,
-// so port 3 is free for BDTU register reads (STM data).
-wire [3:0] r3addr_id = use_rd_id ? rd_addr_id : rs_addr_id;
+// ── Read port address routing ──────────────────────────────────────
+//
+// Port 1: Rn                   (always rn_addr_id)
+// Port 2: Rm                   (always rm_addr_id)
+// Port 3: Rs                   (rs_addr_id; shared with BDTU when busy)
+// Port 4: Rd (store / accum)   (always rd_addr_id)
 
-wire [3:0] bdtu_rf_rd_addr; // Driven by BDTU instance below
-wire [3:0] r3addr_mux = bdtu_busy ? bdtu_rf_rd_addr : r3addr_id;
+wire [3:0] bdtu_rf_rd_addr;
+wire [3:0] r3addr_mux = bdtu_busy ? bdtu_rf_rd_addr : rs_addr_id;
 
-wire [`DATA_WIDTH-1:0] rn_data_id, rm_data_id, r3_data_id;
+wire [`DATA_WIDTH-1:0] rn_data_id, rm_data_id, r3_data_id, r4_data_id;
 
 // Write-back signals from WB stage
 wire [3:0]  wb_wr_addr1, wb_wr_addr2;
@@ -281,8 +288,6 @@ wire [`DATA_WIDTH-1:0] bdtu_wr_data1, bdtu_wr_data2;
 wire bdtu_wr_en1,   bdtu_wr_en2;
 
 // Merged regfile write ports: BDTU has priority when busy.
-// The regfile has a single wena that gates BOTH write ports, so
-// when only one port is active we mirror it to avoid garbage writes.
 wire rf_wr_en = bdtu_busy ? (bdtu_wr_en1 | bdtu_wr_en2) : (wb_wr_en1  | wb_wr_en2);
 
 wire [3:0] rf_wr_addr1 = bdtu_busy
@@ -310,6 +315,7 @@ regfile u_regfile (
     .r1addr (rn_addr_id),
     .r2addr (rm_addr_id),
     .r3addr (r3addr_mux),
+    .r4addr (rd_addr_id),
     .wena (rf_wr_en),
     .wr_addr1 (rf_wr_addr1),
     .wr_data1 (rf_wr_data1),
@@ -318,13 +324,14 @@ regfile u_regfile (
     .r1data (rn_data_id),
     .r2data (rm_data_id),
     .r3data (r3_data_id),
+    .r4data (r4_data_id),
     .ila_cpu_reg_addr (ila_debug_sel[`REG_ADDR_WIDTH-1:0]),
     .ila_cpu_reg_data (debug_reg_out)
 );
 
-//When executing an ARM instruction, PC reads as the address of the current instruction plus 8.
-// Reference link: https://developer.arm.com/documentation/ddi0406/c/Application-Level-Architecture/Application-Level-Programmers--Model/ARM-core-registers
-// Provide PC+8 when reading R15 (ARM convention: R15 = PC+8)
+// When executing an ARM instruction, PC reads as the address of the
+// current instruction plus 8.
+// Ref: https://developer.arm.com/documentation/ddi0406/c/Application-Level-Architecture/Application-Level-Programmers--Model/ARM-core-registers
 wire [`DATA_WIDTH-1:0] rn_data_pc_adj = (rn_addr_id == 4'd15) ? (pc_plus4_id + 32'd4) : rn_data_id;
 wire [`DATA_WIDTH-1:0] rm_data_pc_adj = (rm_addr_id == 4'd15) ? (pc_plus4_id + 32'd4) : rm_data_id;
 
@@ -352,8 +359,10 @@ reg use_rn_ex, use_rm_ex, use_rs_ex, use_rd_ex;
 // Register addresses (for forwarding)
 reg [3:0]  rn_addr_ex, rm_addr_ex, rs_addr_ex, rd_addr_ex;
 
-// Register data
-reg [`DATA_WIDTH-1:0] rn_data_ex, rm_data_ex, r3_data_ex;
+// Register data — separate Rs and Rd pipeline registers (v1.1)
+reg [`DATA_WIDTH-1:0] rn_data_ex, rm_data_ex;
+reg [`DATA_WIDTH-1:0] rs_data_ex;
+reg [`DATA_WIDTH-1:0] rd_data_ex;
 reg [`DATA_WIDTH-1:0] pc_plus4_ex;
 
 // BDT / multi-cycle
@@ -403,7 +412,8 @@ always @(posedge clk or negedge rst_n) begin
         rd_addr_ex <= 4'd0;
         rn_data_ex <= 32'd0;
         rm_data_ex <= 32'd0;
-        r3_data_ex <= 32'd0;
+        rs_data_ex <= 32'd0;
+        rd_data_ex <= 32'd0;
         pc_plus4_ex <= 32'd0;
         is_multi_cycle_ex <= 1'b0;
         t_bdt_ex <= 1'b0;
@@ -454,7 +464,8 @@ always @(posedge clk or negedge rst_n) begin
         rd_addr_ex <= rd_addr_id;
         rn_data_ex <= rn_data_pc_adj;
         rm_data_ex <= rm_data_pc_adj;
-        r3_data_ex <= r3_data_id;
+        rs_data_ex <= r3_data_id;  // Port 3: Rs data
+        rd_data_ex <= r4_data_id;  // Port 4: Rd data (store / accumulator)
         pc_plus4_ex <= pc_plus4_id;
         is_multi_cycle_ex <= is_multi_cycle_id;
         t_bdt_ex <= t_bdt;
@@ -474,17 +485,25 @@ end
  ************   EX Stage Signals and Logic    ************
  *********************************************************/
 
-// Forwarding unit signals
-//exmem meaning the signals from EX/MEM pipeline register,
-//memwb meaning the signals from MEM/WB pipeline register
+// ── Forwarding-unit interface wires (EX/MEM) ──
 wire [3:0] exmem_wr_addr1;
 wire exmem_wr_en1;
 wire exmem_is_load;
 
+// ── Forwarding-unit interface wires (MEM/WB) ──
 wire [3:0] memwb_wr_addr1;
 wire memwb_wr_en1;
+wire [3:0] memwb_wr_addr2;       // v1.2: port-2 address exposed
+wire       memwb_wr_en2;         // v1.2: port-2 enable  exposed
 
+// ── Forwarding select outputs ──
 wire [2:0] fwd_a, fwd_b, fwd_s, fwd_d;
+
+// ── Forwarding data wires (declared here, assigned after EX/MEM & WB) ──
+wire [`DATA_WIDTH-1:0] exmem_alu_result;  // EX/MEM port-1 data (ALU result)
+wire [`DATA_WIDTH-1:0] exmem_wb_data2;    // v1.2: EX/MEM port-2 data (base WB / RdHi)
+wire [`DATA_WIDTH-1:0] wb_result_data;    // MEM/WB port-1 data (final WB mux output)
+// wb_data2 (MEM/WB port-2 data) is declared in the WB section below.
 
 fu u_fu (
     .ex_rn (rn_addr_ex),
@@ -495,56 +514,90 @@ fu u_fu (
     .ex_use_rm (use_rm_ex),
     .ex_use_rs (use_rs_ex),
     .ex_use_rd_st (use_rd_ex),
-    .exmem_wd (exmem_wr_addr1),
-    .exmem_we (exmem_wr_en1),
-    .exmem_is_load (exmem_is_load),
-    .memwb_wd (memwb_wr_addr1),
-    .memwb_we (memwb_wr_en1),
+
+    // EX/MEM — port 1
+    .exmem_wd1 (exmem_wr_addr1),
+    .exmem_we1 (exmem_wr_en1),
+    .exmem_is_load  (exmem_is_load),
+
+    // EX/MEM — port 2  (v1.2)
+    .exmem_wd2 (wr_addr2_mem),
+    .exmem_we2 (wr_en2_mem),
+
+    // MEM/WB — port 1
+    .memwb_wd1 (memwb_wr_addr1),
+    .memwb_we1 (memwb_wr_en1),
+
+    // MEM/WB — port 2  (v1.2)
+    .memwb_wd2 (memwb_wr_addr2),
+    .memwb_we2 (memwb_wr_en2),
+
+    // BDTU
     .bdtu_wd1 (bdtu_wr_addr1),
     .bdtu_we1 (bdtu_wr_en1),
     .bdtu_wd2 (bdtu_wr_addr2),
     .bdtu_we2 (bdtu_wr_en2),
+
+    // Outputs
     .fwd_a (fwd_a),
     .fwd_b (fwd_b),
     .fwd_s (fwd_s),
     .fwd_d (fwd_d)
 );
 
-wire [`DATA_WIDTH-1:0] exmem_alu_result;   // From EX/MEM register
-wire [`DATA_WIDTH-1:0] wb_result_data;     // From WB mux (final result)
+// ── 7-to-1 forwarding mux (v1.2: added EXMEM_P2 and MEMWB_P2) ──
+//
+// NOTE: If `FWD_EXMEM_P2 / `FWD_MEMWB_P2 are not yet in define.v,
+//       add them:  `define FWD_EXMEM_P2  3'b101
+//                  `define FWD_MEMWB_P2  3'b110
 
-//May need to revise if function is not supported in XILINX ISE 10.1
-// 5-to-1 forward mux
 function [`DATA_WIDTH-1:0] fwd_mux;
-    input [2:0]  sel;
-    input [`DATA_WIDTH-1:0] reg_val;
-    input [`DATA_WIDTH-1:0] exmem_val;
-    input [`DATA_WIDTH-1:0] memwb_val;
-    input [`DATA_WIDTH-1:0] bdtu_p1;
-    input [`DATA_WIDTH-1:0] bdtu_p2;
+    input [2:0]              sel;
+    input [`DATA_WIDTH-1:0]  reg_val;      // register-file value (default)
+    input [`DATA_WIDTH-1:0]  exmem_p1;     // EX/MEM port-1
+    input [`DATA_WIDTH-1:0]  exmem_p2;     // EX/MEM port-2
+    input [`DATA_WIDTH-1:0]  memwb_p1;     // MEM/WB port-1
+    input [`DATA_WIDTH-1:0]  memwb_p2;     // MEM/WB port-2
+    input [`DATA_WIDTH-1:0]  bdtu_p1;      // BDTU  port-1
+    input [`DATA_WIDTH-1:0]  bdtu_p2;      // BDTU  port-2
     begin
         case (sel)
-            `FWD_NONE:    fwd_mux = reg_val;
-            `FWD_EXMEM:   fwd_mux = exmem_val;
-            `FWD_MEMWB:   fwd_mux = memwb_val;
-            `FWD_BDTU_P1: fwd_mux = bdtu_p1;
-            `FWD_BDTU_P2: fwd_mux = bdtu_p2;
-            default:      fwd_mux = reg_val;
+            `FWD_NONE:     fwd_mux = reg_val;
+            `FWD_EXMEM:    fwd_mux = exmem_p1;
+            `FWD_EXMEM_P2: fwd_mux = exmem_p2;
+            `FWD_MEMWB:    fwd_mux = memwb_p1;
+            `FWD_MEMWB_P2: fwd_mux = memwb_p2;
+            `FWD_BDTU_P1:  fwd_mux = bdtu_p1;
+            `FWD_BDTU_P2:  fwd_mux = bdtu_p2;
+            default:       fwd_mux = reg_val;
         endcase
     end
 endfunction
 
-wire [`DATA_WIDTH-1:0] rn_fwd = fwd_mux(fwd_a, rn_data_ex, exmem_alu_result, wb_result_data, bdtu_wr_data1, bdtu_wr_data2);
-wire [`DATA_WIDTH-1:0] rm_fwd = fwd_mux(fwd_b, rm_data_ex, exmem_alu_result, wb_result_data, bdtu_wr_data1, bdtu_wr_data2);
-wire [`DATA_WIDTH-1:0] rs_fwd = fwd_mux(fwd_s, r3_data_ex, exmem_alu_result, wb_result_data, bdtu_wr_data1, bdtu_wr_data2);
-wire [`DATA_WIDTH-1:0] rd_store_fwd = fwd_mux(fwd_d, r3_data_ex, exmem_alu_result, wb_result_data, bdtu_wr_data1, bdtu_wr_data2);
+// wb_data2 is a wire declared in the WB section; Verilog allows
+// referencing it here because all wires are module-scoped.
+wire [`DATA_WIDTH-1:0] rn_fwd = fwd_mux(fwd_a, rn_data_ex,
+    exmem_alu_result, exmem_wb_data2,
+    wb_result_data,   wb_data2,
+    bdtu_wr_data1,    bdtu_wr_data2);
 
-// Route correct port-3 data based on usage
-wire [`DATA_WIDTH-1:0] rs_data_ex_fwd = use_rd_ex ? r3_data_ex : rs_fwd;
-wire [`DATA_WIDTH-1:0] rd_data_ex_fwd = use_rd_ex ? rd_store_fwd : {`DATA_WIDTH{1'b0}};
+wire [`DATA_WIDTH-1:0] rm_fwd = fwd_mux(fwd_b, rm_data_ex,
+    exmem_alu_result, exmem_wb_data2,
+    wb_result_data,   wb_data2,
+    bdtu_wr_data1,    bdtu_wr_data2);
 
-// Barrel Shifter 
-wire [`SHIFT_AMOUNT_WIDTH-1:0] actual_shamt = shift_src_ex ? rs_data_ex_fwd[`SHIFT_AMOUNT_WIDTH-1:0] : shift_amount_ex;
+wire [`DATA_WIDTH-1:0] rs_fwd = fwd_mux(fwd_s, rs_data_ex,
+    exmem_alu_result, exmem_wb_data2,
+    wb_result_data,   wb_data2,
+    bdtu_wr_data1,    bdtu_wr_data2);
+
+wire [`DATA_WIDTH-1:0] rd_store_fwd = fwd_mux(fwd_d, rd_data_ex,
+    exmem_alu_result, exmem_wb_data2,
+    wb_result_data,   wb_data2,
+    bdtu_wr_data1,    bdtu_wr_data2);
+
+// Barrel Shifter
+wire [`SHIFT_AMOUNT_WIDTH-1:0] actual_shamt = shift_src_ex ? rs_fwd[`SHIFT_AMOUNT_WIDTH-1:0] : shift_amount_ex;
 
 wire [`DATA_WIDTH-1:0] bs_din = rm_fwd;
 
@@ -578,15 +631,15 @@ alu u_alu (
     .alu_flags (alu_flags_ex)
 );
 
-// MAC Unit (dummy) signals and instance
+// MAC Unit
 wire [`DATA_WIDTH-1:0] mac_result_lo, mac_result_hi;
 wire [3:0]  mac_flags;
 
 mac u_mac (
     .rm (rm_fwd),
-    .rs (rs_data_ex_fwd),
+    .rs (rs_fwd),
     .rn_acc (rn_fwd),
-    .rdlo_acc (rd_data_ex_fwd),
+    .rdlo_acc (rd_store_fwd),
     .mul_en (mul_en_ex),
     .mul_long (mul_long_ex),
     .mul_signed (mul_signed_ex),
@@ -596,16 +649,14 @@ mac u_mac (
     .mac_flags (mac_flags)
 );
 
-// B/BL: target = PC+8 + imm32.  pc_plus4_ex = addr_of_branch + 4,
-//        so target = pc_plus4_ex + 4 + imm32.
-// BX:   target = Rm.
+// Branch target calculation
 wire [`PC_WIDTH-1:0] branch_target_br = pc_plus4_ex + 32'd4 + imm32_ex;
 wire [`PC_WIDTH-1:0] branch_target_bx = rm_fwd;
 
 assign branch_taken_ex  = branch_en_ex;
 assign branch_target_ex = branch_exchange_ex ? branch_target_bx : branch_target_br;
 
-// Condition flags update logic in EX stage
+// Condition flags update logic
 wire [3:0] new_flags = mul_en_ex ? mac_flags : alu_flags_ex;
 
 always @(posedge clk or negedge rst_n) begin
@@ -616,7 +667,7 @@ always @(posedge clk or negedge rst_n) begin
 end
 
 wire [`DMEM_ADDR_WIDTH-1:0] mem_addr_ex = addr_pre_idx_ex ? alu_result_ex : rn_fwd;
-wire [`DATA_WIDTH-1:0] store_data_ex = rd_data_ex_fwd;
+wire [`DATA_WIDTH-1:0] store_data_ex = rd_store_fwd;
 
 /*********************************************************
  ********   EX/MEM PIPELINE Register Definition   ********
@@ -710,11 +761,20 @@ always @(posedge clk or negedge rst_n) begin
     end
 end
 
-// Expose EX/MEM for forwarding
-assign exmem_wr_addr1 = wr_addr1_mem;
-assign exmem_wr_en1 = wr_en1_mem;
-assign exmem_is_load = mem_read_mem;
+// ── Expose EX/MEM for forwarding ──
+assign exmem_wr_addr1  = wr_addr1_mem;
+assign exmem_wr_en1    = wr_en1_mem;
+assign exmem_is_load   = mem_read_mem;
 assign exmem_alu_result = alu_result_mem;
+
+// v1.2: Port-2 forwarding data from EX/MEM.
+//   • Long multiply (WB_MUL) → mac_result_hi (RdHi)
+//   • Everything else        → alu_result    (base writeback address)
+//
+// The FU's exmem_valid2 has no exmem_is_load guard because port-2
+// always carries a value computed in EX (never memory-read data).
+assign exmem_wb_data2 = (wb_sel_mem == `WB_MUL) ? mac_result_hi_mem
+                                                  : alu_result_mem;
 
 /*********************************************************
  ************   MEM Stage Signals and Logic    ***********
@@ -756,12 +816,11 @@ bdtu u_bdtu (
     .mem_rd (bdtu_mem_rd),
     .mem_wr (bdtu_mem_wr),
     .mem_size (bdtu_mem_size),
-    .mem_rdata (d_mem_data_i),     // Sync: data from previous cycle's address
+    .mem_rdata (d_mem_data_i),
     .busy (bdtu_busy)
 );
 
-// Data Memory Interface Mux
-// BDTU has priority over single-cycle memory access
+// Data Memory Interface Mux — BDTU has priority
 assign d_mem_addr_o = bdtu_busy ? bdtu_mem_addr  : mem_addr_mem;
 assign d_mem_data_o = bdtu_busy ? bdtu_mem_wdata : store_data_mem;
 assign d_mem_wen_o  = bdtu_busy ? bdtu_mem_wr    : mem_write_mem;
@@ -809,9 +868,11 @@ always @(posedge clk or negedge rst_n) begin
     end
 end
 
-// Expose MEM/WB for forwarding
+// ── Expose MEM/WB for forwarding ──
 assign memwb_wr_addr1 = wr_addr1_wb;
-assign memwb_wr_en1 = wr_en1_wb;
+assign memwb_wr_en1   = wr_en1_wb;
+assign memwb_wr_addr2 = wr_addr2_wb;   // v1.2: port-2
+assign memwb_wr_en2   = wr_en2_wb;     // v1.2: port-2
 
 
 /*********************************************************
@@ -820,7 +881,6 @@ assign memwb_wr_en1 = wr_en1_wb;
 
 reg [`DATA_WIDTH-1:0] load_data_wb;
 
-// The definition here is not strictly Arm 32-bit. It has some issue with the 64-bit data width defined in the lab manual.
 always @(*) begin
     case (mem_size_wb)
         2'b00: // Byte
@@ -834,41 +894,49 @@ always @(*) begin
     endcase
 end
 
-// ── WB Data Mux ────────────────────────────────────────────────────
+// ── WB Data Mux (port 1) ──────────────────────────────────────────
 reg [`DATA_WIDTH-1:0] wb_data1;
 
 always @(*) begin
     case (wb_sel_wb)
         `WB_ALU:  wb_data1 = alu_result_wb;
-        `WB_MEM:  wb_data1 = load_data_wb;              // From sync DMEM output
-        `WB_LINK: wb_data1 = pc_plus4_wb;               // BL return address
-        `WB_PSR:  wb_data1 = {{(`DATA_WIDTH-4){1'b0}}, cpsr_flags}; // MRS (simplified)
-        `WB_MUL:  wb_data1 = mac_result_lo_wb;          // MUL/MLA low
+        `WB_MEM:  wb_data1 = load_data_wb;
+        `WB_LINK: wb_data1 = pc_plus4_wb;
+        `WB_PSR:  wb_data1 = {{(`DATA_WIDTH-4){1'b0}}, cpsr_flags};
+        `WB_MUL:  wb_data1 = mac_result_lo_wb;
         default:  wb_data1 = alu_result_wb;
     endcase
 end
 
-// Second write data: long multiply RdHi or base writeback
+// ── WB Data (port 2): long multiply RdHi or base writeback ──
 wire [`DATA_WIDTH-1:0] wb_data2 = (wb_sel_wb == `WB_MUL) ? mac_result_hi_wb : alu_result_wb;
 
 // Route to register file write ports
 assign wb_wr_addr1 = wr_addr1_wb;
 assign wb_wr_data1 = wb_data1;
-assign wb_wr_en1 = wr_en1_wb;
+assign wb_wr_en1   = wr_en1_wb;
 
 assign wb_wr_addr2 = wr_addr2_wb;
 assign wb_wr_data2 = wb_data2;
-assign wb_wr_en2 = wr_en2_wb;
+assign wb_wr_en2   = wr_en2_wb;
 
-// WB result for forwarding (used by FWD_MEMWB path in fwd_mux)
+// WB result for forwarding (MEM/WB port-1 path)
 assign wb_result_data = wb_data1;
+// wb_data2 serves as MEM/WB port-2 forwarding data (FWD_MEMWB_P2)
 
-// HDU signals and instance late declare to include all flushing conditions
+// ── HDU (placed after all signals it references are declared) ──
 hdu u_hdu (
     .idex_is_load (mem_read_ex),
-    .idex_wd (wr_addr1_ex),
-    .idex_we (wr_en1_ex),
 
+    // Port 1
+    .idex_wd1 (wr_addr1_ex),
+    .idex_we1 (wr_en1_ex),
+
+    // Port 2  (v1.2)
+    .idex_wd2 (wr_addr2_ex),
+    .idex_we2 (wr_en2_ex),
+
+    // IF/ID source registers
     .ifid_rn (rn_addr_id),
     .ifid_rm (rm_addr_id),
     .ifid_rs (rs_addr_id),
@@ -881,6 +949,7 @@ hdu u_hdu (
     .branch_taken (branch_taken_ex),
     .bdtu_busy (bdtu_busy),
 
+    // Outputs
     .stall_if (stall_if),
     .stall_id (stall_id),
     .stall_ex (stall_ex),
@@ -891,9 +960,7 @@ hdu u_hdu (
     .flush_exmem (flush_exmem)
 );
 
-// Newly added ILA Debug Interface logic
-// Now using full `DATA_WIDTH` (64 bits) for output.
-// Signals smaller than 64 bits are zero-padded.
+// ── ILA Debug Interface ──
 always @(*) begin
     if (ila_debug_sel[4]) begin
         // Mode 1: Register File Debug (MSB = 1)

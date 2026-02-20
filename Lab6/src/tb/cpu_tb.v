@@ -122,7 +122,7 @@ begin
 
     // ─── BOOTSTRAP ────────────────────────────────────────────
     mem_array['h000 >> 2] = 32'hE3A0B000;  // MOV  R11(FP), #0
-    mem_array['h004 >> 2] = 32'hE3E0E000;  // MVN  R14(LR), #0  → 0xFFFFFFFF
+    mem_array['h004 >> 2] = 32'hE3A0EC02;  // MOV  R14(LR), #0x200  (aligned sentinel)
     mem_array['h008 >> 2] = 32'hE1A00000;  // NOP  (MOV R0, R0)
     mem_array['h00C >> 2] = 32'hE3A0DB01;  // MOV  R13(SP), #0x400
 
@@ -441,7 +441,7 @@ initial begin
 
     $display("");
     $display("════════════════════════════════════════════════════════════════");
-    $display("  ARM CPU Testbench  -  Selection Sort (sort.s)");
+    $display("  ARM CPU Testbench  -  Bubble Sort (sort.s)");
     $display("  Bootstrap initialises SP/LR/FP via real instructions");
     $display("════════════════════════════════════════════════════════════════");
     $display("  SP_INIT     = 0x%08H", SP_INIT);
@@ -566,12 +566,12 @@ initial begin
         $display("  [PASS] FP = 0  (restored)");
 
     // LR restored
-    if (u_cpu.u_regfile.regs[14] !== 32'hFFFF_FFFF) begin
-        $display("  [FAIL] LR = 0x%08H, expected 0xFFFFFFFF",
+    if (u_cpu.u_regfile.regs[14] !== 32'h0000_0200) begin
+        $display("  [FAIL] LR = 0x%08H, expected 0x00000200",
                  u_cpu.u_regfile.regs[14]);
         errors = errors + 1;
     end else
-        $display("  [PASS] LR = 0xFFFFFFFF  (restored)");
+        $display("  [PASS] LR = 0x00000200  (restored)");
 
     // Sorted array
     $display("");

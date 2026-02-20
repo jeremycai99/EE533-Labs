@@ -136,12 +136,12 @@ wire [3:0] cur_reg = remaining[0]  ? 4'd0  :
 //   DB    1  0  Rn − 4N           Rn − 4N
 //
 wire [`DATA_WIDTH-1:0] total_off = {{(`DATA_WIDTH-5){1'b0}}, num_regs, 2'b00};    // N × 4
-wire [`DATA_WIDTH-1:0] base_up   = base_value + total_off;          // Rn + 4N
-wire [`DATA_WIDTH-1:0] base_dn   = base_value - total_off;          // Rn − 4N
+wire [`DATA_WIDTH-1:0] base_up = base_value + total_off;          // Rn + 4N
+wire [`DATA_WIDTH-1:0] base_dn = base_value - total_off;          // Rn − 4N
 
 wire [`DATA_WIDTH-1:0] start_addr = up_down
     ? (pre_index ? base_value + 32'd4 : base_value)          // IB / IA
-    : (pre_index ? base_dn          : base_dn + 32'd4);  // DB / DA
+    : (pre_index ? base_dn : base_dn + 32'd4);  // DB / DA
 
 wire [`DATA_WIDTH-1:0] calc_new_base = up_down ? base_up : base_dn;
 
@@ -150,19 +150,19 @@ wire is_last = (remaining != 16'd0) && ((remaining & (remaining - 16'd1)) == 16'
 
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-        state      <= S_IDLE;
-        remaining  <= 16'd0;
-        cur_addr   <= {`DMEM_ADDR_WIDTH{1'b0}};
+        state <= S_IDLE;
+        remaining <= 16'd0;
+        cur_addr <= {`DMEM_ADDR_WIDTH{1'b0}};
         r_new_base <= {`DATA_WIDTH{1'b0}};
-        r_load     <= 1'b0;
-        r_wb       <= 1'b0;
-        r_is_swp   <= 1'b0;
-        r_byte     <= 1'b0;
+        r_load <= 1'b0;
+        r_wb <= 1'b0;
+        r_is_swp <= 1'b0;
+        r_byte <= 1'b0;
         r_base_reg <= 4'd0;
-        r_swp_rd   <= 4'd0;
-        r_swp_rm   <= 4'd0;
-        swp_temp   <= {`DATA_WIDTH{1'b0}};
-        prev_reg   <= 4'd0;
+        r_swp_rd <= 4'd0;
+        r_swp_rm <= 4'd0;
+        swp_temp <= {`DATA_WIDTH{1'b0}};
+        prev_reg <= 4'd0;
         rd_pending <= 1'b0;
     end
     else begin
@@ -175,20 +175,20 @@ always @(posedge clk or negedge rst_n) begin
 
                 if (op_swp) begin
                     r_is_swp <= 1'b1;
-                    r_byte   <= swap_byte;
+                    r_byte <= swap_byte;
                     r_swp_rd <= swp_rd;
                     r_swp_rm <= swp_rm;
                     cur_addr <= base_value;         // address = [Rn]
-                    state    <= S_SWP_RD;
+                    state <= S_SWP_RD;
                 end
                 else if (op_bdt) begin
-                    r_is_swp   <= 1'b0;
-                    r_load     <= bdt_load;
-                    r_wb       <= bdt_wb;
+                    r_is_swp <= 1'b0;
+                    r_load <= bdt_load;
+                    r_wb <= bdt_wb;
                     r_new_base <= calc_new_base;
-                    remaining  <= reg_list;
-                    cur_addr   <= start_addr;
-                    state      <= S_BDT_XFER;
+                    remaining <= reg_list;
+                    cur_addr <= start_addr;
+                    state <= S_BDT_XFER;
                 end
             end
         end
@@ -199,16 +199,16 @@ always @(posedge clk or negedge rst_n) begin
                 // Safety: empty register list (UNPREDICTABLE per ARM).
                 // Skip transfers, proceed to WB or DONE.
                 rd_pending <= 1'b0;
-                state      <= r_wb ? S_BDT_WB : S_DONE;
+                state <= r_wb ? S_BDT_WB : S_DONE;
             end
             else begin
-                cur_addr  <= cur_addr + 32'd4;
+                cur_addr <= cur_addr + 32'd4;
                 remaining <= remaining & (remaining - 16'd1);  // clear lowest bit
 
                 if (r_load) begin
                     // LDM: track which register this cycle's address belongs to.
                     // The data for THIS address arrives next cycle (sync read).
-                    prev_reg   <= cur_reg;
+                    prev_reg <= cur_reg;
                     rd_pending <= 1'b1;
                 end
 
@@ -228,7 +228,7 @@ always @(posedge clk or negedge rst_n) begin
         //  register in the list) without issuing a new read.
         S_BDT_LAST: begin
             rd_pending <= 1'b0;
-            state      <= r_wb ? S_BDT_WB : S_DONE;
+            state <= r_wb ? S_BDT_WB : S_DONE;
         end
 
         //  BDT: base writeback
@@ -247,7 +247,7 @@ always @(posedge clk or negedge rst_n) begin
         //  mem_rdata now holds mem[Rn].  Latch it into swp_temp.
         S_SWP_RD_WAIT: begin
             swp_temp <= mem_rdata;
-            state    <= S_SWP_WR;
+            state <= S_SWP_WR;
         end
 
         //  SWP: write Rm → memory, swp_temp → Rd
@@ -261,7 +261,7 @@ always @(posedge clk or negedge rst_n) begin
         //  posedge.  The BDTU simultaneously returns to IDLE.
         S_DONE: begin
             rd_pending <= 1'b0;
-            state      <= S_IDLE;
+            state <= S_IDLE;
         end
 
         default: state <= S_IDLE;
@@ -321,7 +321,7 @@ assign mem_size = (r_is_swp && r_byte) ? 2'b00 : 2'b10;
 assign wr_addr1 = (state == S_SWP_WR) ? r_swp_rd : prev_reg;
 assign wr_data1 = (state == S_DONE)    ? last_wr_data1 :
                   (state == S_SWP_WR)  ? swp_temp      : mem_rdata;
-assign wr_en1   = (rd_pending && (state == S_BDT_XFER || state == S_BDT_LAST))
+assign wr_en1 = (rd_pending && (state == S_BDT_XFER || state == S_BDT_LAST))
                 | (state == S_SWP_WR)
                 | (state == S_DONE && (r_load || r_is_swp));
 

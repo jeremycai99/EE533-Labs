@@ -19,6 +19,7 @@ module regfile(
     input [`REG_ADDR_WIDTH-1:0] r1addr, // Source register 1 address
     input [`REG_ADDR_WIDTH-1:0] r2addr, // Source register 2 address
     input [`REG_ADDR_WIDTH-1:0] r3addr, // Source register 3 address (for multiply instructions)
+    input [`REG_ADDR_WIDTH-1:0] r4addr, // Source register 4 address (for multiply MLAL instructions)
 
     input wena, // Write enable signal
     input [`REG_ADDR_WIDTH-1:0] wr_addr1, // Destination register address
@@ -29,6 +30,7 @@ module regfile(
     output wire [`REG_DATA_WIDTH-1:0] r1data, // Data read from source register 1
     output wire [`REG_DATA_WIDTH-1:0] r2data, // Data read from source register 2
     output wire [`REG_DATA_WIDTH-1:0] r3data, // Data read from source register 3 (for multiply instructions)
+    output wire [`REG_DATA_WIDTH-1:0] r4data, // Data read from source register 4 (for multiply MLAL instructions)
     // ILA probe signals for debugging
     input [`REG_ADDR_WIDTH-1:0] ila_cpu_reg_addr, // ILA probe address input
     output wire [`REG_DATA_WIDTH-1:0] ila_cpu_reg_data // ILA probe data output
@@ -40,9 +42,10 @@ reg [`REG_DATA_WIDTH-1:0] regs [0:(1<<`REG_ADDR_WIDTH)-1]; // Register file arra
 // do not need to qualify with waddr != 0 since Arm doesn't restrict writes to x0
 // Implement register forwarding: if the current instruction is writing to a register that is being read
 // forward the write data instead of reading from the register file
-assign r1data = (wena && wr_addr1 == r1addr) ? wr_data1 : (wena && wr_addr2 == r1addr) ? wr_data2 : regs[r1addr]; // Register x0 is hardwired to 0
-assign r2data = (wena && wr_addr1 == r2addr) ? wr_data1 : (wena && wr_addr2 == r2addr) ? wr_data2 : regs[r2addr]; // Register x0 is hardwired to 0
-assign r3data = (wena && wr_addr1 == r3addr) ? wr_data1 : (wena && wr_addr2 == r3addr) ? wr_data2 : regs[r3addr]; // Register x0 is hardwired to 0
+assign r1data = (wena && wr_addr1 == r1addr) ? wr_data1 : (wena && wr_addr2 == r1addr) ? wr_data2 : regs[r1addr];
+assign r2data = (wena && wr_addr1 == r2addr) ? wr_data1 : (wena && wr_addr2 == r2addr) ? wr_data2 : regs[r2addr];
+assign r3data = (wena && wr_addr1 == r3addr) ? wr_data1 : (wena && wr_addr2 == r3addr) ? wr_data2 : regs[r3addr];
+assign r4data = (wena && wr_addr1 == r4addr) ? wr_data1 : (wena && wr_addr2 == r4addr) ? wr_data2 : regs[r4addr];
 
 assign ila_cpu_reg_data = regs[ila_cpu_reg_addr]; // ILA probe data output
 
