@@ -510,8 +510,8 @@ wire exmem_is_load;
 // ── Forwarding-unit interface wires (MEM/WB) ──
 wire [3:0] memwb_wr_addr1;
 wire memwb_wr_en1;
-wire [3:0] memwb_wr_addr2;       // v1.2: port-2 address exposed
-wire       memwb_wr_en2;         // v1.2: port-2 enable  exposed
+wire [3:0] memwb_wr_addr2; // v1.2: port-2 address exposed
+wire memwb_wr_en2; // v1.2: port-2 enable  exposed
 
 // ── Forwarding select outputs ──
 wire [2:0] fwd_a, fwd_b, fwd_s, fwd_d;
@@ -569,7 +569,7 @@ fu u_fu (
 //                  `define FWD_MEMWB_P2  3'b110
 
 function [`DATA_WIDTH-1:0] fwd_mux;
-    input [2:0]              sel;
+    input [2:0] sel;
     input [`DATA_WIDTH-1:0]  reg_val;      // register-file value (default)
     input [`DATA_WIDTH-1:0]  exmem_p1;     // EX/MEM port-1
     input [`DATA_WIDTH-1:0]  exmem_p2;     // EX/MEM port-2
@@ -685,7 +685,7 @@ always @(posedge clk or negedge rst_n) begin
         if (psr_wr_flags_ex)
             cpsr_flags <= alu_result_ex[31:28];   // MSR: flags from operand
         else if (cpsr_wen_ex)
-            cpsr_flags <= new_flags;              // DP/MUL: flags from ALU/MAC
+            cpsr_flags <= new_flags; // DP/MUL: flags from ALU/MAC
     end
 end
 
@@ -791,8 +791,8 @@ assign exmem_is_load   = mem_read_mem;
 assign exmem_alu_result = alu_result_mem;
 
 // v1.2: Port-2 forwarding data from EX/MEM.
-//   • Long multiply (WB_MUL) -> mac_result_hi (RdHi)
-//   • Everything else        -> alu_result    (base writeback address)
+//  Long multiply (WB_MUL) -> mac_result_hi (RdHi)
+//  Everything else        -> alu_result    (base writeback address)
 //
 // The FU's exmem_valid2 has no exmem_is_load guard because port-2
 // always carries a value computed in EX (never memory-read data).
@@ -803,7 +803,7 @@ assign exmem_wb_data2 = (wb_sel_mem == `WB_MUL) ? mac_result_hi_mem
  ************   MEM Stage Signals and Logic    ***********
  *********************************************************/
 wire [`DATA_WIDTH-1:0] bdtu_mem_addr, bdtu_mem_wdata;
-wire        bdtu_mem_rd, bdtu_mem_wr;
+wire bdtu_mem_rd, bdtu_mem_wr;
 wire [1:0]  bdtu_mem_size;
 
 // BDTU register reads via port 3 (free during BDTU stall)
@@ -856,11 +856,11 @@ assign d_mem_size_o = bdtu_busy ? bdtu_mem_size  : mem_size_mem;
 reg [`DATA_WIDTH-1:0] alu_result_wb;
 reg [`DATA_WIDTH-1:0] mac_result_lo_wb, mac_result_hi_wb;
 reg [`DATA_WIDTH-1:0] pc_plus4_wb;
-reg [2:0]  wb_sel_wb;
-reg [3:0]  wr_addr1_wb, wr_addr2_wb;
-reg        wr_en1_wb,   wr_en2_wb;
-reg [1:0]  mem_size_wb;
-reg        mem_signed_wb;
+reg [2:0] wb_sel_wb;
+reg [3:0] wr_addr1_wb, wr_addr2_wb;
+reg wr_en1_wb, wr_en2_wb;
+reg [1:0] mem_size_wb;
+reg mem_signed_wb;
 
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin

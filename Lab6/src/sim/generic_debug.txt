@@ -947,10 +947,10 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
 [C00003] PC=0x0000000c  @PC=0xe328f102  pipe_in=0xe10f1000 | D:addr=0x00000000 wen=0 wdata=0x00000008 rdata=0xe3a00000 sz=2
 [C00005] PC=0x00000010  @PC=0xe10f2000  pipe_in=0xe328f102 | D:addr=0x00000000 wen=0 wdata=0x00000008 rdata=0xe3a00000 sz=2
 [C00005] PC=0x00000014  @PC=0xe328f4f0  pipe_in=0xe10f2000 | D:addr=0x00000018 wen=0 wdata=0x00000005 rdata=0xe3a00000 sz=2
-[C00007] PC=0x00000018  @PC=0xe10f3000  pipe_in=0xe328f4f0 | D:addr=0x80000004 wen=0 wdata=0xxxxxxxxx rdata=0xe10f3000 sz=2
-[C00007] PC=0x0000001c  @PC=0xeafffffe  pipe_in=0xe10f3000 | D:addr=0x00000018 wen=0 wdata=0x00000003 rdata=0xe1500000 sz=2
-[C00009] PC=0x00000020  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0xf0000004 wen=0 wdata=0xxxxxxxxx rdata=0xe10f3000 sz=2
-[C00009] PC=0x00000024  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0x00000005 rdata=0xe1500000 sz=2
+[C00007] PC=0x00000018  @PC=0xe10f3000  pipe_in=0xe328f4f0 | D:addr=0x80000000 wen=0 wdata=0xxxxxxxxx rdata=0xe10f3000 sz=2
+[C00007] PC=0x0000001c  @PC=0xeafffffe  pipe_in=0xe10f3000 | D:addr=0x00000018 wen=0 wdata=0x00000003 rdata=0xe3a00000 sz=2
+[C00009] PC=0x00000020  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0xf0000000 wen=0 wdata=0xxxxxxxxx rdata=0xe10f3000 sz=2
+[C00009] PC=0x00000024  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0x00000005 rdata=0xe3a00000 sz=2
 [C00011] PC=0x0000001c  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000024 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00011] PC=0x00000020  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00013] PC=0x00000024  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0xe3a00000 sz=2
@@ -1812,7 +1812,7 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
   ── S16: Edge Cases: all 6 passed (75 cycles) ──
 
 ┌──────────────────────────────────────────────────────────────┐
-│  S15: Integration���� Bubble Sort
+│  S15: Integration���� Bubble Sort
 └──────────────────────────────────────────────────────────────┘
 [C00001] PC=0x00000000  @PC=0xe3a0b000  pipe_in=0xe3a0b000 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0xe3a0b000 sz=0
 [C00001] PC=0x00000004  @PC=0xe3a0ec02  pipe_in=0xe3a0b000 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0xe3a0b000 sz=0
@@ -2416,7 +2416,7 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
   │ CPSR flags = 0010  (N=0 Z=0 C=1 V=0)                           │
   │ Final PC   = 0x00000208                                            │
   └───────────────────────────────────────────────────────────────────┘
-  ── S15: Integration���� Bubble Sort: all 13 passed (2280 cycles) ──
+  ── S15: Integration���� Bubble Sort: all 13 passed (2280 cycles) ──
 
 ╔══════════════════════════════════════════════════════════════════════╗
 ║  *** ALL  110 CHECKS PASSED ***                                    ║
