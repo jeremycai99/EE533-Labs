@@ -25,8 +25,8 @@ module mac (
     input  wire mul_accumulate, // 1 = multiply-accumulate variant (MLA/UMLAL/SMLAL)
 
     // Result outputs
-    output wire [`REG_DATA_WIDTH-1:0] result_lo, // Lower 64 bits  (MUL/MLA result, or RdLo for long)
-    output wire [`REG_DATA_WIDTH-1:0] result_hi, // Upper 64 bits  (RdHi for long multiply; 0 for short)
+    output wire [`REG_DATA_WIDTH-1:0] result_lo, // Lower 32 bits  (MUL/MLA result, or RdLo for long)
+    output wire [`REG_DATA_WIDTH-1:0] result_hi, // Upper 32 bits  (RdHi for long multiply; 0 for short)
     output wire [3:0]  mac_flags // {N, Z, C(0), V(0)} — MUL/MULL flag outputs
 );
 
@@ -54,7 +54,7 @@ assign result_hi = mul_long ? long_result[2*`REG_DATA_WIDTH-1:`REG_DATA_WIDTH] :
 
 // Flag Generation
 // ARM MUL/MULL sets N and Z; C and V are UNPREDICTABLE (we set to 0)
-wire [`REG_DATA_WIDTH-1:0] flag_check = mul_long ? long_result[2*`REG_DATA_WIDTH-1:`REG_DATA_WIDTH] : short_result;
+// wire [`REG_DATA_WIDTH-1:0] flag_check = mul_long ? long_result[2*`REG_DATA_WIDTH-1:`REG_DATA_WIDTH] : short_result;
 wire        n_flag = mul_long ? long_result[2*`REG_DATA_WIDTH-1] : short_result[`REG_DATA_WIDTH-1];
 wire        z_flag = mul_long ? (long_result == {2*`REG_DATA_WIDTH{1'b0}}) : (short_result == {`REG_DATA_WIDTH{1'b0}});
 

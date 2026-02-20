@@ -107,3 +107,8 @@
 `define FWD_MEMWB    3'b010
 `define FWD_BDTU_P1  3'b011
 `define FWD_BDTU_P2  3'b100
+`define FWD_EXMEM_P2  3'b101
+`define FWD_MEMWB_P2  3'b110
+
+// CPU Done PC Value (used for testbench to detect when CPU has finished executing)
+`define CPU_DONE_PC 32'h0000_0200
