@@ -252,7 +252,11 @@ end
 
 // Step 5: Generate ALU control signals
 wire [3:0] alu_op_mem = addr_up ? 4'b0100 : 4'b0010; // ADD : SUB
-assign alu_op = (is_dp) ? f_opcode : (is_sdt | is_hdt) ? alu_op_mem : 4'b0100; // Default ADD for others
+assign alu_op = (is_dp) ? f_opcode :
+                (is_sdt | is_hdt) ? alu_op_mem :
+                (dec_msr_reg | dec_msr_imm) ? 4'b1101 : // MOV: pass operand_b through
+                                              4'b0100; // Default ADD for others
+
 assign alu_src_b = dec_dp_imm | dec_msr_imm | dec_sdt_immo | dec_hdt_immo; // Use immediate value for data processing immediate instructions, move to PSR immediate instructions, single data transfer with immediate offset, and halfword data transfer with immediate offset
 assign cpsr_wen = cond_met & ((is_dp | dec_mul | dec_mull) & f_s);
 
