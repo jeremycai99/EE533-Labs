@@ -552,8 +552,8 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
 [C00003] PC=0x0000000c  @PC=0xe3a03003  pipe_in=0xe3a02002 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0x00000000 sz=2
 [C00005] PC=0x00000010  @PC=0xe3a04004  pipe_in=0xe3a03003 | D:addr=0x00000001 wen=0 wdata=0x00009abc rdata=0x00000000 sz=2
 [C00005] PC=0x00000014  @PC=0xe8a0001e  pipe_in=0xe3a04004 | D:addr=0x00000002 wen=0 wdata=0xffff9abc rdata=0xe3a00c10 sz=2
-[C00007] PC=0x00000018  @PC=0xe93001e0  pipe_in=0xe8a0001e | D:addr=0x00000003 wen=0 wdata=0xffffffbc rdata=0xe3a00c10 sz=2
-[C00007] PC=0x0000001c  @PC=0xe980001e  pipe_in=0xe93001e0 | D:addr=0x00000004 wen=0 wdata=0x0000007f rdata=0xe3a00c10 sz=2
+[C00007] PC=0x00000018  @PC=0xe91001e0  pipe_in=0xe8a0001e | D:addr=0x00000003 wen=0 wdata=0xffffffbc rdata=0xe3a00c10 sz=2
+[C00007] PC=0x0000001c  @PC=0xe980001e  pipe_in=0xe91001e0 | D:addr=0x00000004 wen=0 wdata=0x0000007f rdata=0xe3a00c10 sz=2
 [C00009] PC=0x00000020  @PC=0xe3a09c10  pipe_in=0xe980001e | D:addr=0x00000000 wen=0 wdata=0x00001000 rdata=0xe3a01001 sz=2
 [C00009] PC=0x00000020  @PC=0xe3a09c10  pipe_in=0xe3a09c10 | D:addr=0x00001000 wen=1 wdata=0x00000001 rdata=0xe3a00c10 sz=2
          >> DMEM WRITE: [0x00001000] <= 0x00000001 (size=2) @ cycle 9
@@ -561,8 +561,8 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
          >> DMEM WRITE: [0x00001004] <= 0x00000002 (size=2) @ cycle 11
 [C00011] PC=0x00000020  @PC=0xe3a09c10  pipe_in=0xe3a09c10 | D:addr=0x00001008 wen=1 wdata=0x00000003 rdata=0x00000000 sz=2
          >> DMEM WRITE: [0x00001008] <= 0x00000003 (size=2) @ cycle 11
-[C00013] PC=0x00000020  @PC=0xe3a09c10  pipe_in=0xe3a09c10 | D:addr=0x0000100c wen=1 wdata=0x0000007f rdata=0x00000000 sz=2
-         >> DMEM WRITE: [0x0000100c] <= 0x0000007f (size=2) @ cycle 13
+[C00013] PC=0x00000020  @PC=0xe3a09c10  pipe_in=0xe3a09c10 | D:addr=0x0000100c wen=1 wdata=0x00000004 rdata=0x00000000 sz=2
+         >> DMEM WRITE: [0x0000100c] <= 0x00000004 (size=2) @ cycle 13
 [C00013] PC=0x00000020  @PC=0xe3a09c10  pipe_in=0xe3a09c10 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0x00000000 sz=2
 [C00015] PC=0x00000020  @PC=0xe3a09c10  pipe_in=0xe3a09c10 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0x00000000 sz=2
 [C00015] PC=0x00000024  @PC=0xe2899020  pipe_in=0xe3a09c10 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0x00000001 sz=2
@@ -570,161 +570,160 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
 [C00017] PC=0x00000024  @PC=0xe2899020  pipe_in=0xe2899020 | D:addr=0x00001004 wen=0 wdata=0x00001010 rdata=0x00000001 sz=2
 [C00019] PC=0x00000024  @PC=0xe2899020  pipe_in=0xe2899020 | D:addr=0x00001008 wen=0 wdata=0x00001010 rdata=0x00000002 sz=2
 [C00019] PC=0x00000024  @PC=0xe2899020  pipe_in=0xe2899020 | D:addr=0x0000100c wen=0 wdata=0x00001010 rdata=0x00000003 sz=2
-[C00021] PC=0x00000024  @PC=0xe2899020  pipe_in=0xe2899020 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0x0000007f sz=2
-[C00021] PC=0x00000024  @PC=0xe2899020  pipe_in=0xe2899020 | D:addr=0x00001010 wen=0 wdata=0x00001000 rdata=0x00000000 sz=2
-[C00023] PC=0x00000024  @PC=0xe2899020  pipe_in=0xe2899020 | D:addr=0x00002010 wen=0 wdata=0x00001000 rdata=0x00000000 sz=2
-[C00023] PC=0x00000028  @PC=0xe800001e  pipe_in=0xe2899020 | D:addr=0x00001010 wen=0 wdata=0x00001000 rdata=0x00000000 sz=2
-[C00025] PC=0x00000028  @PC=0xe800001e  pipe_in=0xe800001e | D:addr=0x00001004 wen=1 wdata=0x00000001 rdata=0x00000000 sz=2
-         >> DMEM WRITE: [0x00001004] <= 0x00000001 (size=2) @ cycle 25
-[C00025] PC=0x00000028  @PC=0xe800001e  pipe_in=0xe800001e | D:addr=0x00001008 wen=1 wdata=0x00000002 rdata=0x00000002 sz=2
-         >> DMEM WRITE: [0x00001008] <= 0x00000002 (size=2) @ cycle 25
-[C00027] PC=0x00000028  @PC=0xe800001e  pipe_in=0xe800001e | D:addr=0x0000100c wen=1 wdata=0x00000003 rdata=0x00000003 sz=2
-         >> DMEM WRITE: [0x0000100c] <= 0x00000003 (size=2) @ cycle 27
-[C00027] PC=0x00000028  @PC=0xe800001e  pipe_in=0xe800001e | D:addr=0x00001010 wen=1 wdata=0x0000007f rdata=0x0000007f sz=2
-         >> DMEM WRITE: [0x00001010] <= 0x0000007f (size=2) @ cycle 27
-[C00029] PC=0x00000028  @PC=0xe800001e  pipe_in=0xe800001e | D:addr=0xxxxxxxxx wen=0 wdata=0x00001010 rdata=0x00000000 sz=2
-[C00029] PC=0x0000002c  @PC=0xe3a0dc20  pipe_in=0xe800001e | D:addr=0x00001000 wen=0 wdata=0x00000000 rdata=0xxxxxxxxx sz=2
-[C00031] PC=0x00000030  @PC=0xe92d001e  pipe_in=0xe3a0dc20 | D:addr=0x00001000 wen=0 wdata=0x00000000 rdata=0x00000001 sz=2
-[C00031] PC=0x00000034  @PC=0xe3a01000  pipe_in=0xe92d001e | D:addr=0x00001014 wen=0 wdata=0x00001000 rdata=0x00000001 sz=2
-[C00033] PC=0x00000034  @PC=0xe3a01000  pipe_in=0xe3a01000 | D:addr=0x00000ff4 wen=1 wdata=0x00000001 rdata=0x00000000 sz=2
-         >> DMEM WRITE: [0x00000ff4] <= 0x00000001 (size=2) @ cycle 33
-[C00033] PC=0x00000034  @PC=0xe3a01000  pipe_in=0xe3a01000 | D:addr=0x00000ff8 wen=1 wdata=0x00000002 rdata=0x00000000 sz=2
-         >> DMEM WRITE: [0x00000ff8] <= 0x00000002 (size=2) @ cycle 33
-[C00035] PC=0x00000034  @PC=0xe3a01000  pipe_in=0xe3a01000 | D:addr=0x00000ffc wen=1 wdata=0x00000003 rdata=0x00000000 sz=2
-         >> DMEM WRITE: [0x00000ffc] <= 0x00000003 (size=2) @ cycle 35
-[C00035] PC=0x00000034  @PC=0xe3a01000  pipe_in=0xe3a01000 | D:addr=0x00001000 wen=1 wdata=0x0000007f rdata=0x00000000 sz=2
-         >> DMEM WRITE: [0x00001000] <= 0x0000007f (size=2) @ cycle 35
-[C00037] PC=0x00000034  @PC=0xe3a01000  pipe_in=0xe3a01000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0x00000001 sz=2
-[C00037] PC=0x00000038  @PC=0xe3a02000  pipe_in=0xe3a01000 | D:addr=0x00002000 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
-[C00039] PC=0x0000003c  @PC=0xe3a03000  pipe_in=0xe3a02000 | D:addr=0x00001004 wen=0 wdata=0x00001000 rdata=0x00000000 sz=2
-[C00039] PC=0x0000003c  @PC=0xe3a03000  pipe_in=0xe3a03000 | D:addr=0x00001ff0 wen=1 wdata=0x00000001 rdata=0x00000001 sz=2
+[C00021] PC=0x00000024  @PC=0xe2899020  pipe_in=0xe2899020 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0x00000004 sz=2
+[C00021] PC=0x00000024  @PC=0xe2899020  pipe_in=0xe2899020 | D:addr=0x00002010 wen=0 wdata=0x00001000 rdata=0x00000000 sz=2
+[C00023] PC=0x00000028  @PC=0xe809001e  pipe_in=0xe2899020 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0x00000000 sz=2
+[C00023] PC=0x00000028  @PC=0xe809001e  pipe_in=0xe809001e | D:addr=0x00001014 wen=1 wdata=0x00000001 rdata=0x00000000 sz=2
+         >> DMEM WRITE: [0x00001014] <= 0x00000001 (size=2) @ cycle 23
+[C00025] PC=0x00000028  @PC=0xe809001e  pipe_in=0xe809001e | D:addr=0x00001018 wen=1 wdata=0x00000002 rdata=0x00000000 sz=2
+         >> DMEM WRITE: [0x00001018] <= 0x00000002 (size=2) @ cycle 25
+[C00025] PC=0x00000028  @PC=0xe809001e  pipe_in=0xe809001e | D:addr=0x0000101c wen=1 wdata=0x00000003 rdata=0x00000000 sz=2
+         >> DMEM WRITE: [0x0000101c] <= 0x00000003 (size=2) @ cycle 25
+[C00027] PC=0x00000028  @PC=0xe809001e  pipe_in=0xe809001e | D:addr=0x00001020 wen=1 wdata=0x00000004 rdata=0x00000000 sz=2
+         >> DMEM WRITE: [0x00001020] <= 0x00000004 (size=2) @ cycle 27
+[C00027] PC=0x00000028  @PC=0xe809001e  pipe_in=0xe809001e | D:addr=0xxxxxxxxx wen=0 wdata=0x00001010 rdata=0x00000000 sz=2
+[C00029] PC=0x0000002c  @PC=0xe3a0dc20  pipe_in=0xe809001e | D:addr=0x00001000 wen=0 wdata=0x00000000 rdata=0xxxxxxxxx sz=2
+[C00029] PC=0x00000030  @PC=0xe92d001e  pipe_in=0xe3a0dc20 | D:addr=0x00001000 wen=0 wdata=0x00000000 rdata=0x00000001 sz=2
+[C00031] PC=0x00000034  @PC=0xe3a01000  pipe_in=0xe92d001e | D:addr=0x00001024 wen=0 wdata=0x00001010 rdata=0x00000001 sz=2
+[C00031] PC=0x00000034  @PC=0xe3a01000  pipe_in=0xe3a01000 | D:addr=0x00001014 wen=1 wdata=0x00000001 rdata=0x00000000 sz=2
+         >> DMEM WRITE: [0x00001014] <= 0x00000001 (size=2) @ cycle 31
+[C00033] PC=0x00000034  @PC=0xe3a01000  pipe_in=0xe3a01000 | D:addr=0x00001018 wen=1 wdata=0x00000002 rdata=0x00000001 sz=2
+         >> DMEM WRITE: [0x00001018] <= 0x00000002 (size=2) @ cycle 33
+[C00033] PC=0x00000034  @PC=0xe3a01000  pipe_in=0xe3a01000 | D:addr=0x0000101c wen=1 wdata=0x00000003 rdata=0x00000002 sz=2
+         >> DMEM WRITE: [0x0000101c] <= 0x00000003 (size=2) @ cycle 33
+[C00035] PC=0x00000034  @PC=0xe3a01000  pipe_in=0xe3a01000 | D:addr=0x00001020 wen=1 wdata=0x00000004 rdata=0x00000003 sz=2
+         >> DMEM WRITE: [0x00001020] <= 0x00000004 (size=2) @ cycle 35
+[C00035] PC=0x00000034  @PC=0xe3a01000  pipe_in=0xe3a01000 | D:addr=0x00001020 wen=0 wdata=0x00001010 rdata=0x00000004 sz=2
+[C00037] PC=0x00000038  @PC=0xe3a02000  pipe_in=0xe3a01000 | D:addr=0x00002000 wen=0 wdata=0xxxxxxxxx rdata=0x00000004 sz=2
+[C00037] PC=0x0000003c  @PC=0xe3a03000  pipe_in=0xe3a02000 | D:addr=0x00001024 wen=0 wdata=0x00001010 rdata=0x00000000 sz=2
+[C00039] PC=0x0000003c  @PC=0xe3a03000  pipe_in=0xe3a03000 | D:addr=0x00001ff0 wen=1 wdata=0x00000001 rdata=0x00000000 sz=2
          >> DMEM WRITE: [0x00001ff0] <= 0x00000001 (size=2) @ cycle 39
-[C00041] PC=0x0000003c  @PC=0xe3a03000  pipe_in=0xe3a03000 | D:addr=0x00001ff4 wen=1 wdata=0x00000002 rdata=0x00000000 sz=2
-         >> DMEM WRITE: [0x00001ff4] <= 0x00000002 (size=2) @ cycle 41
+[C00039] PC=0x0000003c  @PC=0xe3a03000  pipe_in=0xe3a03000 | D:addr=0x00001ff4 wen=1 wdata=0x00000002 rdata=0x00000000 sz=2
+         >> DMEM WRITE: [0x00001ff4] <= 0x00000002 (size=2) @ cycle 39
 [C00041] PC=0x0000003c  @PC=0xe3a03000  pipe_in=0xe3a03000 | D:addr=0x00001ff8 wen=1 wdata=0x00000003 rdata=0x00000000 sz=2
          >> DMEM WRITE: [0x00001ff8] <= 0x00000003 (size=2) @ cycle 41
-[C00043] PC=0x0000003c  @PC=0xe3a03000  pipe_in=0xe3a03000 | D:addr=0x00001ffc wen=1 wdata=0x0000007f rdata=0x00000000 sz=2
-         >> DMEM WRITE: [0x00001ffc] <= 0x0000007f (size=2) @ cycle 43
-[C00043] PC=0x0000003c  @PC=0xe3a03000  pipe_in=0xe3a03000 | D:addr=0x00002000 wen=0 wdata=0x00001000 rdata=0x00000000 sz=2
-[C00045] PC=0x0000003c  @PC=0xe3a03000  pipe_in=0xe3a03000 | D:addr=0xxxxxxxxx wen=0 wdata=0x00001000 rdata=0x00000000 sz=2
+[C00041] PC=0x0000003c  @PC=0xe3a03000  pipe_in=0xe3a03000 | D:addr=0x00001ffc wen=1 wdata=0x00000004 rdata=0x00000000 sz=2
+         >> DMEM WRITE: [0x00001ffc] <= 0x00000004 (size=2) @ cycle 41
+[C00043] PC=0x0000003c  @PC=0xe3a03000  pipe_in=0xe3a03000 | D:addr=0x00002000 wen=0 wdata=0x00001010 rdata=0x00000000 sz=2
+[C00043] PC=0x0000003c  @PC=0xe3a03000  pipe_in=0xe3a03000 | D:addr=0xxxxxxxxx wen=0 wdata=0x00001010 rdata=0x00000000 sz=2
 [C00045] PC=0x00000040  @PC=0xe3a04000  pipe_in=0xe3a03000 | D:addr=0x00000000 wen=0 wdata=0x00000001 rdata=0xxxxxxxxx sz=2
-[C00047] PC=0x00000044  @PC=0xe8bd001e  pipe_in=0xe3a04000 | D:addr=0x00000000 wen=0 wdata=0x00000002 rdata=0xe3a00c10 sz=2
+[C00045] PC=0x00000044  @PC=0xe8bd001e  pipe_in=0xe3a04000 | D:addr=0x00000000 wen=0 wdata=0x00000002 rdata=0xe3a00c10 sz=2
 [C00047] PC=0x00000048  @PC=0xeafffffe  pipe_in=0xe8bd001e | D:addr=0x00000000 wen=0 wdata=0x00000003 rdata=0xe3a00c10 sz=2
-[C00049] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x0000007f rdata=0xe3a00c10 sz=2
-[C00049] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00051] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ff0 wen=0 wdata=0x00001000 rdata=0x00000000 sz=2
-[C00051] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ff4 wen=0 wdata=0x00001000 rdata=0x00000001 sz=2
-[C00053] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ff8 wen=0 wdata=0x00001000 rdata=0x00000002 sz=2
-[C00053] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ffc wen=0 wdata=0x00001000 rdata=0x00000003 sz=2
-[C00055] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x00001000 rdata=0x0000007f sz=2
-[C00055] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x00001000 rdata=0x00000000 sz=2
-[C00057] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ff0 wen=0 wdata=0x00001000 rdata=0x00000000 sz=2
+[C00047] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000004 rdata=0xe3a00c10 sz=2
+[C00049] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00049] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ff0 wen=0 wdata=0x00001010 rdata=0x00000000 sz=2
+[C00051] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ff4 wen=0 wdata=0x00001010 rdata=0x00000001 sz=2
+[C00051] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ff8 wen=0 wdata=0x00001010 rdata=0x00000002 sz=2
+[C00053] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ffc wen=0 wdata=0x00001010 rdata=0x00000003 sz=2
+[C00053] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x00001010 rdata=0x00000004 sz=2
+[C00055] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x00001010 rdata=0x00000000 sz=2
+[C00055] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ff0 wen=0 wdata=0x00001010 rdata=0x00000000 sz=2
 [C00057] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000001 sz=2
-[C00059] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00059] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00061] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
+[C00057] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
+[C00059] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00059] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00061] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00063] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00063] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
-[C00065] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00065] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00067] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
+[C00061] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00063] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
+[C00063] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
+[C00065] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00065] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00067] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00069] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00069] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
-[C00071] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00071] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00073] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
+[C00067] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00069] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
+[C00069] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
+[C00071] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00071] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00073] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00075] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00075] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
-[C00077] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00077] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00079] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
+[C00073] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00075] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
+[C00075] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
+[C00077] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00077] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00079] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00081] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00081] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
-[C00083] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00083] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00085] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
+[C00079] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00081] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
+[C00081] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
+[C00083] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00083] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00085] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00087] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00087] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
-[C00089] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00089] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00091] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
+[C00085] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00087] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
+[C00087] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
+[C00089] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00089] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00091] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00093] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00093] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
-[C00095] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00095] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00097] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
+[C00091] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00093] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
+[C00093] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
+[C00095] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00095] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00097] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00099] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00099] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
-[C00101] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00101] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00103] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
+[C00097] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00099] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
+[C00099] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
+[C00101] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00101] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00103] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00105] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00105] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
-[C00107] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00107] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00109] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
+[C00103] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00105] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
+[C00105] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
+[C00107] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00107] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00109] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00111] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00111] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
-[C00113] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00113] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00115] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
+[C00109] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00111] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
+[C00111] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
+[C00113] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00113] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00115] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00117] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00117] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
-[C00119] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00119] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-    [HALT] Sentinel (B .) detected at PC=0x00000048, cycle 121
-[C00121] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
-[C00121] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00121] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00121] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x0000007f sz=2
-[C00121] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
+[C00115] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00117] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
+[C00117] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
+[C00119] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00119] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
+    [HALT] Sentinel (B .) detected at PC=0x00000048, cycle 120
+[C00120] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
+[C00120] PC=0x00000050  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00c10 sz=2
+[C00120] PC=0x00000048  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000050 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
+[C00120] PC=0x0000004c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
     [PASS] R1 = 0x00000001  POP R1
     [PASS] R2 = 0x00000002  POP R2
     [PASS] R3 = 0x00000003  POP R3
-    [FAIL] R4 = 0x0000007f, expected 0x00000004  POP R4
+    [PASS] R4 = 0x00000004  POP R4
     [PASS] R5 = 0x00000001  LDMDB R5
     [PASS] R6 = 0x00000002  LDMDB R6
     [PASS] R7 = 0x00000003  LDMDB R7
-    [FAIL] R8 = 0x0000007f, expected 0x00000004  LDMDB R8
+    [PASS] R8 = 0x00000004  LDMDB R8
     [PASS] R13 = 0x00002000  SP restored
-    [FAIL] [0x00001000] = 0x0000007f, expected 0x00000001  STMIA [0x1000]=R1
-    [FAIL] [0x00001004] = 0x00000001, expected 0x00000002  STMIA [0x1004]=R2
-    [FAIL] [0x00001008] = 0x00000002, expected 0x00000003  STMIA [0x1008]=R3
-    [FAIL] [0x0000100c] = 0x00000003, expected 0x00000004  STMIA [0x100C]=R4
-    [FAIL] [0x00001010] = 0x0000007f, expected 0x00000004  STMIB [0x1010]=R4
-    [FAIL] [0x00001020] = 0x00000000, expected 0x00000004  STMDA [0x1020]=R4
-    [FAIL] [0x0000101c] = 0x00000000, expected 0x00000003  STMDA [0x101C]=R3
-    [FAIL] [0x00001018] = 0x00000000, expected 0x00000002  STMDA [0x1018]=R2
-    [FAIL] [0x00001014] = 0x00000000, expected 0x00000001  STMDA [0x1014]=R1
+    [PASS] [0x00001000] = 0x00000001  STMIA [0x1000]=R1
+    [PASS] [0x00001004] = 0x00000002  STMIA [0x1004]=R2
+    [PASS] [0x00001008] = 0x00000003  STMIA [0x1008]=R3
+    [PASS] [0x0000100c] = 0x00000004  STMIA [0x100C]=R4
+    [PASS] [0x00001020] = 0x00000004  STMIB [0x1010]=R4
+    [PASS] [0x00001020] = 0x00000004  STMDA [0x1020]=R4
+    [PASS] [0x0000101c] = 0x00000003  STMDA [0x101C]=R3
+    [PASS] [0x00001018] = 0x00000002  STMDA [0x1018]=R2
+    [PASS] [0x00001014] = 0x00000001  STMDA [0x1014]=R1
   ┌─ Register Dump ───────────────────────────────────────────────────┐
-  │ R0 =0x00001000  R1 =0x00000001  R2 =0x00000002  R3 =0x00000003 │
-  │ R4 =0x0000007f  R5 =0x00000001  R6 =0x00000002  R7 =0x00000003 │
-  │ R8 =0x0000007f  R9 =0x00001000  R10=0x00000002  R11=0x00000000 │
+  │ R0 =0x00001010  R1 =0x00000001  R2 =0x00000002  R3 =0x00000003 │
+  │ R4 =0x00000004  R5 =0x00000001  R6 =0x00000002  R7 =0x00000003 │
+  │ R8 =0x00000004  R9 =0x00001020  R10=0x00000002  R11=0x00000000 │
   │ R12=0xffffffff  R13=0x00002000  R14=0xxxxxxxxx  R15=0xxxxxxxxx │
   │ CPSR flags = 0000  (N=0 Z=0 C=0 V=0)                           │
   │ Final PC   = 0x0000004c                                            │
   └───────────────────────────────────────────────────────────────────┘
-  ** S6: Block Data Transfer (LDM/STM): 7 PASSED, 11 FAILED (121 cycles) **
+  ── S6: Block Data Transfer (LDM/STM): all 18 passed (120 cycles) ──
 
 ┌──────────────────────────────────────────────────────────────┐
 │  S7: Branch (B, BL, BX)
 └──────────────────────────────────────────────────────────────┘
 [C00001] PC=0x00000000  @PC=0xe3a00000  pipe_in=0xe3a00000 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0xe3a00000 sz=0
 [C00001] PC=0x00000004  @PC=0xe1a00000  pipe_in=0xe3a00000 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0xe3a00000 sz=0
-[C00003] PC=0x00000008  @PC=0xea000004  pipe_in=0xe1a00000 | D:addr=0x00000000 wen=0 wdata=0x00001000 rdata=0xe3a00000 sz=2
-[C00003] PC=0x0000000c  @PC=0xe2800099  pipe_in=0xea000004 | D:addr=0x00000000 wen=0 wdata=0x00001000 rdata=0xe3a00000 sz=2
-[C00005] PC=0x00000010  @PC=0xe2800099  pipe_in=0xe2800099 | D:addr=0x00000000 wen=0 wdata=0x00001000 rdata=0xe3a00000 sz=2
-[C00005] PC=0x00000020  @PC=0xe2800001  pipe_in=0xe2800099 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00000 sz=2
+[C00003] PC=0x00000008  @PC=0xea000004  pipe_in=0xe1a00000 | D:addr=0x00000000 wen=0 wdata=0x00001010 rdata=0xe3a00000 sz=2
+[C00003] PC=0x0000000c  @PC=0xe2800099  pipe_in=0xea000004 | D:addr=0x00000000 wen=0 wdata=0x00001010 rdata=0xe3a00000 sz=2
+[C00005] PC=0x00000010  @PC=0xe2800099  pipe_in=0xe2800099 | D:addr=0x00000000 wen=0 wdata=0x00001010 rdata=0xe3a00000 sz=2
+[C00005] PC=0x00000020  @PC=0xe2800001  pipe_in=0xe2800099 | D:addr=0x00001010 wen=0 wdata=0x00001010 rdata=0xe3a00000 sz=2
 [C00007] PC=0x00000024  @PC=0xeb000015  pipe_in=0xe2800001 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00007] PC=0x00000028  @PC=0xe2800001  pipe_in=0xeb000015 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0xe3a00000 sz=2
 [C00009] PC=0x0000002c  @PC=0xe3a02040  pipe_in=0xe2800001 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0xe3a00000 sz=2
@@ -823,8 +822,8 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
     [PASS] R14 = 0x00000028  LR from BL
   ┌─ Register Dump ───────────────────────────────────────────────────┐
   │ R0 =0x00000006  R1 =0x00000001  R2 =0x00000040  R3 =0x00000003 │
-  │ R4 =0x0000007f  R5 =0x00000001  R6 =0x00000002  R7 =0x00000003 │
-  │ R8 =0x0000007f  R9 =0x00001000  R10=0x00000002  R11=0x00000000 │
+  │ R4 =0x00000004  R5 =0x00000001  R6 =0x00000002  R7 =0x00000003 │
+  │ R8 =0x00000004  R9 =0x00001020  R10=0x00000002  R11=0x00000000 │
   │ R12=0xffffffff  R13=0x00002000  R14=0x00000028  R15=0xxxxxxxxx │
   │ CPSR flags = 0000  (N=0 Z=0 C=0 V=0)                           │
   │ Final PC   = 0x0000006c                                            │
@@ -856,9 +855,9 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
 [C00019] PC=0x0000004c  @PC=0xe3a04102  pipe_in=0x92800064 | D:addr=0x00000002 wen=0 wdata=0x00000004 rdata=0xe3a01005 sz=2
 [C00021] PC=0x00000050  @PC=0xe2444001  pipe_in=0xe3a04102 | D:addr=0x00000005 wen=0 wdata=0x00000004 rdata=0xe3a00000 sz=2
 [C00021] PC=0x00000054  @PC=0xe2944001  pipe_in=0xe2444001 | D:addr=0x00000006 wen=0 wdata=0x00000005 rdata=0xe3a01005 sz=2
-[C00023] PC=0x00000058  @PC=0x62800001  pipe_in=0xe2944001 | D:addr=0x80000000 wen=0 wdata=0x0000007f rdata=0xe3a01005 sz=2
-[C00023] PC=0x0000005c  @PC=0x72800064  pipe_in=0x62800001 | D:addr=0x80000000 wen=0 wdata=0x0000007f rdata=0xe3a00000 sz=2
-[C00025] PC=0x00000060  @PC=0xe2800001  pipe_in=0x72800064 | D:addr=0x7fffffff wen=0 wdata=0x0000007f rdata=0xe3a00000 sz=2
+[C00023] PC=0x00000058  @PC=0x62800001  pipe_in=0xe2944001 | D:addr=0x80000000 wen=0 wdata=0x00000004 rdata=0xe3a01005 sz=2
+[C00023] PC=0x0000005c  @PC=0x72800064  pipe_in=0x62800001 | D:addr=0x80000000 wen=0 wdata=0x00000004 rdata=0xe3a00000 sz=2
+[C00025] PC=0x00000060  @PC=0xe2800001  pipe_in=0x72800064 | D:addr=0x7fffffff wen=0 wdata=0x00000004 rdata=0xe3a00000 sz=2
 [C00025] PC=0x00000064  @PC=0xeafffffe  pipe_in=0xe2800001 | D:addr=0x00000006 wen=0 wdata=0x00000006 rdata=0x00000000 sz=2
 [C00027] PC=0x00000068  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000007 wen=0 wdata=0x00000006 rdata=0xe3a01005 sz=2
 [C00027] PC=0x0000006c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000007 wen=0 wdata=0x00000006 rdata=0xe3a01005 sz=2
@@ -932,7 +931,7 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
   ┌─ Register Dump ───────────────────────────────────────────────────┐
   │ R0 =0x00000008  R1 =0x00000005  R2 =0x00000003  R3 =0x00000005 │
   │ R4 =0x80000000  R5 =0x00000001  R6 =0x00000002  R7 =0x00000003 │
-  │ R8 =0x0000007f  R9 =0x00001000  R10=0x00000002  R11=0x00000000 │
+  │ R8 =0x00000004  R9 =0x00001020  R10=0x00000002  R11=0x00000000 │
   │ R12=0xffffffff  R13=0x00002000  R14=0x00000028  R15=0xxxxxxxxx │
   │ CPSR flags = 1001  (N=1 Z=0 C=0 V=1)                           │
   │ Final PC   = 0x00000068                                            │
@@ -948,10 +947,10 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
 [C00003] PC=0x0000000c  @PC=0xe328f102  pipe_in=0xe10f1000 | D:addr=0x00000000 wen=0 wdata=0x00000008 rdata=0xe3a00000 sz=2
 [C00005] PC=0x00000010  @PC=0xe10f2000  pipe_in=0xe328f102 | D:addr=0x00000000 wen=0 wdata=0x00000008 rdata=0xe3a00000 sz=2
 [C00005] PC=0x00000014  @PC=0xe328f4f0  pipe_in=0xe10f2000 | D:addr=0x00000018 wen=0 wdata=0x00000005 rdata=0xe3a00000 sz=2
-[C00007] PC=0x00000018  @PC=0xe10f3000  pipe_in=0xe328f4f0 | D:addr=0x8000007f wen=0 wdata=0xxxxxxxxx rdata=0xe10f3000 sz=2
-[C00007] PC=0x0000001c  @PC=0xeafffffe  pipe_in=0xe10f3000 | D:addr=0x00000018 wen=0 wdata=0x00000003 rdata=0x00000000 sz=2
-[C00009] PC=0x00000020  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0xf000007f wen=0 wdata=0xxxxxxxxx rdata=0xe10f3000 sz=2
-[C00009] PC=0x00000024  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0x00000005 rdata=0x00000000 sz=2
+[C00007] PC=0x00000018  @PC=0xe10f3000  pipe_in=0xe328f4f0 | D:addr=0x80000004 wen=0 wdata=0xxxxxxxxx rdata=0xe10f3000 sz=2
+[C00007] PC=0x0000001c  @PC=0xeafffffe  pipe_in=0xe10f3000 | D:addr=0x00000018 wen=0 wdata=0x00000003 rdata=0xe1500000 sz=2
+[C00009] PC=0x00000020  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0xf0000004 wen=0 wdata=0xxxxxxxxx rdata=0xe10f3000 sz=2
+[C00009] PC=0x00000024  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0x00000005 rdata=0xe1500000 sz=2
 [C00011] PC=0x0000001c  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000024 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00011] PC=0x00000020  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00013] PC=0x00000024  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0xe3a00000 sz=2
@@ -1028,7 +1027,7 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
   ┌─ Register Dump ───────────────────────────────────────────────────┐
   │ R0 =0x00000000  R1 =0x80000000  R2 =0xf0000000  R3 =0xf0000000 │
   │ R4 =0x80000000  R5 =0x00000001  R6 =0x00000002  R7 =0x00000003 │
-  │ R8 =0x0000007f  R9 =0x00001000  R10=0x00000002  R11=0x00000000 │
+  │ R8 =0x00000004  R9 =0x00001020  R10=0x00000002  R11=0x00000000 │
   │ R12=0xffffffff  R13=0x00002000  R14=0x00000028  R15=0xxxxxxxxx │
   │ CPSR flags = 1111  (N=1 Z=1 C=1 V=1)                           │
   │ Final PC   = 0x00000020                                            │
@@ -1043,101 +1042,101 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
 [C00003] PC=0x00000008  @PC=0xe1002091  pipe_in=0xe3a01c22 | D:addr=0x00001000 wen=0 wdata=0x00000000 rdata=0xe3a00c10 sz=2
 [C00003] PC=0x0000000c  @PC=0xe3a03042  pipe_in=0xe1002091 | D:addr=0x00001000 wen=0 wdata=0x00000000 rdata=0xaaaabbbb sz=2
 [C00005] PC=0x00000010  @PC=0xe2804004  pipe_in=0xe3a03042 | D:addr=0x00002200 wen=0 wdata=0x80000000 rdata=0xaaaabbbb sz=2
-[C00005] PC=0x00000014  @PC=0xe1405093  pipe_in=0xe2804004 | D:addr=0x00000000 wen=0 wdata=0x00001000 rdata=0x00000000 sz=2
-[C00007] PC=0x00000014  @PC=0xe1405093  pipe_in=0xe1405093 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00007] PC=0x00000014  @PC=0xe1405093  pipe_in=0xe1405093 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xaaaabbbb sz=2
-[C00009] PC=0x00000014  @PC=0xe1405093  pipe_in=0xe1405093 | D:addr=0x00001000 wen=1 wdata=0x80000000 rdata=0xaaaabbbb sz=2
-         >> DMEM WRITE: [0x00001000] <= 0x80000000 (size=2) @ cycle 9
-[C00009] PC=0x00000014  @PC=0xe1405093  pipe_in=0xe1405093 | D:addr=0x00003200 wen=0 wdata=0xf0000000 rdata=0xaaaabbbb sz=2
-[C00011] PC=0x00000018  @PC=0xeafffffe  pipe_in=0xe1405093 | D:addr=0x00000042 wen=0 wdata=0xf0000000 rdata=0x00000000 sz=2
+[C00005] PC=0x00000014  @PC=0xe1445093  pipe_in=0xe2804004 | D:addr=0x00000000 wen=0 wdata=0x00001000 rdata=0x00000000 sz=2
+[C00007] PC=0x00000014  @PC=0xe1445093  pipe_in=0xe1445093 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
+[C00007] PC=0x00000014  @PC=0xe1445093  pipe_in=0xe1445093 | D:addr=0x00001000 wen=0 wdata=0x00002200 rdata=0xaaaabbbb sz=2
+[C00009] PC=0x00000014  @PC=0xe1445093  pipe_in=0xe1445093 | D:addr=0x00001000 wen=1 wdata=0x00002200 rdata=0xaaaabbbb sz=2
+         >> DMEM WRITE: [0x00001000] <= 0x00002200 (size=2) @ cycle 9
+[C00009] PC=0x00000014  @PC=0xe1445093  pipe_in=0xe1445093 | D:addr=0x00003200 wen=0 wdata=0xf0000000 rdata=0xaaaabbbb sz=2
+[C00011] PC=0x00000018  @PC=0xeafffffe  pipe_in=0xe1445093 | D:addr=0x00000042 wen=0 wdata=0xf0000000 rdata=0x00000000 sz=2
 [C00011] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00001000 wen=0 wdata=0x80000000 rdata=0x00000000 sz=2
-[C00013] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0x80000000 sz=2
-[C00013] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0x80000000 sz=0
-[C00015] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0x80000000 sz=0
-[C00015] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=1 wdata=0x00000042 rdata=0x80000000 sz=0
-         >> DMEM WRITE: [0x00001000] <= 0x00000042 (size=0) @ cycle 15
-[C00017] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001042 wen=0 wdata=0x00000001 rdata=0x80000000 sz=2
+[C00013] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0x00002200 sz=2
+[C00013] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001004 wen=0 wdata=0x00000000 rdata=0x00002200 sz=0
+[C00015] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001004 wen=0 wdata=0x42424242 rdata=0x000000ff sz=0
+[C00015] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001004 wen=1 wdata=0x42424242 rdata=0x000000ff sz=0
+         >> DMEM WRITE: [0x00001004] <= 0x42424242 (size=0) @ cycle 15
+[C00017] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001046 wen=0 wdata=0x00000001 rdata=0x000000ff sz=2
 [C00017] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00019] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00019] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00021] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00021] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00021] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00023] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00023] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00023] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00025] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00025] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00027] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00027] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00027] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00029] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00029] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00029] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00031] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00031] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00033] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00033] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00033] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00035] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00035] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00035] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00037] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00037] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00039] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00039] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00039] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00041] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00041] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00041] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00043] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00043] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00045] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00045] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00045] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00047] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00047] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00047] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00049] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00049] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00051] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00051] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00051] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00053] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00053] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00053] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00055] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00055] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00057] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00057] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00057] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00059] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00059] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00059] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00061] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00061] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00063] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00063] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00063] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00065] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00065] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00065] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00067] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00067] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00069] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00069] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00069] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00071] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00071] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00071] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00073] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00073] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00075] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00075] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00075] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00077] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00077] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00077] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00079] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00079] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
     [HALT] Sentinel (B .) detected at PC=0x00000018, cycle 81
-[C00081] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00081] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00081] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
 [C00081] PC=0x00000020  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001000 wen=0 wdata=0x00001000 rdata=0xe3a00c10 sz=2
-[C00081] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00000042 sz=2
+[C00081] PC=0x00000018  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x00000020 wen=0 wdata=0xxxxxxxxx rdata=0x00002200 sz=2
 [C00081] PC=0x0000001c  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
     [PASS] R2 = 0xaaaabbbb  SWP read old value
-    [FAIL] [0x00001000] = 0x00000042, expected 0x00002200  SWP wrote new value
-    [FAIL] R5 = 0x80000000, expected 0x000000ff  SWPB read old byte
+    [PASS] [0x00001000] = 0x00002200  SWP wrote new value
+    [PASS] R5 = 0x000000ff  SWPB read old byte
   ┌─ Register Dump ───────────────────────────────────────────────────┐
-  │ R0 =0x00001000  R1 =0x80000000  R2 =0xaaaabbbb  R3 =0x00000042 │
-  │ R4 =0x80000000  R5 =0x80000000  R6 =0x00000002  R7 =0x00000003 │
-  │ R8 =0x0000007f  R9 =0x00001000  R10=0x00000002  R11=0x00000000 │
+  │ R0 =0x00001000  R1 =0x00002200  R2 =0xaaaabbbb  R3 =0x00000042 │
+  │ R4 =0x00001004  R5 =0x000000ff  R6 =0x00000002  R7 =0x00000003 │
+  │ R8 =0x00000004  R9 =0x00001020  R10=0x00000002  R11=0x00000000 │
   │ R12=0xffffffff  R13=0x00002000  R14=0x00000028  R15=0xxxxxxxxx │
   │ CPSR flags = 0000  (N=0 Z=0 C=0 V=0)                           │
   │ Final PC   = 0x0000001c                                            │
   └───────────────────────────────────────────────────────────────────┘
-  ** S10: Swap (SWP, SWPB): 1 PASSED, 2 FAILED (81 cycles) **
+  ── S10: Swap (SWP, SWPB): all 3 passed (81 cycles) ──
 
 ┌──────────────────────────────────────────────────────────────┐
 │  S11: Pipeline Hazards
@@ -1146,19 +1145,19 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
 [C00001] PC=0x00000004  @PC=0xe2801003  pipe_in=0xe3a00005 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0xe3a00005 sz=0
 [C00003] PC=0x00000008  @PC=0xe0812000  pipe_in=0xe2801003 | D:addr=0x00000005 wen=0 wdata=0x00001000 rdata=0xe3a00005 sz=2
 [C00003] PC=0x0000000c  @PC=0xe0823001  pipe_in=0xe0812000 | D:addr=0x00000005 wen=0 wdata=0x00001000 rdata=0xe2801003 sz=2
-[C00005] PC=0x00000010  @PC=0xe0434002  pipe_in=0xe0823001 | D:addr=0x00000005 wen=0 wdata=0x80000000 rdata=0xe2801003 sz=2
+[C00005] PC=0x00000010  @PC=0xe0434002  pipe_in=0xe0823001 | D:addr=0x00000005 wen=0 wdata=0x00002200 rdata=0xe2801003 sz=2
 [C00005] PC=0x00000014  @PC=0xe3a05c10  pipe_in=0xe0434002 | D:addr=0x00000008 wen=0 wdata=0xaaaabbbb rdata=0xe2801003 sz=2
 [C00007] PC=0x00000018  @PC=0xe5956000  pipe_in=0xe3a05c10 | D:addr=0x0000000d wen=0 wdata=0x00000042 rdata=0xe0812000 sz=2
-[C00007] PC=0x0000001c  @PC=0xe2867002  pipe_in=0xe5956000 | D:addr=0x00000015 wen=0 wdata=0x80000000 rdata=0xe0823001 sz=2
-[C00009] PC=0x00000020  @PC=0xe5958004  pipe_in=0xe2867002 | D:addr=0x00001000 wen=0 wdata=0x80000000 rdata=0xe3a05c10 sz=2
+[C00007] PC=0x0000001c  @PC=0xe2867002  pipe_in=0xe5956000 | D:addr=0x00000015 wen=0 wdata=0x00001004 rdata=0xe0823001 sz=2
+[C00009] PC=0x00000020  @PC=0xe5958004  pipe_in=0xe2867002 | D:addr=0x00001000 wen=0 wdata=0x000000ff rdata=0xe3a05c10 sz=2
 [C00009] PC=0x00000020  @PC=0xe5958004  pipe_in=0xe5958004 | D:addr=0x00001000 wen=0 wdata=0x00000002 rdata=0x0000000a sz=2
 [C00011] PC=0x00000024  @PC=0xe5858008  pipe_in=0xe5958004 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x0000000a sz=0
 [C00011] PC=0x00000028  @PC=0xe595900c  pipe_in=0xe5858008 | D:addr=0x0000000a wen=0 wdata=0x00000003 rdata=0xe3a00005 sz=2
-[C00013] PC=0x00000028  @PC=0xe595900c  pipe_in=0xe595900c | D:addr=0x00001004 wen=0 wdata=0x0000007f rdata=0xe0812000 sz=2
+[C00013] PC=0x00000028  @PC=0xe595900c  pipe_in=0xe595900c | D:addr=0x00001004 wen=0 wdata=0x00000004 rdata=0xe0812000 sz=2
 [C00013] PC=0x0000002c  @PC=0xe595a010  pipe_in=0xe595900c | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000014 sz=0
 [C00015] PC=0x00000030  @PC=0xe089b00a  pipe_in=0xe595a010 | D:addr=0x00001008 wen=1 wdata=0x00000014 rdata=0xe3a00005 sz=2
          >> DMEM WRITE: [0x00001008] <= 0x00000014 (size=2) @ cycle 15
-[C00015] PC=0x00000034  @PC=0xe289c001  pipe_in=0xe089b00a | D:addr=0x0000100c wen=0 wdata=0x00001000 rdata=0x00000000 sz=2
+[C00015] PC=0x00000034  @PC=0xe289c001  pipe_in=0xe089b00a | D:addr=0x0000100c wen=0 wdata=0x00001020 rdata=0x00000000 sz=2
 [C00017] PC=0x00000034  @PC=0xe289c001  pipe_in=0xe289c001 | D:addr=0x00001010 wen=0 wdata=0x00000002 rdata=0x0000001e sz=2
 [C00017] PC=0x00000038  @PC=0xe585c014  pipe_in=0xe289c001 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000028 sz=0
 [C00019] PC=0x0000003c  @PC=0xeafffffe  pipe_in=0xe585c014 | D:addr=0x0000001e wen=0 wdata=0x00000000 rdata=0xe3a00005 sz=2
@@ -1605,19 +1604,19 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
 [C00011] PC=0x0000004c  @PC=0xe12fff1e  pipe_in=0xe12fff1e | D:addr=0x00002000 wen=0 wdata=0x00000005 rdata=0x00000000 sz=2
 [C00013] PC=0x0000004c  @PC=0xe12fff1e  pipe_in=0xe12fff1e | D:addr=0x00002005 wen=0 wdata=0x00000004 rdata=0x00000000 sz=2
 [C00013] PC=0x00000050  @PC=0x00000000  pipe_in=0xe12fff1e | D:addr=0x00000005 wen=0 wdata=0x00000005 rdata=0x00000000 sz=2
-[C00015] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x00000005 rdata=0xe3a00005 sz=2
-[C00015] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ffc wen=0 wdata=0x00000005 rdata=0x00000000 sz=2
-[C00017] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x00000005 rdata=0x00000010 sz=2
-[C00017] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x00000005 rdata=0x00000000 sz=2
+[C00015] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x0000000c rdata=0xe3a00005 sz=2
+[C00015] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ffc wen=0 wdata=0x0000000c rdata=0x00000000 sz=2
+[C00017] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x0000000c rdata=0x00000010 sz=2
+[C00017] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x0000000c rdata=0x00000000 sz=2
 [C00019] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ffc wen=0 wdata=0x00000004 rdata=0x00000000 sz=2
 [C00019] PC=0x00000010  @PC=0xe1a02000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0xxxxxxxxx rdata=0x00000010 sz=2
 [C00021] PC=0x00000014  @PC=0xe3a00064  pipe_in=0xe1a02000 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00021] PC=0x00000018  @PC=0xe3a010c8  pipe_in=0xe3a00064 | D:addr=0x00000005 wen=0 wdata=0x00000005 rdata=0xe3a0dc20 sz=2
-[C00023] PC=0x0000001c  @PC=0xeb000007  pipe_in=0xe3a010c8 | D:addr=0x00000005 wen=0 wdata=0x0000000a rdata=0xe3a00005 sz=2
-[C00023] PC=0x00000020  @PC=0xe1a03000  pipe_in=0xeb000007 | D:addr=0x00000064 wen=0 wdata=0x00000005 rdata=0xe3a00005 sz=2
+[C00021] PC=0x00000018  @PC=0xe3a010c8  pipe_in=0xe3a00064 | D:addr=0x0000000c wen=0 wdata=0x0000000c rdata=0xe3a0dc20 sz=2
+[C00023] PC=0x0000001c  @PC=0xeb000007  pipe_in=0xe3a010c8 | D:addr=0x0000000c wen=0 wdata=0x0000000a rdata=0xeb00000b sz=2
+[C00023] PC=0x00000020  @PC=0xe1a03000  pipe_in=0xeb000007 | D:addr=0x00000064 wen=0 wdata=0x0000000c rdata=0xeb00000b sz=2
 [C00025] PC=0x00000024  @PC=0xeafffffe  pipe_in=0xe1a03000 | D:addr=0x000000c8 wen=0 wdata=0x00000007 rdata=0x00000000 sz=2
-[C00025] PC=0x00000040  @PC=0xe92d4000  pipe_in=0xeafffffe | D:addr=0x80000005 wen=0 wdata=0x00000005 rdata=0x00000000 sz=2
-[C00027] PC=0x00000044  @PC=0xe0800001  pipe_in=0xe92d4000 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0xe3a00005 sz=0
+[C00025] PC=0x00000040  @PC=0xe92d4000  pipe_in=0xeafffffe | D:addr=0x8000000c wen=0 wdata=0x0000000c rdata=0x00000000 sz=2
+[C00027] PC=0x00000044  @PC=0xe0800001  pipe_in=0xe92d4000 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0xeb00000b sz=0
 [C00027] PC=0x00000048  @PC=0xe8bd4000  pipe_in=0xe0800001 | D:addr=0x00000028 wen=0 wdata=0xxxxxxxxx rdata=0xe3a0dc20 sz=2
 [C00029] PC=0x0000004c  @PC=0xe12fff1e  pipe_in=0xe8bd4000 | D:addr=0x00002000 wen=0 wdata=0x00000064 rdata=0x00000000 sz=2
 [C00029] PC=0x0000004c  @PC=0xe12fff1e  pipe_in=0xe12fff1e | D:addr=0x00001ffc wen=1 wdata=0x00000020 rdata=0x00000000 sz=2
@@ -1625,105 +1624,105 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
 [C00031] PC=0x0000004c  @PC=0xe12fff1e  pipe_in=0xe12fff1e | D:addr=0x00002000 wen=0 wdata=0x00000064 rdata=0x00000010 sz=2
 [C00031] PC=0x0000004c  @PC=0xe12fff1e  pipe_in=0xe12fff1e | D:addr=0x00002064 wen=0 wdata=0x00000004 rdata=0x00000000 sz=2
 [C00033] PC=0x00000050  @PC=0x00000000  pipe_in=0xe12fff1e | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0x00000000 sz=2
-[C00033] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x00000064 rdata=0x00000000 sz=2
-[C00035] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ffc wen=0 wdata=0x00000064 rdata=0x00000000 sz=2
-[C00035] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x00000064 rdata=0x00000020 sz=2
-[C00037] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x00000064 rdata=0x00000000 sz=2
+[C00033] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x0000012c rdata=0x00000000 sz=2
+[C00035] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ffc wen=0 wdata=0x0000012c rdata=0x00000000 sz=2
+[C00035] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x0000012c rdata=0x00000020 sz=2
+[C00037] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00002000 wen=0 wdata=0x0000012c rdata=0x00000000 sz=2
 [C00037] PC=0x00000054  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00001ffc wen=0 wdata=0x00000004 rdata=0x00000000 sz=2
 [C00039] PC=0x00000020  @PC=0xe1a03000  pipe_in=0x00000000 | D:addr=0x00000074 wen=0 wdata=0xxxxxxxxx rdata=0x00000020 sz=2
 [C00039] PC=0x00000024  @PC=0xeafffffe  pipe_in=0xe1a03000 | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00041] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
-[C00041] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000003 rdata=0x00000000 sz=2
+[C00041] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
+[C00041] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x00000003 rdata=0x00000000 sz=2
 [C00043] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00043] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00045] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00045] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00045] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00047] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00047] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00047] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00049] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00049] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00051] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00051] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00051] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00053] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00053] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00053] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00055] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00055] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00057] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00057] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00057] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00059] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00059] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00059] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00061] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00061] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00063] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00063] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00063] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00065] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00065] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00065] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00067] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00067] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00069] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00069] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00069] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00071] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00071] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00071] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00073] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00073] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00075] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00075] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00075] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00077] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00077] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00077] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00079] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00079] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00081] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00081] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00081] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00083] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00083] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00083] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00085] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00085] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00087] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00087] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00087] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00089] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00089] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00089] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00091] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00091] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00093] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00093] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00093] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00095] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00095] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00095] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00097] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00097] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00099] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00099] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00099] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00101] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00101] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00101] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
     [HALT] Sentinel (B .) detected at PC=0x00000024, cycle 103
 [C00103] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00103] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-[C00103] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x00000064 wen=0 wdata=0x00000064 rdata=0xe3a0dc20 sz=2
+[C00103] PC=0x0000002c  @PC=0x00000000  pipe_in=0x00000000 | D:addr=0x0000012c wen=0 wdata=0x0000012c rdata=0xe3a0dc20 sz=2
 [C00103] PC=0x00000024  @PC=0xeafffffe  pipe_in=0x00000000 | D:addr=0x0000002c wen=0 wdata=0xxxxxxxxx rdata=0x00000000 sz=2
 [C00103] PC=0x00000028  @PC=0x00000000  pipe_in=0xeafffffe | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0x00000000 sz=0
-    [FAIL] R2 = 0x00000005, expected 0x0000000c  First call: 5+7=12
-    [FAIL] R3 = 0x00000064, expected 0x0000012c  Second call: 100+200=300
+    [PASS] R2 = 0x0000000c  First call: 5+7=12
+    [PASS] R3 = 0x0000012c  Second call: 100+200=300
     [PASS] R13 = 0x00002000  SP restored
   ┌─ Register Dump ───────────────────────────────────────────────────┐
-  │ R0 =0x00000064  R1 =0x000000c8  R2 =0x00000005  R3 =0x00000064 │
+  │ R0 =0x0000012c  R1 =0x000000c8  R2 =0x0000000c  R3 =0x0000012c │
   │ R4 =0x00000004  R5 =0x0000000c  R6 =0x000000ff  R7 =0x80000000 │
   │ R8 =0x00000000  R9 =0x00000000  R10=0x90000000  R11=0x00000046 │
   │ R12=0x0000001f  R13=0x00002000  R14=0x00000020  R15=0xxxxxxxxx │
   │ CPSR flags = 0000  (N=0 Z=0 C=0 V=0)                           │
   │ Final PC   = 0x00000028                                            │
   └───────────────────────────────────────────────────────────────────┘
-  ** S14: Subroutine Call/Return with Stack: 1 PASSED, 2 FAILED (103 cycles) **
+  ── S14: Subroutine Call/Return with Stack: all 3 passed (103 cycles) ──
 
 ┌──────────────────────────────────────────────────────────────┐
 │  S16: Edge Cases
 └──────────────────────────────────────────────────────────────┘
 [C00001] PC=0x00000000  @PC=0xe1a0000f  pipe_in=0xe1a0000f | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0xe1a0000f sz=0
 [C00001] PC=0x00000004  @PC=0xe3a01000  pipe_in=0xe1a0000f | D:addr=0x00000000 wen=0 wdata=0x00000000 rdata=0xe1a0000f sz=0
-[C00003] PC=0x00000008  @PC=0xe3a01000  pipe_in=0xe3a01000 | D:addr=0x00000004 wen=0 wdata=0x00000064 rdata=0xe1a0000f sz=2
-[C00003] PC=0x0000000c  @PC=0xe3a020ff  pipe_in=0xe3a01000 | D:addr=0x00000008 wen=0 wdata=0x00000064 rdata=0xe3a01000 sz=2
+[C00003] PC=0x00000008  @PC=0xe3a01000  pipe_in=0xe3a01000 | D:addr=0x00000004 wen=0 wdata=0x0000012c rdata=0xe1a0000f sz=2
+[C00003] PC=0x0000000c  @PC=0xe3a020ff  pipe_in=0xe3a01000 | D:addr=0x00000008 wen=0 wdata=0x0000012c rdata=0xe3a01000 sz=2
 [C00005] PC=0x00000010  @PC=0xe1a03002  pipe_in=0xe3a020ff | D:addr=0x00000000 wen=0 wdata=0x000000c8 rdata=0xe3a01000 sz=2
 [C00005] PC=0x00000014  @PC=0xe20040ff  pipe_in=0xe1a03002 | D:addr=0x00000000 wen=0 wdata=0x000000c8 rdata=0xe1a0000f sz=2
-[C00007] PC=0x00000018  @PC=0xe0405000  pipe_in=0xe20040ff | D:addr=0x000000ff wen=0 wdata=0x00000005 rdata=0xe1a0000f sz=2
-[C00007] PC=0x0000001c  @PC=0xe3a06042  pipe_in=0xe0405000 | D:addr=0x000000ff wen=0 wdata=0x00000064 rdata=0x00000000 sz=2
+[C00007] PC=0x00000018  @PC=0xe0405000  pipe_in=0xe20040ff | D:addr=0x000000ff wen=0 wdata=0x0000000c rdata=0xe1a0000f sz=2
+[C00007] PC=0x0000001c  @PC=0xe3a06042  pipe_in=0xe0405000 | D:addr=0x000000ff wen=0 wdata=0x0000012c rdata=0x00000000 sz=2
 [C00009] PC=0x00000020  @PC=0xe1a06006  pipe_in=0xe3a06042 | D:addr=0x00000008 wen=0 wdata=0x00000004 rdata=0x00000000 sz=2
 [C00009] PC=0x00000024  @PC=0xe3a074ff  pipe_in=0xe1a06006 | D:addr=0x00000008 wen=0 wdata=0x0000000c rdata=0xe3a01000 sz=2
 [C00011] PC=0x00000028  @PC=0xe2877801  pipe_in=0xe3a074ff | D:addr=0x00000042 wen=0 wdata=0x000000ff rdata=0xe3a01000 sz=2
@@ -2420,8 +2419,8 @@ VCD info: dumpfile cpu_generic_tb.vcd opened for output.
   ── S15: Integration���� Bubble Sort: all 13 passed (2280 cycles) ──
 
 ╔══════════════════════════════════════════════════════════════════════╗
-║  ***   95 PASSED,   15 FAILED ***                                   ║
+║  *** ALL  110 CHECKS PASSED ***                                    ║
 ║  Total checks:  110                                                 ║
 ╚══════════════════════════════════════════════════════════════════════╝
 
-../tb/cpu_generic_tb.v:1369: $finish called at 38385000 (1ps)
+../tb/cpu_generic_tb.v:1369: $finish called at 38375000 (1ps)

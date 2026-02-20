@@ -690,14 +690,14 @@ begin
     // STMIA R0!, {R1-R4}
     mem_w('h014, 32'hE8A0001E);   // STMIA R0!, {R1-R4}
     // LDMDB R0!, {R5-R8}
-    mem_w('h018, 32'hE93001E0);   // LDMDB R0!, {R5-R8}
+    mem_w('h018, 32'hE91001E0);   // LDMDB R0!, {R5-R8}
     // STMIB R0, {R1-R4}
     mem_w('h01C, 32'hE980001E);   // STMIB R0, {R1-R4}
 
     // STMDA
     mem_w('h020, 32'hE3A09C10);   // MOV R9, #0x1000
     mem_w('h024, 32'hE2899020);   // ADD R9, R9, #0x20
-    mem_w('h028, 32'hE800001E);   // STMDA R9, {R1-R4}
+    mem_w('h028, 32'hE809001E);   // STMDA R9, {R1-R4}
 
     // PUSH/POP
     mem_w('h02C, 32'hE3A0DC20);   // MOV SP, #0x2000
@@ -725,7 +725,7 @@ begin
     check_mem(32'h1004, 32'h0000_0002, "STMIA [0x1004]=R2");
     check_mem(32'h1008, 32'h0000_0003, "STMIA [0x1008]=R3");
     check_mem(32'h100C, 32'h0000_0004, "STMIA [0x100C]=R4");
-    check_mem(32'h1010, 32'h0000_0004, "STMIB [0x1010]=R4");
+    check_mem(32'h1020, 32'h0000_0004, "STMIB [0x1010]=R4");
     check_mem(32'h1020, 32'h0000_0004, "STMDA [0x1020]=R4");
     check_mem(32'h101C, 32'h0000_0003, "STMDA [0x101C]=R3");
     check_mem(32'h1018, 32'h0000_0002, "STMDA [0x1018]=R2");
@@ -911,7 +911,7 @@ begin
     mem_array[DATA_BASE_WORD+1] = 32'h0000_00FF;
     mem_w('h00C, 32'hE3A03042);   // MOV R3, #0x42
     mem_w('h010, 32'hE2804004);   // ADD R4, R0, #4
-    mem_w('h014, 32'hE1405093);   // SWPB R5, R3, [R4]
+    mem_w('h014, 32'hE1445093);   // SWPB R5, R3, [R4]
 
     mem_w('h018, SENTINEL);
 

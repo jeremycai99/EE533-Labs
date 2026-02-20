@@ -301,7 +301,7 @@ end
 
 // Step 10: Register write signal generation (Also see BDTU unit for multi-cycle instruction register write control)
 assign wr_addr1 = dec_mul ? f_rn  :    // MUL/MLA dest
-                 (dec_br & instr[24]) ? 4'd14 :    // BL → R14
+                 (dec_br & instr[24]) ? 4'd14 :    // BL -> R14
                  f_rd;
 // --- Primary write enable ---
 wire raw_we1 = (is_dp & ~dp_test)            | // DP (non-test)

@@ -288,24 +288,30 @@ wire [3:0]  bdtu_wr_addr1, bdtu_wr_addr2;
 wire [`DATA_WIDTH-1:0] bdtu_wr_data1, bdtu_wr_data2;
 wire bdtu_wr_en1,   bdtu_wr_en2;
 
-// Merged regfile write ports: BDTU has priority when busy.
-wire rf_wr_en = bdtu_busy ? (bdtu_wr_en1 | bdtu_wr_en2) : (wb_wr_en1  | wb_wr_en2);
+wire bdtu_has_write = bdtu_wr_en1 | bdtu_wr_en2;
 
-wire [3:0] rf_wr_addr1 = bdtu_busy
+wire rf_wr_en = bdtu_has_write ? 1'b1 // BDTU writing → enable
+    : (wb_wr_en1 | wb_wr_en2); // else WB controls
+
+wire [3:0] rf_wr_addr1 = bdtu_has_write
     ? (bdtu_wr_en1 ? bdtu_wr_addr1 : bdtu_wr_addr2)
     : (wb_wr_en1   ? wb_wr_addr1   : wb_wr_addr2);
 
-wire [`DATA_WIDTH-1:0] rf_wr_data1 = bdtu_busy
+wire [`DATA_WIDTH-1:0] rf_wr_data1 = bdtu_has_write
     ? (bdtu_wr_en1 ? bdtu_wr_data1 : bdtu_wr_data2)
     : (wb_wr_en1   ? wb_wr_data1   : wb_wr_data2);
 
-wire [3:0] rf_wr_addr2 = bdtu_busy
-    ? (bdtu_wr_en2 ? bdtu_wr_addr2 : rf_wr_addr1)
-    : (wb_wr_en2   ? wb_wr_addr2   : rf_wr_addr1);
+wire [3:0] rf_wr_addr2 = (bdtu_wr_en1 & bdtu_wr_en2)
+    ? bdtu_wr_addr2                     // BDTU needs both ports
+    : bdtu_has_write
+        ? (wb_wr_en1 ? wb_wr_addr1 : rf_wr_addr1) // spare port → WB
+        : (wb_wr_en2 ? wb_wr_addr2 : rf_wr_addr1);
 
-wire [`DATA_WIDTH-1:0] rf_wr_data2 = bdtu_busy
-    ? (bdtu_wr_en2 ? bdtu_wr_data2 : rf_wr_data1)
-    : (wb_wr_en2   ? wb_wr_data2   : rf_wr_data1);
+wire [`DATA_WIDTH-1:0] rf_wr_data2 = (bdtu_wr_en1 & bdtu_wr_en2)
+    ? bdtu_wr_data2
+    : bdtu_has_write
+        ? (wb_wr_en1 ? wb_wr_data1 : rf_wr_data1)
+        : (wb_wr_en2 ? wb_wr_data2 : rf_wr_data1);
 
 // Debug
 wire [`DATA_WIDTH-1:0] debug_reg_out;
@@ -785,8 +791,8 @@ assign exmem_is_load   = mem_read_mem;
 assign exmem_alu_result = alu_result_mem;
 
 // v1.2: Port-2 forwarding data from EX/MEM.
-//   • Long multiply (WB_MUL) → mac_result_hi (RdHi)
-//   • Everything else        → alu_result    (base writeback address)
+//   • Long multiply (WB_MUL) -> mac_result_hi (RdHi)
+//   • Everything else        -> alu_result    (base writeback address)
 //
 // The FU's exmem_valid2 has no exmem_is_load guard because port-2
 // always carries a value computed in EX (never memory-read data).
@@ -916,13 +922,13 @@ reg [`DATA_WIDTH-1:0] wb_data1;
 
 always @(*) begin
     case (wb_sel_wb)
-        `WB_ALU:  wb_data1 = alu_result_wb;
-        `WB_MEM:  wb_data1 = load_data_wb;
+        `WB_ALU: wb_data1 = alu_result_wb;
+        `WB_MEM: wb_data1 = load_data_wb;
         `WB_LINK: wb_data1 = pc_plus4_wb;
         // Bug fix for CPSR flags write back for MRS
-        `WB_PSR:  wb_data1 = {{cpsr_flags, {(`DATA_WIDTH-4){1'b0}}}};
-        `WB_MUL:  wb_data1 = mac_result_lo_wb;
-        default:  wb_data1 = alu_result_wb;
+        `WB_PSR: wb_data1 = {{cpsr_flags, {(`DATA_WIDTH-4){1'b0}}}};
+        `WB_MUL: wb_data1 = mac_result_lo_wb;
+        default: wb_data1 = alu_result_wb;
     endcase
 end
 

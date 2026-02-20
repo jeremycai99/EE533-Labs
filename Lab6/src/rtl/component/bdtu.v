@@ -1,8 +1,8 @@
 /* file: bdtu.v
  Description: Block data transfer unit module for multi-cycle instructions in Arm pipeline CPU design
  Author: Jeremy Cai
- Date: Feb. 17, 2026
- Version: 1.0
+ Date: Feb. 19, 2026
+ Version: 1.3
  */
 
 `ifndef BDTU_V
@@ -29,14 +29,14 @@ module bdtu (
     // SWP instruction field configurations from CU
     input wire swap_byte, // B bit: 1 = byte swap, 0 = word swap for SWP instruction
     input wire [3:0] swp_rd, // Rd register address for SWP instruction
-    input wire [3:0] swp_rm, // Rn register address for SWP instruction
+    input wire [3:0] swp_rm, // Rm register address for SWP instruction
 
     // Common signals
     input wire [3:0] base_reg, // Base register address for BDT instructions
     input wire [`DATA_WIDTH-1:0] base_value, // Base register value for BDT instructions
 
-    output wire [3:0] rf_rd_addr, // Register file destination register address for SWP instruction
-    input wire [`DATA_WIDTH-1:0] rf_rd_data, // Register file source register data for SWP instruction
+    output wire [3:0] rf_rd_addr, // Register file read address (STM / SWP Rm)
+    input wire [`DATA_WIDTH-1:0] rf_rd_data, // Register file read data
 
     output wire [3:0] wr_addr1, // Register file write address for BDT instruction
     output wire [`DATA_WIDTH-1:0] wr_data1, // Register file write data for BDT instruction
@@ -63,7 +63,7 @@ localparam [2:0]
     S_BDT_WB = 3'd3,  // BDT: write updated base back to Rn
     S_SWP_RD = 3'd4,  // SWP: assert read address to memory
     S_SWP_RD_WAIT = 3'd5,  // SWP: wait for sync-read data, latch into swp_temp
-    S_SWP_WR = 3'd6,  // SWP: write Rm → memory, swp_temp → Rd
+    S_SWP_WR = 3'd6,  // SWP: write Rm -> memory, swp_temp -> Rd
     S_DONE = 3'd7;  // 1-cycle drain so pipeline can advance
 
 reg [2:0] state;
@@ -85,7 +85,7 @@ reg [3:0] prev_reg; // Register index whose read was issued last cycle
 reg rd_pending; // 1 = a sync-read response is due this cycle
 
 // Number of set bits in the register list, used for calculating address offsets and writeback value
-// Level 1: pair-wise addition → 8 × 2-bit sums
+// Level 1: pair-wise addition -> 8 × 2-bit sums 
 wire [1:0] pc_l1_0 = {1'b0, reg_list[0]}  + {1'b0, reg_list[1]};
 wire [1:0] pc_l1_1 = {1'b0, reg_list[2]}  + {1'b0, reg_list[3]};
 wire [1:0] pc_l1_2 = {1'b0, reg_list[4]}  + {1'b0, reg_list[5]};
@@ -95,13 +95,13 @@ wire [1:0] pc_l1_5 = {1'b0, reg_list[10]} + {1'b0, reg_list[11]};
 wire [1:0] pc_l1_6 = {1'b0, reg_list[12]} + {1'b0, reg_list[13]};
 wire [1:0] pc_l1_7 = {1'b0, reg_list[14]} + {1'b0, reg_list[15]};
 
-// Level 2: quad-wise addition → 4 × 3-bit sums
+// Level 2: quad-wise addition -> 4 × 3-bit sums
 wire [2:0] pc_l2_0 = {1'b0, pc_l1_0} + {1'b0, pc_l1_1};
 wire [2:0] pc_l2_1 = {1'b0, pc_l1_2} + {1'b0, pc_l1_3};
 wire [2:0] pc_l2_2 = {1'b0, pc_l1_4} + {1'b0, pc_l1_5};
 wire [2:0] pc_l2_3 = {1'b0, pc_l1_6} + {1'b0, pc_l1_7};
 
-// Level 3: octet-wise addition → 2 × 4-bit sums
+// Level 3: octet-wise addition -> 2 × 4-bit sums
 wire [3:0] pc_l3_0 = {1'b0, pc_l2_0} + {1'b0, pc_l2_1};
 wire [3:0] pc_l3_1 = {1'b0, pc_l2_2} + {1'b0, pc_l2_3};
 
@@ -128,13 +128,6 @@ wire [3:0] cur_reg = remaining[0]  ? 4'd0  :
                                      4'd0;
 
 // BDT start address and base calculation
-//   Mode  P  U  Start Address      New Base (if W=1)
-//   ────  ─  ─  ─────────────────  ─────────────────
-//   IA    0  1  Rn                 Rn + 4N
-//   IB    1  1  Rn + 4             Rn + 4N
-//   DA    0  0  Rn − 4(N−1)       Rn − 4N
-//   DB    1  0  Rn − 4N           Rn − 4N
-//
 wire [`DATA_WIDTH-1:0] total_off = {{(`DATA_WIDTH-5){1'b0}}, num_regs, 2'b00};    // N × 4
 wire [`DATA_WIDTH-1:0] base_up = base_value + total_off;          // Rn + 4N
 wire [`DATA_WIDTH-1:0] base_dn = base_value - total_off;          // Rn − 4N
@@ -178,7 +171,9 @@ always @(posedge clk or negedge rst_n) begin
                     r_byte <= swap_byte;
                     r_swp_rd <= swp_rd;
                     r_swp_rm <= swp_rm;
-                    cur_addr <= base_value;         // address = [Rn]
+                    r_load <= 1'b0;
+                    r_wb <= 1'b0;
+                    cur_addr <= base_value; // address = [Rn]
                     state <= S_SWP_RD;
                 end
                 else if (op_bdt) begin
@@ -223,9 +218,6 @@ always @(posedge clk or negedge rst_n) begin
         end
 
         //  BDT LDM: drain the read pipeline
-        //  mem_rdata now contains the data from the LAST address
-        //  asserted in S_BDT_XFER.  Write it to prev_reg (the last
-        //  register in the list) without issuing a new read.
         S_BDT_LAST: begin
             rd_pending <= 1'b0;
             state <= r_wb ? S_BDT_WB : S_DONE;
@@ -246,11 +238,12 @@ always @(posedge clk or negedge rst_n) begin
         //  SWP: wait for sync-read data
         //  mem_rdata now holds mem[Rn].  Latch it into swp_temp.
         S_SWP_RD_WAIT: begin
-            swp_temp <= mem_rdata;
+            swp_temp <= r_byte ? {{(`DATA_WIDTH-8){1'b0}}, mem_rdata[7:0]}
+                               : mem_rdata;
             state <= S_SWP_WR;
         end
 
-        //  SWP: write Rm → memory, swp_temp → Rd
+        //  SWP: write Rm -> memory, swp_temp -> Rd
         //  Both commits occur at the posedge leaving this state.
         S_SWP_WR: begin
             state <= S_DONE;
@@ -287,17 +280,17 @@ assign busy = (state == S_IDLE) ? start  :
               (state == S_DONE) ? 1'b0   : 1'b1;
 
 // Register file read address
-//  STM    : read the register being stored to memory.
+//  STM : read the register being stored to memory.
 //  SWP_WR : read Rm (value to write to memory).
-assign rf_rd_addr = (state == S_BDT_XFER && !r_load) ? cur_reg   :
-                    (state == S_SWP_WR)               ? r_swp_rm  :
-                                                        4'd0;
+//  SWP_RD_WAIT: present Rm address one cycle early for setup time.
+assign rf_rd_addr = (state == S_BDT_XFER && !r_load)              ? cur_reg   :
+                    (state == S_SWP_RD_WAIT || state == S_SWP_WR)  ? r_swp_rm  :
+                                                                     4'd0;
+
 // Memory address
 assign mem_addr = cur_addr;
 
 // Memory read enable
-//  Guarded by remaining != 0 to suppress spurious reads if the
-//  FSM enters S_BDT_XFER with an empty register list.
 assign mem_rd = (state == S_BDT_XFER && r_load && remaining != 16'd0)
               | (state == S_SWP_RD);
 
@@ -306,19 +299,17 @@ assign mem_wr = (state == S_BDT_XFER && !r_load && remaining != 16'd0)
               | (state == S_SWP_WR);
 
 // Memory write data
-assign mem_wdata = rf_rd_data;
+assign mem_wdata = (r_is_swp && r_byte) ? {4{rf_rd_data[7:0]}} : rf_rd_data;
 
 // Memory access size
 assign mem_size = (r_is_swp && r_byte) ? 2'b00 : 2'b10;
 
 // Register write port 1 (data)
-//  LDM        : write mem_rdata (arriving from PREVIOUS cycle's
-//               address) into prev_reg.  Enabled by rd_pending.
-//  SWP_WR     : write swp_temp (latched in S_SWP_RD_WAIT) → Rd.
+//  LDM : write mem_rdata (from PREVIOUS cycle's address) into prev_reg.
+//  SWP_WR : write swp_temp (latched in S_SWP_RD_WAIT) -> Rd.
+//  S_DONE : defensive repeat of the last write (same data, same register).
 //
-//  Active in S_BDT_XFER (cycles 2+) and S_BDT_LAST for LDM,
-//  and S_SWP_WR for SWP.
-assign wr_addr1 = (state == S_SWP_WR) ? r_swp_rd : prev_reg;
+assign wr_addr1 = r_is_swp ? r_swp_rd : prev_reg;
 assign wr_data1 = (state == S_DONE)    ? last_wr_data1 :
                   (state == S_SWP_WR)  ? swp_temp      : mem_rdata;
 assign wr_en1 = (rd_pending && (state == S_BDT_XFER || state == S_BDT_LAST))

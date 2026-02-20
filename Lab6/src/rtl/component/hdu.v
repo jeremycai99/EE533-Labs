@@ -11,9 +11,9 @@
 `include "define.v"
 
 module hdu (
-    input wire       idex_is_load,   // ID/EX instruction is a load (LDR/LDRB etc.)
+    input wire idex_is_load,   // ID/EX instruction is a load (LDR/LDRB etc.)
     input wire [3:0] idex_wd1,        // ID/EX primary dest register (Rd for load)
-    input wire       idex_we1,        // ID/EX primary write-back enable
+    input wire idex_we1,        // ID/EX primary write-back enable
 
     // ── Secondary write port from ID/EX (base writeback / RdHi) ──
     //
@@ -23,29 +23,29 @@ module hdu (
     // result (base±offset) or multiply-hi — both computed in EX
     // and available for forwarding from EX/MEM.
     input wire [3:0] idex_wd2,       // ID/EX secondary dest register
-    input wire       idex_we2,       // ID/EX secondary write-back enable
+    input wire idex_we2,       // ID/EX secondary write-back enable
 
     // Source register addresses of the instruction in IF/ID (decode stage)
     input wire [3:0] ifid_rn,        // Rn address being decoded
     input wire [3:0] ifid_rm,        // Rm address being decoded
     input wire [3:0] ifid_rs,        // Rs address being decoded
     input wire [3:0] ifid_rd_store,  // Rd for a store instruction being decoded
-    input wire       ifid_use_rn,    // Decoded instruction uses Rn
-    input wire       ifid_use_rm,    // Decoded instruction uses Rm
-    input wire       ifid_use_rs,    // Decoded instruction uses Rs
-    input wire       ifid_use_rd_st, // Decoded instruction is store using Rd
+    input wire ifid_use_rn,    // Decoded instruction uses Rn
+    input wire ifid_use_rm,    // Decoded instruction uses Rm
+    input wire ifid_use_rs,    // Decoded instruction uses Rs
+    input wire ifid_use_rd_st, // Decoded instruction is store using Rd
 
     // Branch detection
-    input wire       branch_taken,   // Branch resolved as taken in EX
+    input wire branch_taken,   // Branch resolved as taken in EX
 
     // Multi-cycle stall
-    input wire       bdtu_busy,      // BDTU is processing (LDM/STM/SWP)
+    input wire bdtu_busy,      // BDTU is processing (LDM/STM/SWP)
 
     // Pipeline control outputs
     output wire stall_if,   // Stall the IF stage (hold PC and IF/ID register)
-    output wire stall_id,   // Stall the ID stage (hold IF/ID → ID/EX latch)
-    output wire stall_ex,   // Stall the EX stage (hold ID/EX → EX/MEM latch)
-    output wire stall_mem,  // Stall the MEM stage (hold EX/MEM → MEM/WB latch)
+    output wire stall_id,   // Stall the ID stage (hold IF/ID -> ID/EX latch)
+    output wire stall_ex,   // Stall the EX stage (hold ID/EX -> EX/MEM latch)
+    output wire stall_mem,  // Stall the MEM stage (hold EX/MEM -> MEM/WB latch)
 
     output wire flush_ifid, // Flush IF/ID register (insert bubble into ID)
     output wire flush_idex, // Flush ID/EX register (insert bubble into EX)
@@ -61,22 +61,20 @@ module hdu (
 //   • Its destination is not R15           (idex_wd != 15)
 //   • The instruction in IF/ID reads that same register
 
-wire load_use_rn = ifid_use_rn    && (ifid_rn       == idex_wd1);
-wire load_use_rm = ifid_use_rm    && (ifid_rm       == idex_wd1);
-wire load_use_rs = ifid_use_rs    && (ifid_rs       == idex_wd1);
+wire load_use_rn = ifid_use_rn && (ifid_rn == idex_wd1);
+wire load_use_rm = ifid_use_rm && (ifid_rm == idex_wd1);
+wire load_use_rs = ifid_use_rs && (ifid_rs == idex_wd1);
 wire load_use_rd = ifid_use_rd_st && (ifid_rd_store == idex_wd1);
 
 wire load_use_hazard = idex_is_load && idex_we1
                      && (idex_wd1 != 4'd15)
                      && (load_use_rn | load_use_rm | load_use_rs | load_use_rd);
 
-// ────────────────────────────────────────────────────────────
 // Port-2 note
-// ────────────────────────────────────────────────────────────
 // No load-use stall is needed for port 2 in the current design:
 //
-//   • SDT with writeback : wb_data2 = ALU result  (available at EX)
-//   • Long multiply      : wb_data2 = RdHi result (available at EX)
+//  SDT with writeback : wb_data2 = ALU result  (available at EX)
+//  Long multiply      : wb_data2 = RdHi result (available at EX)
 //
 // Both values can be forwarded from EX/MEM without stalling.
 // The forwarding unit (fu.v) handles this via FWD_EXMEM_P2 /
@@ -127,14 +125,14 @@ wire lu_stall = load_use_hazard && !bdtu_stall && !branch_flush;
 // ── Output assignments ──
 
 // Stall signals
-assign stall_if  = bdtu_stall | lu_stall;
-assign stall_id  = bdtu_stall | lu_stall;
-assign stall_ex  = bdtu_stall;
+assign stall_if = bdtu_stall | lu_stall;
+assign stall_id = bdtu_stall | lu_stall;
+assign stall_ex = bdtu_stall;
 assign stall_mem = bdtu_stall;
 
 // Flush signals
-assign flush_ifid  = branch_flush;
-assign flush_idex  = branch_flush | lu_stall;
+assign flush_ifid = branch_flush;
+assign flush_idex = branch_flush | lu_stall;
 
 // Branch effective in EX stage and flush ex/mem or not doesn't
 // matter so hardcode the flush_exmem to 0 for simplicity.
