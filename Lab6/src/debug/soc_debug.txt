@@ -1,0 +1,168 @@
+VCD info: dumpfile soc_tb.vcd opened for output.
+
+╔══════════════════════════════════════════════════════════════╗
+║     SoC MMIO Testbench — MMIO + Bubble Sort Integration    ║
+╠══════════════════════════════════════════════════════════════╣
+║  Program  : ../hex/sort_imem.txt                             ║
+║  Halt     : 0x00000200                                     ║
+║  CPU_DONE : 0x00000200                                     ║
+║  Timeout  : 200000 cycles                                 ║
+╚══════════════════════════════════════════════════════════════╝
+
+──────────────────────────────────────────────────
+  PHASE A: Basic MMIO Infrastructure Tests
+──────────────────────────────────────────────────
+
+[A1] CTRL read — expect idle (0)
+[A2] IMEM sequential W+R (8 words)
+[A3] DMEM sequential W+R (8 words)
+[A4] Write-after-write — last value wins
+[A5] Read-after-read — non-destructive
+[A6] Random IMEM W+R (64 entries)
+  Checked 56 IMEM addresses
+[A7] Random DMEM W+R (64 entries)
+  Checked 57 DMEM addresses
+[A8] Mixed IMEM/DMEM interleaved (64 writes)
+  Checked 162 total addresses
+
+──────────────────────────────────────────────────
+  PHASE B: Bubble Sort Integration Test
+──────────────────────────────────────────────────
+
+[B1] Loading hex file...
+WARNING: ../tb/soc_tb.v:293: $readmemh(../hex/sort_imem.txt): Not enough words in the file for the requested range [0:4095].
+  Loaded (HEX):    ../hex/sort_imem.txt
+  First 8 words:
+    [0x00000000] = 0xe92d4800
+    [0x00000004] = 0xe28db004
+    [0x00000008] = 0xe24dd038
+    [0x0000000c] = 0xe59f3104
+    [0x00000010] = 0xe24bc038
+    [0x00000014] = 0xe1a0e003
+    [0x00000018] = 0xe8be000f
+    [0x0000001c] = 0xe8ac000f
+  Placing halt (B . = 0xeafffffe) at word 128 (byte 0x00000200)
+  Load extent: 1024 words (4096 bytes)
+[B2] Resetting SoC...
+[B3] Writing 1024 words to IMEM via MMIO...
+  IMEM load complete.
+[B4] Writing 1024 words to DMEM via MMIO...
+  DMEM load complete.
+[B5] Readback spot-check...
+  IMEM[0]         = 0xe92d4800 (expect 0xe92d4800)
+  IMEM[128]      = 0xeafffffe (expect 0xeafffffe = B .)
+  DMEM[128]      = 0xeafffffe (expect 0xeafffffe = B .)
+[B6] Initialising CPU registers...
+[B7] Asserting external start pin...
+  System busy (req_rdy=0) — CPU running
+[B8] Running CPU (timeout=200000 cycles)...
+  halt_addr = 0x00000200
+
+  [STATUS C001000] PC=0x000000b0  BDTU=IDLE     stall_if=1
+    R0=ffffffc8 R1=00000000 R2=00000000 R3=00000004 SP=ffffffc0 LR=0000013c
+  [STATUS C002000] PC=0x00000088  BDTU=IDLE     stall_if=0
+    R0=ffffffc8 R1=00000000 R2=00000062 R3=0000007b SP=ffffffc0 LR=0000013c
+
+[151216000] PC reached halt address 0x00000200 at cycle 2274
+
+════════════════════════════════════════════════════════════════
+  END-OF-RUN: Bubble Sort  (2274 cycles, exit=0)
+════════════════════════════════════════════════════════════════
+  +-----------------------------------------+
+  |          Register File Dump             |
+  +-----------------------------------------+
+  |  R0   = 0x00000000  (0)
+  |  R1   = 0x00000000  (0)
+  |  R2   = 0x0000007d  (125)
+  |  R3   = 0x00000000  (0)
+  |  R4   = 0x00000000  (0)
+  |  R5   = 0x00000000  (0)
+  |  R6   = 0x00000000  (0)
+  |  R7   = 0x00000000  (0)
+  |  R8   = 0x00000000  (0)
+  |  R9   = 0x00000000  (0)
+  |  R10  = 0x00000000  (0)
+  |  R11  = 0x00000000  (0)
+  |  R12  = 0xffffffe4  (-28)
+  |  R13  = 0x00000000  (0)
+  |  R14  = 0x00000200  (512)
+  |  R15  = 0x00000000  (0)
+  +-----------------------------------------+
+  |  CPSR  = 0010 (N=0 Z=0 C=1 V=0)    |
+  +-----------------------------------------+
+
+[B9] De-asserting start pin...
+  MMIO available (req_rdy=1)
+[B10] Reading 1024 DMEM words via MMIO...
+  DMEM readback complete.
+  Searching for sorted array in DMEM...
+  FOUND sorted array at DMEM word 1009 (byte 0x00000fc4):
+    [0] = 0xfffffe39  (-455)
+    [1] = 0xffffffc8  (-56)
+    [2] = 0x00000000  (0)
+    [3] = 0x00000002  (2)
+    [4] = 0x0000000a  (10)
+    [5] = 0x00000041  (65)
+    [6] = 0x00000062  (98)
+    [7] = 0x0000007b  (123)
+    [8] = 0x0000007d  (125)
+    [9] = 0x00000143  (323)
+
+[B11] Verification...
+  Verifying sort order (10 elements)...
+    PASS: Correctly sorted in ascending order.
+
+  Comparing against expected sorted array...
+    [PASS] arr[0] = -455
+    [PASS] arr[1] = -56
+    [PASS] arr[2] = 0
+    [PASS] arr[3] = 2
+    [PASS] arr[4] = 10
+    [PASS] arr[5] = 65
+    [PASS] arr[6] = 98
+    [PASS] arr[7] = 123
+    [PASS] arr[8] = 125
+    [PASS] arr[9] = 323
+    ALL 10 ELEMENTS MATCH.
+
+──────────────────────────────────────────────────
+  PHASE C: ILA Debug Interface Verification
+──────────────────────────────────────────────────
+
+[C1] Reading registers via ILA debug port...
+  ILA Reg[ 0] = 0x00000000  (hier: 0x00000000)
+  ILA Reg[ 1] = 0x00000000  (hier: 0x00000000)
+  ILA Reg[ 2] = 0x0000007d  (hier: 0x0000007d)
+  ILA Reg[ 3] = 0x00000000  (hier: 0x00000000)
+  ILA Reg[ 4] = 0x00000000  (hier: 0x00000000)
+  ILA Reg[ 5] = 0x00000000  (hier: 0x00000000)
+  ILA Reg[ 6] = 0x00000000  (hier: 0x00000000)
+  ILA Reg[ 7] = 0x00000000  (hier: 0x00000000)
+  ILA Reg[ 8] = 0x00000000  (hier: 0x00000000)
+  ILA Reg[ 9] = 0x00000000  (hier: 0x00000000)
+  ILA Reg[10] = 0x00000000  (hier: 0x00000000)
+  ILA Reg[11] = 0x00000000  (hier: 0x00000000)
+  ILA Reg[12] = 0xffffffe4  (hier: 0xffffffe4)
+  ILA Reg[13] = 0x00000000  (hier: 0x00000000)
+  ILA Reg[14] = 0x00000200  (hier: 0x00000200)
+  ILA Reg[15] = 0x00000000  (hier: 0x00000000)
+
+[C2] System debug probes...
+  Sel[0]  PC         = 0x00000000  (CPU in reset, expect 0)
+  Sel[1]  Instr      = 0xe92d4800
+  Sel[4]  ALU result = 0x00000000
+  Sel[7]  Controls   = 0x00000000
+  Sel[8]  CPSR flags = 0x00000000
+  [PASS] Debug bus free of X
+
+╔══════════════════════════════════════════════════════════════╗
+║                        SUMMARY                              ║
+╠══════════════════════════════════════════════════════════════╣
+║  Sort Cycles  :   2274                                     ║
+║  Sort Exit    : CLEAN (halt reached)                         ║
+║  Sort Result  : FOUND (10 elements)                          ║
+║  Checks       : 330 PASSED, 0 FAILED (330 total)            ║
+╚══════════════════════════════════════════════════════════════╝
+  >>> ALL TESTS PASSED <<<
+
+../tb/soc_tb.v:929: $finish called at 202946000 (1ps)

@@ -1,4 +1,4 @@
-/*  armv4t_tb.v — Comprehensive ARMv4T pipeline testbench (FIXED)
+/*  cpu_generic_tb.v — Comprehensive ARMv4T pipeline testbench (FIXED)
  *
  *  CHANGES vs original:
  *    1. Sentinel detection uses saturating-counter on instruction-at-PC

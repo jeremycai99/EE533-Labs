@@ -267,12 +267,12 @@ module soc_driver #(
     };
 
     assign txn_quality = {
-        {(`MMIO_DATA_WIDTH-48){1'b0}}, timeout_count_r, max_latency_r, 12'd0,
+        {(`MMIO_DATA_WIDTH-16){1'b0}}, timeout_count_r, max_latency_r, 12'd0,
         link_active_r, protocol_error_r, resp_timeout_flag_r, req_timeout_flag_r
     };
 
     assign txn_counters = {
-        {(`MMIO_DATA_WIDTH-48){1'b0}}, write_txn_count_r, read_txn_count_r, total_txn_count_r
+        {(`MMIO_DATA_WIDTH-16){1'b0}}, write_txn_count_r, read_txn_count_r, total_txn_count_r
     };
 
     // FIFO Instance
