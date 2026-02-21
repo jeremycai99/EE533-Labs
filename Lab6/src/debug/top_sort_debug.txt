@@ -1,0 +1,99 @@
+
+########################################
+###  TOP — BUBBLE SORT INTEGRATION   ###
+########################################
+
+VCD info: dumpfile top_sort_tb.vcd opened for output.
+  [PASS] Driver ready after reset
+  Loading hex: ../hex/sort_imem.txt
+WARNING: ../tb/top_sort_tb.v:282: $readmemh(../hex/sort_imem.txt): Not enough words in the file for the requested range [0:4095].
+  Extent: word 0..128 (129 words)
+  First 4: e92d4800 e28db004 e24dd038 e59f3104
+  Halt @ word 128 (byte 0x00000200) = 0xeafffffe
+
+  Writing 129 words to IMEM...
+    IMEM 50 / 129
+    IMEM 100 / 129
+    IMEM done (129 words)
+  Writing 129 words to DMEM...
+    DMEM 50 / 129
+    DMEM 100 / 129
+    DMEM done (129 words)
+  [PASS] Program loaded to IMEM and DMEM
+
+  Spot-checking...
+  [PASS] IMEM[0] matches hex
+    IMEM[0] = 0xe92d4800 (expected 0xe92d4800)
+  [PASS] DMEM[0] matches hex
+  [PASS] IMEM halt word = B .
+  [PASS] DMEM halt word = B .
+
+  Init CPU regs (SP = 0x00000800, LR = 0x00000200)...
+
+  ████ Starting CPU ████
+  [PASS] cpu_run_level = 1 (CPU running)
+  Polling PC (timeout = 5000 cycles)...
+  CPU halted: PC = 0x00000200 (cycle 2400)
+  [PASS] CPU halted after sort execution
+  [PASS] cpu_run_level = 0 (CPU stopped)
+  [PASS] MMIO available after CPU stop
+
+  Reading 768 DMEM words...
+    200 / 768
+    400 / 768
+    600 / 768
+    Readback complete
+
+  Searching for sorted sequence in 768 DMEM words...
+  Sorted array at DMEM word 497 (byte 0x000007c4):
+    [0] = 0xfffffe39  (-455)
+    [1] = 0xffffffc8  (-56)
+    [2] = 0x00000000  (0)
+    [3] = 0x00000002  (2)
+    [4] = 0x0000000a  (10)
+    [5] = 0x00000041  (65)
+    [6] = 0x00000062  (98)
+    [7] = 0x0000007b  (123)
+    [8] = 0x0000007d  (125)
+    [9] = 0x00000143  (323)
+  [PASS] Sorted array found in DMEM
+
+  Verifying ascending order...
+  [PASS] All elements in ascending signed order
+  Comparing against expected...
+    [PASS] arr[0] = -455
+    [PASS] arr[1] = -56
+    [PASS] arr[2] = 0
+    [PASS] arr[3] = 2
+    [PASS] arr[4] = 10
+    [PASS] arr[5] = 65
+    [PASS] arr[6] = 98
+    [PASS] arr[7] = 123
+    [PASS] arr[8] = 125
+    [PASS] arr[9] = 323
+  [PASS] All elements match expected values
+
+  Post-sort register dump:
+    R0  = 0x00000000  (0)
+    R1  = 0x00000000  (0)
+    R2  = 0x0000007d  (125)
+    R3  = 0x00000000  (0)
+    R4  = 0x00000000  (0)
+    R5  = 0x00000000  (0)
+    R6  = 0x00000000  (0)
+    R7  = 0x00000000  (0)
+    R8  = 0x00000000  (0)
+    R9  = 0x00000000  (0)
+    R10 = 0x00000000  (0)
+    R11 = 0x00000000  (0)
+    R12 = 0x000007e4  (2020)
+    R13 = 0x00000800  (2048)
+    R14 = 0x00000200  (512)
+    R15 = 0x00000000  (0)
+
+########################################
+  PASS: 13   FAIL: 0
+  >>> ALL TESTS PASSED <<<
+########################################
+
+../tb/top_sort_tb.v:585: $finish called at 129756000 (1ps)

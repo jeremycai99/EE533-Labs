@@ -10,13 +10,13 @@
 
 module test_i_mem (
     input wire clk,
-    input wire [`PC_WIDTH-1:0] addr,
+    input wire [`IMEM_ADDR_WIDTH-1:0] addr,
     input wire [`INSTR_WIDTH-1:0] din,
     input wire we,
     output reg [`INSTR_WIDTH-1:0] dout
 );
 
-reg [`INSTR_WIDTH-1:0] mem [0:(1<<`PC_WIDTH)-1];
+reg [`INSTR_WIDTH-1:0] mem [0:(1<<`IMEM_ADDR_WIDTH)-1];
 
 // Synchronous read and write logic
 always @(posedge clk) begin

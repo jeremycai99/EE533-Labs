@@ -11,18 +11,18 @@
 module test_d_mem (
     input wire clka,
     input wire [`DMEM_ADDR_WIDTH-1:0] addra,
-    input wire [`DATA_WIDTH-1:0] dina,
+    input wire [`DMEM_DATA_WIDTH-1:0] dina,
     input wire wea,
-    output reg [`DATA_WIDTH-1:0] douta,
+    output reg [`DMEM_DATA_WIDTH-1:0] douta,
 
     input wire clkb,
     input wire [`DMEM_ADDR_WIDTH-1:0] addrb,
-    input wire [`DATA_WIDTH-1:0] dinb,
+    input wire [`DMEM_DATA_WIDTH-1:0] dinb,
     input wire web,
-    output reg [`DATA_WIDTH-1:0] doutb
+    output reg [`DMEM_DATA_WIDTH-1:0] doutb
 );
 
-reg [`DATA_WIDTH-1:0] mem [0:(1<<`DMEM_ADDR_WIDTH)-1];
+reg [`DMEM_DATA_WIDTH-1:0] mem [0:(1<<`DMEM_ADDR_WIDTH)-1];
 // Synchronous read and write logic for Port A
 always @(posedge clka) begin
     if (wea) begin

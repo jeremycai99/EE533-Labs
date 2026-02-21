@@ -2,7 +2,13 @@
  Description: SoC top module for the pipeline CPU design with memory access interface
  Author: Jeremy Cai
  Date: Feb. 14, 2026
- Version: 1.5
+ Version: 1.6
+ Changes:
+   - IMEM CPU path: byte-addressed PC converted to word index (>> 2)
+   - DMEM CPU path: byte-addressed data addr converted to word index (>> 2)
+   - CPU outputs gated with system_active to prevent X propagation
+   - Added d_mem_size_o port from updated cpu interface
+   - DMEM response explicitly zero-extended to MMIO_DATA_WIDTH
  */
 
 `ifndef SOC_V
@@ -110,7 +116,7 @@ wire dmem_host_active = host_active && req_is_dmem;
 wire ctrl_host_active = host_active && req_is_ctrl;
 
 //Instruction memory muxing
-wire [`PC_WIDTH-1:0] cpu_imem_addr;
+wire [`PC_WIDTH-1:0] cpu_imem_addr;     // byte address from CPU (PC += 4)
 wire [`INSTR_WIDTH-1:0] imem_dout;
 
 reg [`PC_WIDTH-1:0] imem_addr_mux;
@@ -118,39 +124,52 @@ reg [`INSTR_WIDTH-1:0] imem_din_mux;
 reg imem_we_mux;
 
 // Data memory address and data muxing logic
-wire [`DMEM_ADDR_WIDTH-1:0] cpu_dmem_addr;
+wire [`CPU_DMEM_ADDR_WIDTH-1:0] cpu_dmem_addr;  // byte address from CPU
 wire [`DATA_WIDTH-1:0]      cpu_dmem_wdata;
 wire                        cpu_dmem_wen;
-wire [`DATA_WIDTH-1:0]      dmem_douta;   // Port A read  → CPU
+wire [1:0]                  cpu_dmem_size;   // access size from CPU (not used by word-only BRAM)
+wire [`DATA_WIDTH-1:0]      dmem_douta;      // Port A read  → CPU
 wire [`DATA_WIDTH-1:0]      dmem_doutb;
 
-reg [`DMEM_ADDR_WIDTH-1:0] dmem_addr_mux;
+reg [`CPU_DMEM_ADDR_WIDTH-1:0] dmem_addr_mux;
 reg [`DATA_WIDTH-1:0] dmem_din_mux;
 reg dmem_we_mux;
 
 // Instruction memory address muxing logic
+// MMIO path: req_addr_reg carries a word index directly.
+// CPU  path: cpu_imem_addr is a byte address (PC += 4),
+//            so we right-shift by 2 to obtain the word index.
+//            When the CPU is inactive (system_active == 0) the
+//            address is parked at 0 to avoid X-propagation.
 always @(*) begin
     if (imem_host_active) begin
         imem_addr_mux = req_addr_reg[(`PC_WIDTH-1):0]; 
         imem_din_mux = req_data_reg[(`INSTR_WIDTH-1):0]; 
         imem_we_mux = req_cmd_reg && ((current_state == STATE_ACCESS)); 
     end else begin
-        imem_addr_mux = cpu_imem_addr;
+        imem_addr_mux = system_active ? (cpu_imem_addr >> 2) : {`PC_WIDTH{1'b0}};
         imem_din_mux = `INSTR_WIDTH'b0; 
         imem_we_mux = 1'b0; 
     end
 end
 
 // Data memory muxing logic
+// MMIO path: req_addr_reg carries a word index directly.
+// CPU  path: cpu_dmem_addr is a byte address produced by the
+//            CPU's load/store unit, so we right-shift by 2 to
+//            obtain the word index for the word-only BRAM.
+//            When the CPU is inactive, all signals are driven to
+//            safe values (addr=0, data=0, we=0) to prevent
+//            X-propagation from uninitialized CPU outputs.
 always @(*) begin
     if (dmem_host_active) begin
-        dmem_addr_mux = req_addr_reg[(`DMEM_ADDR_WIDTH-1):0];
+        dmem_addr_mux = req_addr_reg[(`CPU_DMEM_ADDR_WIDTH-1):0];
         dmem_din_mux = req_data_reg[(`DATA_WIDTH-1):0];
         dmem_we_mux = req_cmd_reg && ((current_state == STATE_ACCESS));
     end else begin
-        dmem_addr_mux = cpu_dmem_addr;
-        dmem_din_mux = cpu_dmem_wdata;
-        dmem_we_mux = cpu_dmem_wen; 
+        dmem_addr_mux = system_active ? (cpu_dmem_addr >> 2) : {`CPU_DMEM_ADDR_WIDTH{1'b0}};
+        dmem_din_mux  = system_active ? cpu_dmem_wdata       : {`DATA_WIDTH{1'b0}};
+        dmem_we_mux   = system_active & cpu_dmem_wen;
     end
 end
 
@@ -220,7 +239,7 @@ always @(posedge clk or negedge rst_n) begin
             // Generate response based on the request region
             case (req_region_reg)
                 REGION_IMEM: resp_data_reg <= {{(`MMIO_DATA_WIDTH-`INSTR_WIDTH){1'b0}}, imem_dout}; 
-                REGION_DMEM: resp_data_reg <= dmem_douta; 
+                REGION_DMEM: resp_data_reg <= {{(`MMIO_DATA_WIDTH-`DATA_WIDTH){1'b0}}, dmem_douta}; 
                 // Return system_active (includes external start pin status)
                 REGION_CTRL: resp_data_reg <= {{(`MMIO_DATA_WIDTH-1){1'b0}}, system_active}; 
                 default: resp_data_reg <= {`MMIO_DATA_WIDTH{1'b0}}; 
@@ -242,16 +261,19 @@ cpu u_cpu (
     .d_mem_data_i(dmem_douta),
     .d_mem_data_o(cpu_dmem_wdata),
     .d_mem_wen_o(cpu_dmem_wen),
+    .d_mem_size_o(cpu_dmem_size),
     .cpu_done(cpu_done),
     
     .ila_debug_sel(ila_debug_sel),       
     .ila_debug_data(ila_debug_data)      
 );
 
+//Make sure that the address space doesn't exceed the size of imem and dmem
+
 test_i_mem u_i_mem (
     .clk(clk),
     .din(imem_din_mux), 
-    .addr(imem_addr_mux), 
+    .addr(imem_addr_mux[(`IMEM_ADDR_WIDTH-1):0]), 
     .we(imem_we_mux), 
     .dout(imem_dout)
 );
@@ -259,12 +281,12 @@ test_i_mem u_i_mem (
 test_d_mem u_d_mem (
     .clka(clk),
     .dina(dmem_din_mux), 
-    .addra(dmem_addr_mux), 
+    .addra(dmem_addr_mux[(`DMEM_ADDR_WIDTH-1):0]), 
     .wea(dmem_we_mux), 
     .douta(dmem_douta), 
     // Port B reserved for GPU access in future labs
     .clkb(clk),
-    .dinb({`DATA_WIDTH{1'b0}}),
+    .dinb({`DMEM_DATA_WIDTH{1'b0}}),
     .addrb({`DMEM_ADDR_WIDTH{1'b0}}),
     .web(1'b0),
     .doutb()

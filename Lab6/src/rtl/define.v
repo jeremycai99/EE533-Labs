@@ -1,11 +1,12 @@
 /* file: define.v
  Description: This file contains global definitions and parameters for the project.
  Author: Jeremy Cai
- Date: Feb. 17, 2026
- Version: 1.1
+ Date: Feb. 21, 2026
+ Version: 1.2
  Revision History:
     - 1.0: Initial version with basic definitions for Lab5 (Feb. 9, 2026)
     - 1.1: Updated version with more Arm-based definitions for Lab6 (Feb. 17, 2026)
+    - 1.2: Updated data memory parameters (Feb. 21, 2026)
  */
 
 //Data width definition
@@ -15,8 +16,8 @@
 //Instruction width definition
 `define INSTR_WIDTH 32
 
-//Data memory parameters
-`define DMEM_ADDR_WIDTH 32 //32 bits for data memory address space. Will be truncated to smaller width for our small data memory.
+// CPU data memory parameters
+`define CPU_DMEM_ADDR_WIDTH 32 //32 bits for CPU data memory address space (
 
 //ALU operation codes (4 bits)
 //Support list: ADD EOR, SUB RSB, AND ADC, SBC RSC, TST TEQ, CMP CMN, ORR MOV, BIC MVN
@@ -92,7 +93,7 @@
 
 //MMIO interface parameters
 `define MMIO_ADDR_WIDTH 32 //32 bits for MMIO address space
-`define MMIO_DATA_WIDTH 64 //64 bits for MMIO data width
+`define MMIO_DATA_WIDTH 32 //32 bits for MMIO data width
 
 // Write-Back Source Select (wb_sel encoding)
 `define WB_ALU   3'b000     // ALU / barrel-shifter result
@@ -112,3 +113,12 @@
 
 // CPU Done PC Value (used for testbench to detect when CPU has finished executing)
 `define CPU_DONE_PC 32'h0000_0200
+
+// Instruction memory and data memory configuration
+`define IMEM_ADDR_WIDTH 10 //10 bits for instruction memory address space. Will be truncated to smaller width for our small instruction memory.
+`define IMEM_DATA_WIDTH 32 //32 bits for instruction width
+`define IMEM_DEPTH 1024 //1024 instructions in instruction memory (32KB)
+
+`define DMEM_ADDR_WIDTH 12 //12 bits for data memory address space. Will be truncated to smaller width for our small data memory.
+`define DMEM_DATA_WIDTH 32 //32 bits for data width
+`define DMEM_DEPTH 4096 //4096 words in data memory (16KB)

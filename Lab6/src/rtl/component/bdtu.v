@@ -46,7 +46,7 @@ module bdtu (
     output wire wr_en2, // Register file write enable for second write port (for multiply instructions)
 
     // Memory interface signals
-    output wire [`DMEM_ADDR_WIDTH-1:0] mem_addr, // Memory address for load/store operations
+    output wire [`CPU_DMEM_ADDR_WIDTH-1:0] mem_addr, // Memory address for load/store operations
     output wire [`DATA_WIDTH-1:0] mem_wdata, // Memory write data for store operations
     output wire mem_rd, // Memory read enable signal not needed for our block memory design. Act as placeholder
     output wire mem_wr, // Memory write enable signal

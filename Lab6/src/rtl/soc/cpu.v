@@ -43,7 +43,7 @@ module cpu (
 
     // Data memory interface
     input wire [`DATA_WIDTH-1:0] d_mem_data_i,  // Data memory data input (32-bit)
-    output wire [`DMEM_ADDR_WIDTH-1:0] d_mem_addr_o, // Data memory address output
+    output wire [`CPU_DMEM_ADDR_WIDTH-1:0] d_mem_addr_o, // Data memory address output
     output wire [`DATA_WIDTH-1:0] d_mem_data_o, // Data memory data output (32-bit)
     output wire d_mem_wen_o,                    // Data memory write enable
     output wire [1:0] d_mem_size_o,             // Data memory access size (00=byte, 01=halfword, 10=word)
@@ -697,7 +697,7 @@ wire [`DATA_WIDTH-1:0] store_data_ex = rd_store_fwd;
  *********************************************************/
 
 reg [`DATA_WIDTH-1:0] alu_result_mem;
-reg [`DMEM_ADDR_WIDTH-1:0] mem_addr_mem;
+reg [`CPU_DMEM_ADDR_WIDTH-1:0] mem_addr_mem;
 reg [`DATA_WIDTH-1:0] store_data_mem;
 reg mem_read_mem,  mem_write_mem;
 reg [1:0] mem_size_mem;
@@ -722,7 +722,7 @@ reg [3:0]  swp_rd_mem, swp_rm_mem;
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n || flush_exmem) begin
         alu_result_mem <= {`DATA_WIDTH{1'b0}};
-        mem_addr_mem <= {`DMEM_ADDR_WIDTH{1'b0}};
+        mem_addr_mem <= {`CPU_DMEM_ADDR_WIDTH{1'b0}};
         store_data_mem <= {`DATA_WIDTH{1'b0}};
         mem_read_mem <= 1'b0;
         mem_write_mem <= 1'b0;
@@ -802,7 +802,8 @@ assign exmem_wb_data2 = (wb_sel_mem == `WB_MUL) ? mac_result_hi_mem
 /*********************************************************
  ************   MEM Stage Signals and Logic    ***********
  *********************************************************/
-wire [`DATA_WIDTH-1:0] bdtu_mem_addr, bdtu_mem_wdata;
+wire [`CPU_DMEM_ADDR_WIDTH-1:0] bdtu_mem_addr;
+wire [`DATA_WIDTH-1:0] bdtu_mem_wdata;
 wire bdtu_mem_rd, bdtu_mem_wr;
 wire [1:0]  bdtu_mem_size;
 
