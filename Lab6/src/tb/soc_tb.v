@@ -34,16 +34,19 @@ module soc_tb;
     parameter CLK_PERIOD       = 10;
     parameter SORT_ARRAY_SIZE  = 10;
     parameter MAX_SORT_ELEMS   = 64;
-    parameter SORT_MEM_DEPTH   = 4096;
     parameter LOAD_EXTENT      = 1024;   // min words to load into IMEM & DMEM
 
     parameter [31:0] HALT_ADDR  = 32'h0000_0200;
     parameter [31:0] HALT_INSTR = 32'hEAFF_FFFE;  // B . (branch-to-self)
     parameter [31:0] HALT_WORD  = HALT_ADDR >> 2;  // word index 128
 
-    // Hardware BRAM depths — derived from define.v
-    localparam IMEM_HW_DEPTH = (1 << `IMEM_ADDR_WIDTH);  // e.g. 512 when IMEM_ADDR_WIDTH=9
-    localparam DMEM_HW_DEPTH = (1 << `DMEM_ADDR_WIDTH);  // e.g. 1024 when DMEM_ADDR_WIDTH=10
+    // Hardware BRAM depths — derived from define.v (moved before SORT_MEM_DEPTH)
+    localparam IMEM_HW_DEPTH = (1 << `IMEM_ADDR_WIDTH);
+    localparam DMEM_HW_DEPTH = (1 << `DMEM_ADDR_WIDTH);
+
+    // Local memory depth must cover the larger of the two BRAMs (min 4096)
+    localparam SORT_MEM_DEPTH_MIN = (DMEM_HW_DEPTH > IMEM_HW_DEPTH) ? DMEM_HW_DEPTH : IMEM_HW_DEPTH;
+    localparam SORT_MEM_DEPTH     = (SORT_MEM_DEPTH_MIN > 4096) ? SORT_MEM_DEPTH_MIN : 4096;
 
 `ifdef SIM_TIMEOUT
     parameter TIMEOUT = `SIM_TIMEOUT;
@@ -129,8 +132,8 @@ module soc_tb;
     reg [`DATA_WIDTH-1:0]       dmem_snap       [0:SORT_MEM_DEPTH-1];
     integer sort_count;
     integer load_extent_actual;
-    integer imem_load_extent;     // clamped to IMEM_HW_DEPTH
-    integer dmem_load_extent;     // clamped to DMEM_HW_DEPTH
+    integer imem_load_extent;     // always IMEM_HW_DEPTH
+    integer dmem_load_extent;     // always DMEM_HW_DEPTH
 
     // Phase A reference model
     reg [`MMIO_DATA_WIDTH-1:0]  imem_ref   [0:ADDR_RANGE-1];
@@ -313,35 +316,28 @@ module soc_tb;
                      HALT_INSTR, HALT_WORD, HALT_ADDR);
             sort_local_mem[HALT_WORD] = HALT_INSTR;
 
-            // Determine actual extent (last non-zero word + margin)
+            // Determine actual extent (last non-zero word + margin) — diagnostic only
             load_extent_actual = 0;
             for (k = 0; k < SORT_MEM_DEPTH; k = k + 1)
                 if (sort_local_mem[k] !== {`DATA_WIDTH{1'b0}})
                     load_extent_actual = k + 1;
             if (load_extent_actual < LOAD_EXTENT)
                 load_extent_actual = LOAD_EXTENT;
-            $display("  Load extent: %0d words (%0d bytes)",
+            $display("  Hex data extent: %0d words (%0d bytes)",
                      load_extent_actual, load_extent_actual << 2);
 
-            // Clamp to hardware BRAM depths to prevent aliased overwrites
+            // Always load the FULL BRAM to avoid uninitialized locations.
+            // sort_local_mem[] is pre-zeroed, so addresses beyond the hex
+            // data are written as 0 — eliminating X / stale-data issues
+            // that arise when the BRAM is larger than the hex image.
             $display("  Hardware depths: IMEM=%0d words, DMEM=%0d words",
                      IMEM_HW_DEPTH, DMEM_HW_DEPTH);
 
-            if (load_extent_actual > IMEM_HW_DEPTH) begin
-                imem_load_extent = IMEM_HW_DEPTH;
-                $display("  NOTE: IMEM load clamped from %0d to %0d words (IMEM_ADDR_WIDTH=%0d)",
-                         load_extent_actual, IMEM_HW_DEPTH, `IMEM_ADDR_WIDTH);
-            end else begin
-                imem_load_extent = load_extent_actual;
-            end
+            imem_load_extent = IMEM_HW_DEPTH;
+            dmem_load_extent = DMEM_HW_DEPTH;
 
-            if (load_extent_actual > DMEM_HW_DEPTH) begin
-                dmem_load_extent = DMEM_HW_DEPTH;
-                $display("  NOTE: DMEM load clamped from %0d to %0d words (DMEM_ADDR_WIDTH=%0d)",
-                         load_extent_actual, DMEM_HW_DEPTH, `DMEM_ADDR_WIDTH);
-            end else begin
-                dmem_load_extent = load_extent_actual;
-            end
+            $display("  Will load: IMEM=%0d words, DMEM=%0d words (full BRAM)",
+                     imem_load_extent, dmem_load_extent);
 
             // Safety: verify halt word fits within IMEM
             if (HALT_WORD >= IMEM_HW_DEPTH) begin
@@ -657,10 +653,10 @@ module soc_tb;
         //  The hex file is a unified image (code + data).
         //  Instructions are fetched from IMEM, data from DMEM,
         //  so both get the same image.
-        //  IMPORTANT: Only write up to imem_load_extent words to
-        //  avoid aliased overwrites when the image exceeds BRAM depth.
-        $display("[B3] Writing %0d words to IMEM via MMIO (BRAM depth=%0d)...",
-                 imem_load_extent, IMEM_HW_DEPTH);
+        //  Load the FULL BRAM depth so every address is initialised
+        //  (sort_local_mem is pre-zeroed beyond the hex data).
+        $display("[B3] Writing %0d words to IMEM via MMIO (full BRAM depth)...",
+                 imem_load_extent);
         for (i = 0; i < imem_load_extent; i = i + 1)
             mmio_wr(IMEM_BASE | i, sort_local_mem[i]);
         $display("  IMEM load complete.");
@@ -680,8 +676,8 @@ module soc_tb;
         end
 
         // ── B4: Write program to DMEM via MMIO ─────────
-        $display("[B4] Writing %0d words to DMEM via MMIO (BRAM depth=%0d)...",
-                 dmem_load_extent, DMEM_HW_DEPTH);
+        $display("[B4] Writing %0d words to DMEM via MMIO (full BRAM depth)...",
+                 dmem_load_extent);
         for (i = 0; i < dmem_load_extent; i = i + 1)
             mmio_wr(DMEM_BASE | i, sort_local_mem[i]);
         $display("  DMEM load complete.");
@@ -852,8 +848,9 @@ module soc_tb;
             fail_cnt = fail_cnt + 1;
         end
 
-        // ── B10: Read DMEM via MMIO and search for sorted array ──
-        $display("[B10] Reading %0d DMEM words via MMIO...", dmem_load_extent);
+        // ── B10: Read FULL DMEM via MMIO and search for sorted array ──
+        $display("[B10] Reading %0d DMEM words via MMIO (full BRAM)...",
+                 dmem_load_extent);
         for (i = 0; i < dmem_load_extent; i = i + 1) begin
             mmio_rd(DMEM_BASE | i, rd_data);
             dmem_snap[i] = rd_data[`DATA_WIDTH-1:0];
