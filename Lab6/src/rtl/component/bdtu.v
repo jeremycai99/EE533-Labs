@@ -69,7 +69,7 @@ localparam [2:0]
 reg [2:0] state;
 
 reg [15:0] remaining; // BDT: unprocessed register bits
-reg [`DMEM_ADDR_WIDTH-1:0] cur_addr; // Current memory address
+reg [`CPU_DMEM_ADDR_WIDTH-1:0] cur_addr; // Current memory address
 reg [`DATA_WIDTH-1:0] r_new_base; // Pre-computed new base for writeback
 reg r_load; // Latched bdt_load
 reg r_wb; // Latched bdt_wb
@@ -145,7 +145,7 @@ always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         state <= S_IDLE;
         remaining <= 16'd0;
-        cur_addr <= {`DMEM_ADDR_WIDTH{1'b0}};
+        cur_addr <= {`CPU_DMEM_ADDR_WIDTH{1'b0}};
         r_new_base <= {`DATA_WIDTH{1'b0}};
         r_load <= 1'b0;
         r_wb <= 1'b0;

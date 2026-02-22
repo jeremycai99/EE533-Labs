@@ -9,6 +9,9 @@
     - 1.2: Updated data memory parameters (Feb. 21, 2026)
  */
 
+`ifndef DEFINE_V
+`define DEFINE_V
+
 //Data width definition
 `define DATA_WIDTH 32
 `define ALU_OP_WIDTH 4
@@ -115,10 +118,12 @@
 `define CPU_DONE_PC 32'h0000_0200
 
 // Instruction memory and data memory configuration
-`define IMEM_ADDR_WIDTH 10 //10 bits for instruction memory address space. Will be truncated to smaller width for our small instruction memory.
+`define IMEM_ADDR_WIDTH 9 //9 bits for instruction memory address space. Will be truncated to smaller width for our small instruction memory.
 `define IMEM_DATA_WIDTH 32 //32 bits for instruction width
-`define IMEM_DEPTH 1024 //1024 instructions in instruction memory (32KB)
+`define IMEM_DEPTH 512 //512 instructions in instruction memory (16KB)
 
-`define DMEM_ADDR_WIDTH 12 //12 bits for data memory address space. Will be truncated to smaller width for our small data memory.
+`define DMEM_ADDR_WIDTH 10 //10 bits for data memory address space. Will be truncated to smaller width for our small data memory.
 `define DMEM_DATA_WIDTH 32 //32 bits for data width
-`define DMEM_DEPTH 4096 //4096 words in data memory (16KB)
+`define DMEM_DEPTH 1024 //1024 words in data memory (4KB)
+
+`endif // DEFINE_V
