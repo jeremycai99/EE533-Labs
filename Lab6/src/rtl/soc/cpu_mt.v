@@ -27,7 +27,7 @@ module cpu_mt (
 
     // Data memory interface (shared, single-ported)
     input  wire [`DATA_WIDTH-1:0] d_mem_data_i,
-    output wire [`DMEM_ADDR_WIDTH-1:0] d_mem_addr_o,
+    output wire [`CPU_DMEM_ADDR_WIDTH-1:0] d_mem_addr_o,
     output wire [`DATA_WIDTH-1:0] d_mem_data_o,
     output wire d_mem_wen_o,
     output wire [1:0] d_mem_size_o,
@@ -571,11 +571,11 @@ always @(posedge clk or negedge rst_n) begin
 end
 
 /*  Memory address / store data  */
-wire [`DMEM_ADDR_WIDTH-1:0] mem_addr_ex = addr_pre_idx_ex ? alu_result_ex : rn_val;
+wire [`CPU_DMEM_ADDR_WIDTH-1:0] mem_addr_ex = addr_pre_idx_ex ? alu_result_ex : rn_val;
 wire [`DATA_WIDTH-1:0] store_data_ex = rd_store_val;
 
 reg [`DATA_WIDTH-1:0] alu_result_mem;
-reg [`DMEM_ADDR_WIDTH-1:0] mem_addr_mem;
+reg [`CPU_DMEM_ADDR_WIDTH-1:0] mem_addr_mem;
 reg [`DATA_WIDTH-1:0] store_data_mem;
 reg mem_read_mem, mem_write_mem;
 reg [1:0] mem_size_mem;
@@ -599,7 +599,7 @@ reg [3:0] swp_rd_mem, swp_rm_mem;
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         alu_result_mem <= {`DATA_WIDTH{1'b0}};
-        mem_addr_mem <= {`DMEM_ADDR_WIDTH{1'b0}};
+        mem_addr_mem <= {`CPU_DMEM_ADDR_WIDTH{1'b0}};
         store_data_mem <= {`DATA_WIDTH{1'b0}};
         mem_read_mem <= 1'b0;
         mem_write_mem <= 1'b0;
