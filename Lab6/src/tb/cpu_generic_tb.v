@@ -42,7 +42,7 @@ localparam [31:0] SP_INIT = 32'h0000_2000;
 reg                          clk, rst_n;
 wire [`PC_WIDTH-1:0]         i_mem_addr;
 reg  [`INSTR_WIDTH-1:0]      i_mem_data;
-wire [`DMEM_ADDR_WIDTH-1:0]  d_mem_addr;
+wire [`CPU_DMEM_ADDR_WIDTH-1:0]  d_mem_addr;
 wire [`DATA_WIDTH-1:0]       d_mem_wdata;
 reg  [`DATA_WIDTH-1:0]       d_mem_rdata;
 wire                         d_mem_wen;

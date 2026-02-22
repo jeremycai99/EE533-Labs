@@ -41,6 +41,10 @@ module soc_tb;
     parameter [31:0] HALT_INSTR = 32'hEAFF_FFFE;  // B . (branch-to-self)
     parameter [31:0] HALT_WORD  = HALT_ADDR >> 2;  // word index 128
 
+    // Hardware BRAM depths — derived from define.v
+    localparam IMEM_HW_DEPTH = (1 << `IMEM_ADDR_WIDTH);  // e.g. 512 when IMEM_ADDR_WIDTH=9
+    localparam DMEM_HW_DEPTH = (1 << `DMEM_ADDR_WIDTH);  // e.g. 1024 when DMEM_ADDR_WIDTH=10
+
 `ifdef SIM_TIMEOUT
     parameter TIMEOUT = `SIM_TIMEOUT;
 `else
@@ -125,6 +129,8 @@ module soc_tb;
     reg [`DATA_WIDTH-1:0]       dmem_snap       [0:SORT_MEM_DEPTH-1];
     integer sort_count;
     integer load_extent_actual;
+    integer imem_load_extent;     // clamped to IMEM_HW_DEPTH
+    integer dmem_load_extent;     // clamped to DMEM_HW_DEPTH
 
     // Phase A reference model
     reg [`MMIO_DATA_WIDTH-1:0]  imem_ref   [0:ADDR_RANGE-1];
@@ -316,6 +322,32 @@ module soc_tb;
                 load_extent_actual = LOAD_EXTENT;
             $display("  Load extent: %0d words (%0d bytes)",
                      load_extent_actual, load_extent_actual << 2);
+
+            // Clamp to hardware BRAM depths to prevent aliased overwrites
+            $display("  Hardware depths: IMEM=%0d words, DMEM=%0d words",
+                     IMEM_HW_DEPTH, DMEM_HW_DEPTH);
+
+            if (load_extent_actual > IMEM_HW_DEPTH) begin
+                imem_load_extent = IMEM_HW_DEPTH;
+                $display("  NOTE: IMEM load clamped from %0d to %0d words (IMEM_ADDR_WIDTH=%0d)",
+                         load_extent_actual, IMEM_HW_DEPTH, `IMEM_ADDR_WIDTH);
+            end else begin
+                imem_load_extent = load_extent_actual;
+            end
+
+            if (load_extent_actual > DMEM_HW_DEPTH) begin
+                dmem_load_extent = DMEM_HW_DEPTH;
+                $display("  NOTE: DMEM load clamped from %0d to %0d words (DMEM_ADDR_WIDTH=%0d)",
+                         load_extent_actual, DMEM_HW_DEPTH, `DMEM_ADDR_WIDTH);
+            end else begin
+                dmem_load_extent = load_extent_actual;
+            end
+
+            // Safety: verify halt word fits within IMEM
+            if (HALT_WORD >= IMEM_HW_DEPTH) begin
+                $display("  *** ERROR: HALT_WORD (%0d) >= IMEM depth (%0d) — halt unreachable via IMEM! ***",
+                         HALT_WORD, IMEM_HW_DEPTH);
+            end
         end
     endtask
 
@@ -390,7 +422,7 @@ module soc_tb;
         begin
             printed = 0;
             $display("  ── Non-zero DMEM words (first 64 shown) ──");
-            for (w = 0; w < load_extent_actual && printed < 64; w = w + 1) begin
+            for (w = 0; w < dmem_load_extent && printed < 64; w = w + 1) begin
                 if (dmem_snap[w] !== {`DATA_WIDTH{1'b0}}) begin
                     $display("    [word %4d / 0x%04H] = 0x%08H  (%0d)",
                              w, w << 2, dmem_snap[w], $signed(dmem_snap[w]));
@@ -440,6 +472,7 @@ module soc_tb;
         ila_debug_sel = 0;
         pass_cnt = 0; fail_cnt = 0; seed = 42;
         sort_count = 0; cycle_cnt = 0;
+        imem_load_extent = 0; dmem_load_extent = 0;
 
         do_reset();
 
@@ -451,6 +484,10 @@ module soc_tb;
         $display("║  Halt     : 0x%08H                                     ║", HALT_ADDR);
         $display("║  CPU_DONE : 0x%08H                                     ║", `CPU_DONE_PC);
         $display("║  Timeout  : %0d cycles                                 ║", TIMEOUT);
+        $display("║  IMEM     : %0d words (%0d-bit addr)                   ║",
+                 IMEM_HW_DEPTH, `IMEM_ADDR_WIDTH);
+        $display("║  DMEM     : %0d words (%0d-bit addr)                  ║",
+                 DMEM_HW_DEPTH, `DMEM_ADDR_WIDTH);
         $display("╚══════════════════════════════════════════════════════════════╝");
 
         // ═══════════════════════════════════════════════════
@@ -620,14 +657,32 @@ module soc_tb;
         //  The hex file is a unified image (code + data).
         //  Instructions are fetched from IMEM, data from DMEM,
         //  so both get the same image.
-        $display("[B3] Writing %0d words to IMEM via MMIO...", load_extent_actual);
-        for (i = 0; i < load_extent_actual; i = i + 1)
+        //  IMPORTANT: Only write up to imem_load_extent words to
+        //  avoid aliased overwrites when the image exceeds BRAM depth.
+        $display("[B3] Writing %0d words to IMEM via MMIO (BRAM depth=%0d)...",
+                 imem_load_extent, IMEM_HW_DEPTH);
+        for (i = 0; i < imem_load_extent; i = i + 1)
             mmio_wr(IMEM_BASE | i, sort_local_mem[i]);
         $display("  IMEM load complete.");
 
+        // ── B3.5: Immediate IMEM readback sanity check ──
+        $display("[B3.5] Immediate IMEM readback after load...");
+        mmio_rd(IMEM_BASE | 0, rd_data);
+        $display("  IMEM[0] = 0x%08H (expect 0x%08H)", rd_data,
+                 sort_local_mem[0] & {`INSTR_WIDTH{1'b1}});
+        if (HALT_WORD < IMEM_HW_DEPTH) begin
+            mmio_rd(IMEM_BASE | HALT_WORD, rd_data);
+            $display("  IMEM[%0d] = 0x%08H (expect 0x%08H = halt)",
+                     HALT_WORD, rd_data, HALT_INSTR & {`INSTR_WIDTH{1'b1}});
+        end else begin
+            $display("  IMEM[%0d] — SKIPPED (beyond BRAM depth %0d)",
+                     HALT_WORD, IMEM_HW_DEPTH);
+        end
+
         // ── B4: Write program to DMEM via MMIO ─────────
-        $display("[B4] Writing %0d words to DMEM via MMIO...", load_extent_actual);
-        for (i = 0; i < load_extent_actual; i = i + 1)
+        $display("[B4] Writing %0d words to DMEM via MMIO (BRAM depth=%0d)...",
+                 dmem_load_extent, DMEM_HW_DEPTH);
+        for (i = 0; i < dmem_load_extent; i = i + 1)
             mmio_wr(DMEM_BASE | i, sort_local_mem[i]);
         $display("  DMEM load complete.");
 
@@ -641,19 +696,31 @@ module soc_tb;
         $display("  IMEM[0]         = 0x%08H (expect 0x%08H)",
                  rd_data, sort_local_mem[0] & {`INSTR_WIDTH{1'b1}});
 
-        // Halt instruction in IMEM
-        mmio_rd(IMEM_BASE | HALT_WORD, rd_data);
-        check(HALT_INSTR & {`INSTR_WIDTH{1'b1}},
-              rd_data, IMEM_BASE | HALT_WORD, "SORT_HALT_I");
-        $display("  IMEM[%0d]      = 0x%08H (expect 0x%08H = B .)",
-                 HALT_WORD, rd_data, HALT_INSTR & {`INSTR_WIDTH{1'b1}});
+        // Halt instruction in IMEM (only check if within BRAM range)
+        if (HALT_WORD < IMEM_HW_DEPTH) begin
+            mmio_rd(IMEM_BASE | HALT_WORD, rd_data);
+            check(HALT_INSTR & {`INSTR_WIDTH{1'b1}},
+                  rd_data, IMEM_BASE | HALT_WORD, "SORT_HALT_I");
+            $display("  IMEM[%0d]      = 0x%08H (expect 0x%08H = B .)",
+                     HALT_WORD, rd_data, HALT_INSTR & {`INSTR_WIDTH{1'b1}});
+        end else begin
+            $display("  IMEM[%0d]      — SKIPPED (word %0d >= IMEM depth %0d)",
+                     HALT_WORD, HALT_WORD, IMEM_HW_DEPTH);
+            $display("  *** WARNING: Halt instruction is beyond IMEM! CPU cannot reach it. ***");
+            fail_cnt = fail_cnt + 1;
+        end
 
         // Halt instruction in DMEM
-        mmio_rd(DMEM_BASE | HALT_WORD, rd_data);
-        check(HALT_INSTR & {`DATA_WIDTH{1'b1}},
-              rd_data, DMEM_BASE | HALT_WORD, "SORT_HALT_D");
-        $display("  DMEM[%0d]      = 0x%08H (expect 0x%08H = B .)",
-                 HALT_WORD, rd_data, HALT_INSTR & {`DATA_WIDTH{1'b1}});
+        if (HALT_WORD < DMEM_HW_DEPTH) begin
+            mmio_rd(DMEM_BASE | HALT_WORD, rd_data);
+            check(HALT_INSTR & {`DATA_WIDTH{1'b1}},
+                  rd_data, DMEM_BASE | HALT_WORD, "SORT_HALT_D");
+            $display("  DMEM[%0d]      = 0x%08H (expect 0x%08H = B .)",
+                     HALT_WORD, rd_data, HALT_INSTR & {`DATA_WIDTH{1'b1}});
+        end else begin
+            $display("  DMEM[%0d]      — SKIPPED (word %0d >= DMEM depth %0d)",
+                     HALT_WORD, HALT_WORD, DMEM_HW_DEPTH);
+        end
 
         // ── B6: Initialise CPU registers ────────────────
         //  The CPU is in reset (start=0 → cpu_rst_n=0).
@@ -786,8 +853,8 @@ module soc_tb;
         end
 
         // ── B10: Read DMEM via MMIO and search for sorted array ──
-        $display("[B10] Reading %0d DMEM words via MMIO...", load_extent_actual);
-        for (i = 0; i < load_extent_actual; i = i + 1) begin
+        $display("[B10] Reading %0d DMEM words via MMIO...", dmem_load_extent);
+        for (i = 0; i < dmem_load_extent; i = i + 1) begin
             mmio_rd(DMEM_BASE | i, rd_data);
             dmem_snap[i] = rd_data[`DATA_WIDTH-1:0];
         end
@@ -799,7 +866,7 @@ module soc_tb;
         found_addr = 0;
         sort_count = 0;
 
-        for (i = 0; i < load_extent_actual - SORT_ARRAY_SIZE + 1; i = i + 1) begin
+        for (i = 0; i < dmem_load_extent - SORT_ARRAY_SIZE + 1; i = i + 1) begin
             if (!found) begin
                 match = 1'b1;
                 for (j = 0; j < SORT_ARRAY_SIZE; j = j + 1) begin
@@ -916,6 +983,10 @@ module soc_tb;
                      sort_count);
         else
             $display("║  Sort Result  : NOT FOUND                                      ║");
+        $display("║  IMEM Depth   : %0d words (loaded %0d)                        ║",
+                 IMEM_HW_DEPTH, imem_load_extent);
+        $display("║  DMEM Depth   : %0d words (loaded %0d)                       ║",
+                 DMEM_HW_DEPTH, dmem_load_extent);
         $display("║  Checks       : %0d PASSED, %0d FAILED (%0d total)            ║",
                  pass_cnt, fail_cnt, pass_cnt + fail_cnt);
         $display("╚══════════════════════════════════════════════════════════════╝");
