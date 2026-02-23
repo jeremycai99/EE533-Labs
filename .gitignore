@@ -56,3 +56,6 @@ dkms.conf
 
 # MacOS garbage
 .DS_Store
+
+# simluation files
+*.vcd
