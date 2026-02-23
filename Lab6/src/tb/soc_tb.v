@@ -2,16 +2,14 @@
  * Description: SoC MMIO testbench
  *   Phase A — Basic MMIO read/write infrastructure tests
  *   Phase B — Bubble Sort integration (hex load via MMIO → run via ext start → verify via MMIO)
- *   Phase C — ILA Debug Interface verification
  *
  *  The bubble sort program uses a unified memory image. Both IMEM and DMEM
  *  are loaded with the same hex file (code fetched from IMEM, data from DMEM).
  *  The CPU is started via the external `start` pin (not MMIO CTRL) because
  *  the sort program halts with B. (branch-to-self), which does not trigger
- *  `cpu_done`.  PC is monitored through the ILA debug port (no MMIO needed
- *  while the CPU is running).  After halt detection, `start` is de-asserted
- *  (CPU resets, BRAMs preserved), and DMEM is read back via MMIO to verify
- *  the sorted output.
+ *  `cpu_done`.  PC is monitored through hierarchical access.  After halt
+ *  detection, `start` is de-asserted (CPU resets, BRAMs preserved), and DMEM
+ *  is read back via MMIO to verify the sorted output.
  *
  *  COMPILATION:
  *      iverilog -o soc_tb soc_tb.v
@@ -34,16 +32,19 @@ module soc_tb;
     parameter CLK_PERIOD       = 10;
     parameter SORT_ARRAY_SIZE  = 10;
     parameter MAX_SORT_ELEMS   = 64;
-    parameter SORT_MEM_DEPTH   = 4096;
     parameter LOAD_EXTENT      = 1024;   // min words to load into IMEM & DMEM
 
     parameter [31:0] HALT_ADDR  = 32'h0000_0200;
     parameter [31:0] HALT_INSTR = 32'hEAFF_FFFE;  // B . (branch-to-self)
     parameter [31:0] HALT_WORD  = HALT_ADDR >> 2;  // word index 128
 
-    // Hardware BRAM depths — derived from define.v
-    localparam IMEM_HW_DEPTH = (1 << `IMEM_ADDR_WIDTH);  // e.g. 512 when IMEM_ADDR_WIDTH=9
-    localparam DMEM_HW_DEPTH = (1 << `DMEM_ADDR_WIDTH);  // e.g. 1024 when DMEM_ADDR_WIDTH=10
+    // Hardware BRAM depths — derived from define.v (moved before SORT_MEM_DEPTH)
+    localparam IMEM_HW_DEPTH = (1 << `IMEM_ADDR_WIDTH);
+    localparam DMEM_HW_DEPTH = (1 << `DMEM_ADDR_WIDTH);
+
+    // Local memory depth must cover the larger of the two BRAMs (min 4096)
+    localparam SORT_MEM_DEPTH_MIN = (DMEM_HW_DEPTH > IMEM_HW_DEPTH) ? DMEM_HW_DEPTH : IMEM_HW_DEPTH;
+    localparam SORT_MEM_DEPTH     = (SORT_MEM_DEPTH_MIN > 4096) ? SORT_MEM_DEPTH_MIN : 4096;
 
 `ifdef SIM_TIMEOUT
     parameter TIMEOUT = `SIM_TIMEOUT;
@@ -87,12 +88,6 @@ module soc_tb;
     reg                          resp_rdy;
 
     // ================================================================
-    //  ILA Interface Signals
-    // ================================================================
-    reg  [4:0]                  ila_debug_sel;
-    wire [`DATA_WIDTH-1:0]      ila_debug_data;
-
-    // ================================================================
     //  DUT
     // ================================================================
     soc u_soc (
@@ -108,9 +103,7 @@ module soc_tb;
         .resp_addr    (resp_addr),
         .resp_data    (resp_data),
         .resp_val     (resp_val),
-        .resp_rdy     (resp_rdy),
-        .ila_debug_sel    (ila_debug_sel),
-        .ila_debug_data   (ila_debug_data)
+        .resp_rdy     (resp_rdy)
     );
 
     // ================================================================
@@ -129,8 +122,8 @@ module soc_tb;
     reg [`DATA_WIDTH-1:0]       dmem_snap       [0:SORT_MEM_DEPTH-1];
     integer sort_count;
     integer load_extent_actual;
-    integer imem_load_extent;     // clamped to IMEM_HW_DEPTH
-    integer dmem_load_extent;     // clamped to DMEM_HW_DEPTH
+    integer imem_load_extent;     // always IMEM_HW_DEPTH
+    integer dmem_load_extent;     // always DMEM_HW_DEPTH
 
     // Phase A reference model
     reg [`MMIO_DATA_WIDTH-1:0]  imem_ref   [0:ADDR_RANGE-1];
@@ -150,6 +143,7 @@ module soc_tb;
     integer found_addr;
     reg     found, match;
     reg [`PC_WIDTH-1:0] prev_pc;
+    reg [`PC_WIDTH-1:0] cur_pc;
 
     reg [`MMIO_DATA_WIDTH-1:0]  rd_data;
     reg [`MMIO_ADDR_WIDTH-1:0]  taddr;
@@ -313,35 +307,28 @@ module soc_tb;
                      HALT_INSTR, HALT_WORD, HALT_ADDR);
             sort_local_mem[HALT_WORD] = HALT_INSTR;
 
-            // Determine actual extent (last non-zero word + margin)
+            // Determine actual extent (last non-zero word + margin) — diagnostic only
             load_extent_actual = 0;
             for (k = 0; k < SORT_MEM_DEPTH; k = k + 1)
                 if (sort_local_mem[k] !== {`DATA_WIDTH{1'b0}})
                     load_extent_actual = k + 1;
             if (load_extent_actual < LOAD_EXTENT)
                 load_extent_actual = LOAD_EXTENT;
-            $display("  Load extent: %0d words (%0d bytes)",
+            $display("  Hex data extent: %0d words (%0d bytes)",
                      load_extent_actual, load_extent_actual << 2);
 
-            // Clamp to hardware BRAM depths to prevent aliased overwrites
+            // Always load the FULL BRAM to avoid uninitialized locations.
+            // sort_local_mem[] is pre-zeroed, so addresses beyond the hex
+            // data are written as 0 — eliminating X / stale-data issues
+            // that arise when the BRAM is larger than the hex image.
             $display("  Hardware depths: IMEM=%0d words, DMEM=%0d words",
                      IMEM_HW_DEPTH, DMEM_HW_DEPTH);
 
-            if (load_extent_actual > IMEM_HW_DEPTH) begin
-                imem_load_extent = IMEM_HW_DEPTH;
-                $display("  NOTE: IMEM load clamped from %0d to %0d words (IMEM_ADDR_WIDTH=%0d)",
-                         load_extent_actual, IMEM_HW_DEPTH, `IMEM_ADDR_WIDTH);
-            end else begin
-                imem_load_extent = load_extent_actual;
-            end
+            imem_load_extent = IMEM_HW_DEPTH;
+            dmem_load_extent = DMEM_HW_DEPTH;
 
-            if (load_extent_actual > DMEM_HW_DEPTH) begin
-                dmem_load_extent = DMEM_HW_DEPTH;
-                $display("  NOTE: DMEM load clamped from %0d to %0d words (DMEM_ADDR_WIDTH=%0d)",
-                         load_extent_actual, DMEM_HW_DEPTH, `DMEM_ADDR_WIDTH);
-            end else begin
-                dmem_load_extent = load_extent_actual;
-            end
+            $display("  Will load: IMEM=%0d words, DMEM=%0d words (full BRAM)",
+                     imem_load_extent, dmem_load_extent);
 
             // Safety: verify halt word fits within IMEM
             if (HALT_WORD >= IMEM_HW_DEPTH) begin
@@ -469,7 +456,6 @@ module soc_tb;
         rst_n = 0; start = 0;
         req_cmd = 0; req_addr = 0; req_data = 0;
         req_val = 0; resp_rdy = 0;
-        ila_debug_sel = 0;
         pass_cnt = 0; fail_cnt = 0; seed = 42;
         sort_count = 0; cycle_cnt = 0;
         imem_load_extent = 0; dmem_load_extent = 0;
@@ -657,10 +643,10 @@ module soc_tb;
         //  The hex file is a unified image (code + data).
         //  Instructions are fetched from IMEM, data from DMEM,
         //  so both get the same image.
-        //  IMPORTANT: Only write up to imem_load_extent words to
-        //  avoid aliased overwrites when the image exceeds BRAM depth.
-        $display("[B3] Writing %0d words to IMEM via MMIO (BRAM depth=%0d)...",
-                 imem_load_extent, IMEM_HW_DEPTH);
+        //  Load the FULL BRAM depth so every address is initialised
+        //  (sort_local_mem is pre-zeroed beyond the hex data).
+        $display("[B3] Writing %0d words to IMEM via MMIO (full BRAM depth)...",
+                 imem_load_extent);
         for (i = 0; i < imem_load_extent; i = i + 1)
             mmio_wr(IMEM_BASE | i, sort_local_mem[i]);
         $display("  IMEM load complete.");
@@ -680,8 +666,8 @@ module soc_tb;
         end
 
         // ── B4: Write program to DMEM via MMIO ─────────
-        $display("[B4] Writing %0d words to DMEM via MMIO (BRAM depth=%0d)...",
-                 dmem_load_extent, DMEM_HW_DEPTH);
+        $display("[B4] Writing %0d words to DMEM via MMIO (full BRAM depth)...",
+                 dmem_load_extent);
         for (i = 0; i < dmem_load_extent; i = i + 1)
             mmio_wr(DMEM_BASE | i, sort_local_mem[i]);
         $display("  DMEM load complete.");
@@ -745,12 +731,11 @@ module soc_tb;
             fail_cnt = fail_cnt + 1;
         end
 
-        // ── B8: Monitor PC via ILA, wait for halt ───────
+        // ── B8: Monitor PC via hierarchical access, wait for halt ──
         $display("[B8] Running CPU (timeout=%0d cycles)...", TIMEOUT);
         $display("  halt_addr = 0x%08H", HALT_ADDR);
         $display("");
 
-        ila_debug_sel   = 5'd0;   // Select PC
         cycle_cnt       = 0;
         stuck_cnt       = 0;
         prev_pc         = {`PC_WIDTH{1'b0}};
@@ -760,9 +745,10 @@ module soc_tb;
             forever begin
                 @(posedge clk); #1;
                 cycle_cnt = cycle_cnt + 1;
+                cur_pc = u_soc.u_cpu.pc_if;
 
                 // ── Detection 1: PC reached halt address ──
-                if (ila_debug_data == HALT_ADDR && cycle_cnt > 20) begin
+                if (cur_pc == HALT_ADDR && cycle_cnt > 20) begin
                     $display("");
                     $display("[%0t] PC reached halt address 0x%08H at cycle %0d",
                              $time, HALT_ADDR, cycle_cnt);
@@ -772,11 +758,11 @@ module soc_tb;
                 end
 
                 // ── Stuck-PC detector ──
-                if (ila_debug_data === prev_pc)
+                if (cur_pc === prev_pc)
                     stuck_cnt = stuck_cnt + 1;
                 else
                     stuck_cnt = 0;
-                prev_pc = ila_debug_data;
+                prev_pc = cur_pc;
 
                 // ── Detection 2: stuck at unexpected address ──
                 if (stuck_cnt > 500 && prev_pc != HALT_ADDR) begin
@@ -802,7 +788,7 @@ module soc_tb;
                 if (cycle_cnt >= TIMEOUT) begin
                     $display("");
                     $display("*** TIMEOUT after %0d cycles (PC=0x%08H) ***",
-                             TIMEOUT, ila_debug_data);
+                             TIMEOUT, cur_pc);
                     dump_regs();
                     run_exit_status = 2;
                     disable sort_run_loop;
@@ -852,8 +838,9 @@ module soc_tb;
             fail_cnt = fail_cnt + 1;
         end
 
-        // ── B10: Read DMEM via MMIO and search for sorted array ──
-        $display("[B10] Reading %0d DMEM words via MMIO...", dmem_load_extent);
+        // ── B10: Read FULL DMEM via MMIO and search for sorted array ──
+        $display("[B10] Reading %0d DMEM words via MMIO (full BRAM)...",
+                 dmem_load_extent);
         for (i = 0; i < dmem_load_extent; i = i + 1) begin
             mmio_rd(DMEM_BASE | i, rd_data);
             dmem_snap[i] = rd_data[`DATA_WIDTH-1:0];
@@ -900,67 +887,6 @@ module soc_tb;
         verify_sort_order();
         $display("");
         verify_against_expected();
-
-
-        // ═══════════════════════════════════════════════════
-        //  PHASE C — ILA Debug Interface Verification
-        // ═══════════════════════════════════════════════════
-        $display("\n──────────────────────────────────────────────────");
-        $display("  PHASE C: ILA Debug Interface Verification");
-        $display("──────────────────────────────────────────────────");
-        //  The CPU is currently in reset (start=0 → cpu_rst_n=0).
-        //  Pipeline registers are cleared, but the register file
-        //  retains the values from the just-completed sort execution.
-
-        // ── C1: Read registers via ILA ──────────────────
-        $display("\n[C1] Reading registers via ILA debug port...");
-        for (i = 0; i < 16; i = i + 1) begin
-            ila_debug_sel = 5'b10000 | i[3:0];
-            @(posedge clk); #1;
-            $display("  ILA Reg[%2d] = 0x%08H  (hier: 0x%08H)",
-                     i, ila_debug_data, u_soc.u_cpu.u_regfile.regs[i]);
-            // Cross-check ILA port against hierarchical access
-            if (ila_debug_data !== u_soc.u_cpu.u_regfile.regs[i]) begin
-                $display("    [FAIL] ILA/hier mismatch for R%0d!", i);
-                fail_cnt = fail_cnt + 1;
-            end else
-                pass_cnt = pass_cnt + 1;
-        end
-
-        // ── C2: System debug probes ─────────────────────
-        $display("\n[C2] System debug probes...");
-
-        ila_debug_sel = 5'd0; @(posedge clk); #1;
-        $display("  Sel[0]  PC         = 0x%08H  (CPU in reset, expect 0)",
-                 ila_debug_data);
-        if (ila_debug_data == {`DATA_WIDTH{1'b0}})
-            pass_cnt = pass_cnt + 1;
-        else begin
-            $display("    [FAIL] PC non-zero while CPU is in reset");
-            fail_cnt = fail_cnt + 1;
-        end
-
-        ila_debug_sel = 5'd1; @(posedge clk); #1;
-        $display("  Sel[1]  Instr      = 0x%08H", ila_debug_data);
-
-        ila_debug_sel = 5'd4; @(posedge clk); #1;
-        $display("  Sel[4]  ALU result = 0x%08H", ila_debug_data);
-
-        ila_debug_sel = 5'd7; @(posedge clk); #1;
-        $display("  Sel[7]  Controls   = 0x%08H", ila_debug_data);
-
-        ila_debug_sel = 5'd8; @(posedge clk); #1;
-        $display("  Sel[8]  CPSR flags = 0x%08H", ila_debug_data);
-
-        // Non-X sanity on the debug bus
-        ila_debug_sel = 5'd0; @(posedge clk); #1;
-        if (^ila_debug_data === 1'bx) begin
-            $display("  [FAIL] Debug bus contains X values");
-            fail_cnt = fail_cnt + 1;
-        end else begin
-            $display("  [PASS] Debug bus free of X");
-            pass_cnt = pass_cnt + 1;
-        end
 
 
         // ═══════════════════════════════════════════════════

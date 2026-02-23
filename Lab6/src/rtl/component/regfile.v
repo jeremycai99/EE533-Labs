@@ -30,10 +30,7 @@ module regfile(
     output wire [`REG_DATA_WIDTH-1:0] r1data, // Data read from source register 1
     output wire [`REG_DATA_WIDTH-1:0] r2data, // Data read from source register 2
     output wire [`REG_DATA_WIDTH-1:0] r3data, // Data read from source register 3 (for multiply instructions)
-    output wire [`REG_DATA_WIDTH-1:0] r4data, // Data read from source register 4 (for multiply MLAL instructions)
-    // ILA probe signals for debugging
-    input [`REG_ADDR_WIDTH-1:0] ila_cpu_reg_addr, // ILA probe address input
-    output wire [`REG_DATA_WIDTH-1:0] ila_cpu_reg_data // ILA probe data output
+    output wire [`REG_DATA_WIDTH-1:0] r4data // Data read from source register 4 (for multiply MLAL instructions)
 );
 
 reg [`REG_DATA_WIDTH-1:0] regs [0:(1<<`REG_ADDR_WIDTH)-1]; // Register file array
@@ -46,8 +43,6 @@ assign r1data = (wena && wr_addr1 == r1addr) ? wr_data1 : (wena && wr_addr2 == r
 assign r2data = (wena && wr_addr1 == r2addr) ? wr_data1 : (wena && wr_addr2 == r2addr) ? wr_data2 : regs[r2addr];
 assign r3data = (wena && wr_addr1 == r3addr) ? wr_data1 : (wena && wr_addr2 == r3addr) ? wr_data2 : regs[r3addr];
 assign r4data = (wena && wr_addr1 == r4addr) ? wr_data1 : (wena && wr_addr2 == r4addr) ? wr_data2 : regs[r4addr];
-
-assign ila_cpu_reg_data = regs[ila_cpu_reg_addr]; // ILA probe data output
 
 // Register write logic: synchronous write on clock edge
 always @(posedge clk) begin

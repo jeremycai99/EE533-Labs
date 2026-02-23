@@ -229,7 +229,7 @@ wire is_load = f_l;
 wire dp_test = (f_opcode[3:2] == 2'b10);
 
 // Step 4: Immediate value generation
-wire [4:0] rot_amount = f_rot << 1; // Rotate amount is the rot field multiplied by 2
+wire [4:0] rot_amount = {f_rot, 1'b0};
 wire [31:0] imm8_ext = {24'b0, f_imm8}; // Zero-extend the 8-bit immediate value to 32 bits
 wire [31:0] imm_sdt = {20'b0, f_off12};
 wire [31:0] imm_hdt = {24'b0, f_rs, f_rm}; 

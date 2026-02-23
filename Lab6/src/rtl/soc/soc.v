@@ -45,13 +45,7 @@ module soc (
     input wire resp_rdy,
 
     // External start signal (Active High, Level Sensitive)
-    input wire start,
-    
-    // Expanded Debug Interface
-    // Bit 4: 0 = System Debug, 1 = Register File Debug
-    // Bits 3-0: Selection index or Register Address
-    input wire [4:0] ila_debug_sel,       
-    output wire [`DATA_WIDTH-1:0] ila_debug_data // Full 64-bit debug data output
+    input wire start
 );
 
 //  Address Region Decode — req_addr[31:30]
@@ -262,10 +256,7 @@ cpu u_cpu (
     .d_mem_data_o(cpu_dmem_wdata),
     .d_mem_wen_o(cpu_dmem_wen),
     .d_mem_size_o(cpu_dmem_size),
-    .cpu_done(cpu_done),
-    
-    .ila_debug_sel(ila_debug_sel),       
-    .ila_debug_data(ila_debug_data)      
+    .cpu_done(cpu_done)   
 );
 
 //Make sure that the address space doesn't exceed the size of imem and dmem

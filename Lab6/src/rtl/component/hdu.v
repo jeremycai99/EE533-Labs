@@ -1,8 +1,28 @@
 /* file: hdu.v
- Description: Hazard detection unit module for the Arm pipeline CPU design
- Author: Jeremy Cai
- Date: Feb. 16, 2026
- Version: 2.0 — added secondary write-port (port 2) interface
+ * Hazard Detection Unit — 6-stage pipeline (IF→ID→EX1→EX2→MEM→WB)
+ *
+ * Three data-hazard classes plus branch and BDTU stalls:
+ *
+ *   1. EX2→EX1 hazard: EX2 writes a register that EX1 reads.
+ *      The ALU result is computed in EX2 but not yet in the
+ *      EX2/MEM register, so the forwarding unit cannot supply it
+ *      to EX1.  Stall 1 cycle; result lands in EX2/MEM for FU.
+ *
+ *   2. MEM-load→EX1 hazard: a load in MEM has not yet produced
+ *      its data (available after WB).  The FU blocks forwarding
+ *      from EX2/MEM when exmem_is_load is set.  Stall 1 cycle;
+ *      data lands in MEM/WB for FU.  Combined with hazard 1 this
+ *      gives a 2-cycle load-use penalty.
+ *
+ *   3. Multi-cycle (BDT/SWP) in EX2: these instructions perform
+ *      ALL register writes through the BDTU in MEM, so their
+ *      wr_en1/wr_en2 are 0 in EX2 — invisible to hazard 1.
+ *      Stall 1 cycle so the instruction reaches MEM and the BDTU
+ *      starts; the BDTU then stalls the pipeline and its write
+ *      ports feed the forwarding unit in EX1.
+ *
+ *   Priority (highest first):
+ *      BDTU busy  >  branch flush  >  data-hazard stall
  */
 
 `ifndef HDU_V
@@ -11,133 +31,114 @@
 `include "define.v"
 
 module hdu (
-    input wire idex_is_load,   // ID/EX instruction is a load (LDR/LDRB etc.)
-    input wire [3:0] idex_wd1,        // ID/EX primary dest register (Rd for load)
-    input wire idex_we1,        // ID/EX primary write-back enable
+    // ── EX1/EX2 register: EX2 destination info ──────────
+    input wire [3:0] ex1ex2_wd1,            // EX2 primary dest register
+    input wire       ex1ex2_we1,            // EX2 primary write enable (ungated)
+    input wire [3:0] ex1ex2_wd2,            // EX2 secondary dest register
+    input wire       ex1ex2_we2,            // EX2 secondary write enable (ungated)
+    input wire       ex1ex2_is_multi_cycle, // EX2 is BDT/SWP (ungated)
+    input wire       ex1ex2_valid,          // EX2 holds a valid instruction
 
-    // ── Secondary write port from ID/EX (base writeback / RdHi) ──
-    //
-    // These are provided so the HDU has full visibility of every
-    // in-flight write.  In the current design they do NOT trigger
-    // load-use stalls because port-2's value is always the ALU
-    // result (base±offset) or multiply-hi — both computed in EX
-    // and available for forwarding from EX/MEM.
-    input wire [3:0] idex_wd2,       // ID/EX secondary dest register
-    input wire idex_we2,       // ID/EX secondary write-back enable
+    // ── EX2/MEM register: MEM-stage load info ───────────
+    input wire       ex2mem_is_load,        // MEM instruction is a load
+    input wire [3:0] ex2mem_wd1,            // MEM primary dest register
+    input wire       ex2mem_we1,            // MEM primary write enable (gated)
 
-    // Source register addresses of the instruction in IF/ID (decode stage)
-    input wire [3:0] ifid_rn,        // Rn address being decoded
-    input wire [3:0] ifid_rm,        // Rm address being decoded
-    input wire [3:0] ifid_rs,        // Rs address being decoded
-    input wire [3:0] ifid_rd_store,  // Rd for a store instruction being decoded
-    input wire ifid_use_rn,    // Decoded instruction uses Rn
-    input wire ifid_use_rm,    // Decoded instruction uses Rm
-    input wire ifid_use_rs,    // Decoded instruction uses Rs
-    input wire ifid_use_rd_st, // Decoded instruction is store using Rd
+    // ── EX1 source registers ────────────────────────────
+    input wire [3:0] ex1_rn,
+    input wire [3:0] ex1_rm,
+    input wire [3:0] ex1_rs,
+    input wire [3:0] ex1_rd_store,
+    input wire       ex1_use_rn,
+    input wire       ex1_use_rm,
+    input wire       ex1_use_rs,
+    input wire       ex1_use_rd_st,
 
-    // Branch detection
-    input wire branch_taken,   // Branch resolved as taken in EX
+    // ── Branch (resolved in EX2) ────────────────────────
+    input wire       branch_taken,
 
-    // Multi-cycle stall
-    input wire bdtu_busy,      // BDTU is processing (LDM/STM/SWP)
+    // ── BDTU busy ───────────────────────────────────────
+    input wire       bdtu_busy,
 
-    // Pipeline control outputs
-    output wire stall_if,   // Stall the IF stage (hold PC and IF/ID register)
-    output wire stall_id,   // Stall the ID stage (hold IF/ID -> ID/EX latch)
-    output wire stall_ex,   // Stall the EX stage (hold ID/EX -> EX/MEM latch)
-    output wire stall_mem,  // Stall the MEM stage (hold EX/MEM -> MEM/WB latch)
+    // ── Pipeline control outputs ────────────────────────
+    output wire stall_if,
+    output wire stall_id,
+    output wire stall_ex1,
+    output wire stall_ex2,
+    output wire stall_mem,
 
-    output wire flush_ifid, // Flush IF/ID register (insert bubble into ID)
-    output wire flush_idex, // Flush ID/EX register (insert bubble into EX)
-    output wire flush_exmem // Flush EX/MEM register (insert bubble into MEM)
+    output wire flush_ifid,
+    output wire flush_idex1,
+    output wire flush_ex1ex2
 );
 
-// ────────────────────────────────────────────────────────────
-// Load-use hazard detection — PRIMARY port (port 1)
-// ────────────────────────────────────────────────────────────
-// A load-use hazard exists when:
-//   • The instruction in ID/EX is a load  (idex_is_load)
-//   • It will write back                  (idex_we)
-//   • Its destination is not R15           (idex_wd != 15)
-//   • The instruction in IF/ID reads that same register
+// ────────────────────────────────────────────────────────
+// 1. EX2→EX1 data hazard
+//    wr_en signals are UNGATED (condition not yet evaluated
+//    in EX2), so this is conservative — may stall when the
+//    condition will not be met.  Harmless; minor CPI cost.
+// ────────────────────────────────────────────────────────
+wire ex2_p1_rn = ex1ex2_we1 && ex1_use_rn    && (ex1ex2_wd1 == ex1_rn);
+wire ex2_p1_rm = ex1ex2_we1 && ex1_use_rm    && (ex1ex2_wd1 == ex1_rm);
+wire ex2_p1_rs = ex1ex2_we1 && ex1_use_rs    && (ex1ex2_wd1 == ex1_rs);
+wire ex2_p1_rd = ex1ex2_we1 && ex1_use_rd_st && (ex1ex2_wd1 == ex1_rd_store);
 
-wire load_use_rn = ifid_use_rn && (ifid_rn == idex_wd1);
-wire load_use_rm = ifid_use_rm && (ifid_rm == idex_wd1);
-wire load_use_rs = ifid_use_rs && (ifid_rs == idex_wd1);
-wire load_use_rd = ifid_use_rd_st && (ifid_rd_store == idex_wd1);
+wire ex2_p2_rn = ex1ex2_we2 && ex1_use_rn    && (ex1ex2_wd2 == ex1_rn);
+wire ex2_p2_rm = ex1ex2_we2 && ex1_use_rm    && (ex1ex2_wd2 == ex1_rm);
+wire ex2_p2_rs = ex1ex2_we2 && ex1_use_rs    && (ex1ex2_wd2 == ex1_rs);
+wire ex2_p2_rd = ex1ex2_we2 && ex1_use_rd_st && (ex1ex2_wd2 == ex1_rd_store);
 
-wire load_use_hazard = idex_is_load && idex_we1
-                     && (idex_wd1 != 4'd15)
-                     && (load_use_rn | load_use_rm | load_use_rs | load_use_rd);
+wire ex2_ex1_hazard = ex2_p1_rn | ex2_p1_rm | ex2_p1_rs | ex2_p1_rd
+                    | ex2_p2_rn | ex2_p2_rm | ex2_p2_rs | ex2_p2_rd;
 
-// Port-2 note
-// No load-use stall is needed for port 2 in the current design:
+// ────────────────────────────────────────────────────────
+// 2. MEM-load→EX1 data hazard
+//    Load is in MEM; data not available until WB.  The FU
+//    will NOT forward from EX2/MEM when exmem_is_load is
+//    set, so we must stall one cycle.
+// ────────────────────────────────────────────────────────
+wire mem_ld_rn = ex2mem_is_load && ex2mem_we1 && ex1_use_rn    && (ex2mem_wd1 == ex1_rn);
+wire mem_ld_rm = ex2mem_is_load && ex2mem_we1 && ex1_use_rm    && (ex2mem_wd1 == ex1_rm);
+wire mem_ld_rs = ex2mem_is_load && ex2mem_we1 && ex1_use_rs    && (ex2mem_wd1 == ex1_rs);
+wire mem_ld_rd = ex2mem_is_load && ex2mem_we1 && ex1_use_rd_st && (ex2mem_wd1 == ex1_rd_store);
+
+wire mem_load_ex1_hazard = mem_ld_rn | mem_ld_rm | mem_ld_rs | mem_ld_rd;
+
+// ────────────────────────────────────────────────────────
+// 3. Multi-cycle (BDT/SWP) in EX2
+//    BDT/SWP perform register writes through BDTU in MEM,
+//    bypassing wr_en1/wr_en2.  Without this stall the next
+//    instruction would latch stale operands in EX1/EX2
+//    before BDTU even starts.
 //
-//  SDT with writeback : wb_data2 = ALU result  (available at EX)
-//  Long multiply      : wb_data2 = RdHi result (available at EX)
-//
-// Both values can be forwarded from EX/MEM without stalling.
-// The forwarding unit (fu.v) handles this via FWD_EXMEM_P2 /
-// FWD_MEMWB_P2.
-//
-//
-// wire load_use_p2_rn = ifid_use_rn    && (ifid_rn       == idex_wd2);
-// wire load_use_p2_rm = ifid_use_rm    && (ifid_rm       == idex_wd2);
-// wire load_use_p2_rs = ifid_use_rs    && (ifid_rs       == idex_wd2);
-// wire load_use_p2_rd = ifid_use_rd_st && (ifid_rd_store == idex_wd2);
+//    Cost: 1 extra bubble per BDT/SWP — negligible versus
+//    the multi-cycle operation itself (4–16+ cycles).
+// ────────────────────────────────────────────────────────
+wire mc_ex2_hazard = ex1ex2_is_multi_cycle && ex1ex2_valid;
 
-// wire load_use_hazard_p2 = idex_is_load2 && idex_we2
-//                         && (idex_wd2 != 4'd15)
-//                         && (load_use_p2_rn | load_use_p2_rm
-//                           | load_use_p2_rs | load_use_p2_rd);
-
-// Then OR it into load_use_hazard.
-
-// wire load_use_hazard_full = load_use_hazard | load_use_hazard_p2;
-
-//
-//   Priority (highest to lowest):
-//
-//   1. BDTU busy — freezes the entire pipeline upstream of the
-//      memory interface.  The BDTU has exclusive use of the
-//      register-file write ports and the data memory bus while
-//      active, so IF, ID, EX, and MEM must all hold their state.
-//      No flushes are needed; the pipeline simply pauses.
-//
-//   2. Branch taken — the branch is resolved in EX.  The
-//      instructions in IF and ID are on the wrong path.
-//      Flush IF/ID and ID/EX.  IF is redirected to the branch
-//      target by the datapath (PC update logic).
-//      No stalls are needed beyond the flush.
-//
-//   3. Load-use hazard — stall IF and ID for one cycle, bubble
-//      into EX (flush ID/EX).
-
-// BDTU stall: freeze everything from IF through MEM.
-wire bdtu_stall = bdtu_busy;
-
-// Branch flush: kill the two instructions behind the branch.
+// ────────────────────────────────────────────────────────
+// Stall / flush arbitration
+// ────────────────────────────────────────────────────────
+wire bdtu_stall   = bdtu_busy;
 wire branch_flush = branch_taken && !bdtu_stall;
+wire hazard_stall = (ex2_ex1_hazard || mem_load_ex1_hazard || mc_ex2_hazard)
+                    && !bdtu_stall && !branch_flush;
 
-// Load-use stall: freeze IF and ID, bubble into EX.
-wire lu_stall = load_use_hazard && !bdtu_stall && !branch_flush;
-
-// ── Output assignments ──
-
-// Stall signals
-assign stall_if = bdtu_stall | lu_stall;
-assign stall_id = bdtu_stall | lu_stall;
-assign stall_ex = bdtu_stall;
+// ── Stalls ──
+// BDTU: freeze the entire pipeline (IF through MEM).
+// Hazard: freeze IF, ID, EX1; EX2 and MEM continue.
+assign stall_if  = bdtu_stall | hazard_stall;
+assign stall_id  = bdtu_stall | hazard_stall;
+assign stall_ex1 = bdtu_stall | hazard_stall;
+assign stall_ex2 = bdtu_stall;
 assign stall_mem = bdtu_stall;
 
-// Flush signals
-assign flush_ifid = branch_flush;
-assign flush_idex = branch_flush | lu_stall;
-
-// Branch effective in EX stage and flush ex/mem or not doesn't
-// matter so hardcode the flush_exmem to 0 for simplicity.
-// This fix is intended to fix the multiple branch corner cases.
-assign flush_exmem = 1'b0;
+// ── Flushes ──
+// Branch: kill the three younger instructions (IF/ID, ID/EX1, EX1/EX2).
+// Hazard stall: insert bubble into EX2 (flush EX1/EX2).
+assign flush_ifid   = branch_flush;
+assign flush_idex1  = branch_flush;
+assign flush_ex1ex2 = branch_flush | hazard_stall;
 
 endmodule
 

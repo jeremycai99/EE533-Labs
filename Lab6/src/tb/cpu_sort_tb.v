@@ -1,4 +1,20 @@
-/*  cpu_sort_tb.v — Bubble-sort-only testbench
+/*  cpu_sort_tb.v — Bubble-sort-only testbench (6-stage pipeline)
+ *
+ *  Updated for CPU v2.1: EX1/EX2 split pipeline + HDU module.
+ *    - Removed ila_debug_sel / ila_debug_data ports (not in CPU).
+ *    - Replaced stall_ex / flush_idex / flush_exmem with
+ *      stall_ex1, stall_ex2, flush_idex1, flush_ex1ex2.
+ *    - Hazard signals now accessed through u_cpu.u_hdu hierarchy
+ *      (ex2_ex1_hazard, mem_load_ex1_hazard, mc_ex2_hazard,
+ *       hazard_stall, branch_flush, bdtu_stall).
+ *    - branch_taken_ex → branch_taken_ex2.
+ *    - Trace shows both EX1 (forwarding/shifter) and EX2 (ALU/cond).
+ *    - mul_en_ex removed (was already dead in v1.3).
+ *
+ *  NOTE: The HDU internal signal names referenced via u_cpu.u_hdu.*
+ *  (e.g. ex2_ex1_hazard, mc_ex2_hazard, hazard_stall, branch_flush,
+ *  bdtu_stall) must match the actual wire names inside hdu.v.
+ *  Adjust if your HDU uses different naming.
  *
  *  KEY FIX: Places a halt instruction (B .) at address 0x200,
  *  matching the program's "MOV LR, #0x200".  Without this, BX LR
@@ -44,10 +60,6 @@ parameter STATUS_INTERVAL = 1_000;
 parameter COMPACT_WINDOW  = 2000;
 
 // ── Halt configuration ──
-// The bubble sort bootstrap does: MOV LR, #0x200
-// After main() returns via BX LR, PC lands at 0x200.
-// We place a branch-to-self (B .) there so the CPU spins
-// and our detection logic catches it immediately.
 parameter [31:0] HALT_ADDR  = 32'h0000_0200;
 parameter [31:0] HALT_INSTR = 32'hEAFF_FFFE;  // B . (branch-to-self)
 
@@ -67,8 +79,6 @@ wire [`DATA_WIDTH-1:0]       d_mem_wdata;
 wire                         d_mem_wen;
 wire [1:0]                   d_mem_size;
 wire                         cpu_done_w;
-reg  [`REG_ADDR_WIDTH:0]     ila_debug_sel;
-wire [`DATA_WIDTH-1:0]       ila_debug_data;
 
 // ═══════════════════════════════════════════
 //  Memory model signal declarations
@@ -98,7 +108,7 @@ integer sort_count;
 reg [`DATA_WIDTH-1:0] expected_sorted [0:SORT_ARRAY_SIZE-1];
 
 // ═══════════════════════════════════════════
-//  DUT
+//  DUT — no ila_debug ports in v2.x
 // ═══════════════════════════════════════════
 cpu u_cpu (
     .clk           (clk),
@@ -110,9 +120,7 @@ cpu u_cpu (
     .d_mem_data_o  (d_mem_wdata),
     .d_mem_wen_o   (d_mem_wen),
     .d_mem_size_o  (d_mem_size),
-    .cpu_done      (cpu_done_w),
-    .ila_debug_sel (ila_debug_sel),
-    .ila_debug_data(ila_debug_data)
+    .cpu_done      (cpu_done_w)
 );
 
 // ═══════════════════════════════════════════
@@ -252,22 +260,24 @@ integer run_exit_status;  // 0=done 1=stuck 2=timeout
 
 // ═══════════════════════════════════════════
 //  Per-cycle detailed trace (gated by trace_enable)
+//  Updated for 6-stage pipeline: EX1 + EX2
+//  HDU signals accessed via u_cpu.u_hdu hierarchy (v2.1)
 // ═══════════════════════════════════════════
 always @(posedge clk) begin
     if (rst_n && trace_enable && (cycle_cnt < TRACE_CYCLES)) begin
         $display("────────────────────────────────────────────────────────────────────────────────");
-        $display("[C%04d] IF: PC=0x%08H  |  ID: instr=0x%08H valid=%b  |  EX: alu_res=0x%08H  |  MEM: addr=0x%08H  |  WB: data1=0x%08H",
+        $display("[C%04d] IF: PC=0x%08H  |  ID: instr=0x%08H valid=%b  |  EX2: alu_res=0x%08H cond=%b  |  MEM: addr=0x%08H  |  WB: data1=0x%08H",
                  cycle_cnt, i_mem_addr,
                  u_cpu.instr_id, u_cpu.ifid_valid,
-                 u_cpu.alu_result_ex, u_cpu.mem_addr_mem, u_cpu.wb_data1);
-        $display("        CTRL: stall_if=%b stall_id=%b stall_ex=%b stall_mem=%b | flush_ifid=%b flush_idex=%b flush_exmem=%b",
-                 u_cpu.stall_if, u_cpu.stall_id, u_cpu.stall_ex, u_cpu.stall_mem,
-                 u_cpu.flush_ifid, u_cpu.flush_idex, u_cpu.flush_exmem);
-        $display("        HDU:  lu_hazard=%b (ld_rn=%b ld_rm=%b ld_rs=%b ld_rd=%b) | idex_load=%b idex_wd=R%0d idex_we=%b",
-                 u_cpu.u_hdu.load_use_hazard,
-                 u_cpu.u_hdu.load_use_rn, u_cpu.u_hdu.load_use_rm,
-                 u_cpu.u_hdu.load_use_rs, u_cpu.u_hdu.load_use_rd,
-                 u_cpu.mem_read_ex, u_cpu.wr_addr1_ex, u_cpu.wr_en1_ex);
+                 u_cpu.alu_result_ex2, u_cpu.cond_met_ex2,
+                 u_cpu.mem_addr_mem, u_cpu.wb_data1);
+        $display("        CTRL: stall_if=%b stall_id=%b stall_ex1=%b stall_ex2=%b stall_mem=%b | flush_ifid=%b flush_idex1=%b flush_ex1ex2=%b",
+                 u_cpu.stall_if, u_cpu.stall_id, u_cpu.stall_ex1, u_cpu.stall_ex2, u_cpu.stall_mem,
+                 u_cpu.flush_ifid, u_cpu.flush_idex1, u_cpu.flush_ex1ex2);
+        $display("        HDU:  ex2_ex1_haz=%b mem_ld_ex1_haz=%b mc_ex2_haz=%b hazard_stall=%b | branch_flush=%b bdtu_busy=%b",
+                 u_cpu.u_hdu.ex2_ex1_hazard, u_cpu.u_hdu.mem_load_ex1_hazard,
+                 u_cpu.u_hdu.mc_ex2_hazard, u_cpu.u_hdu.hazard_stall,
+                 u_cpu.u_hdu.branch_flush, u_cpu.bdtu_busy);
         $display("        BDTU: state=%s busy=%b start=%b | addr=0x%08H rd=%b wr=%b wdata=0x%08H rdata=0x%08H",
                  bdtu_state_name(u_cpu.u_bdtu.state),
                  u_cpu.bdtu_busy, u_cpu.is_multi_cycle_mem,
@@ -277,29 +287,34 @@ always @(posedge clk) begin
             $display("        BDTU WR: port1: R%0d<=0x%08H en=%b | port2: R%0d<=0x%08H en=%b",
                      u_cpu.bdtu_wr_addr1, u_cpu.bdtu_wr_data1, u_cpu.bdtu_wr_en1,
                      u_cpu.bdtu_wr_addr2, u_cpu.bdtu_wr_data2, u_cpu.bdtu_wr_en2);
-        if (u_cpu.branch_taken_ex)
-            $display("        BRANCH: taken=%b target=0x%08H (exchange=%b link=%b)",
-                     u_cpu.branch_taken_ex, u_cpu.branch_target_ex,
-                     u_cpu.branch_exchange_ex, u_cpu.branch_link_ex);
+        if (u_cpu.branch_taken_ex2)
+            $display("        BRANCH: taken=%b target=0x%08H (link=%b)",
+                     u_cpu.branch_taken_ex2, u_cpu.branch_target_ex2_wire,
+                     u_cpu.branch_link_ex2);
         $display("        ID READ: Rn[R%0d]=0x%08H  Rm[R%0d]=0x%08H  R3port[R%0d]=0x%08H | use: rn=%b rm=%b rs=%b rd=%b",
                  u_cpu.rn_addr_id, u_cpu.rn_data_id,
                  u_cpu.rm_addr_id, u_cpu.rm_data_id,
                  u_cpu.r3addr_mux, u_cpu.r3_data_id,
                  u_cpu.use_rn_id, u_cpu.use_rm_id, u_cpu.use_rs_id, u_cpu.use_rd_id);
-        $display("        EX FWD: fwd_a=%s fwd_b=%s fwd_s=%s fwd_d=%s",
+        $display("        EX1 FWD: fwd_a=%s fwd_b=%s fwd_s=%s fwd_d=%s",
                  fwd_name(u_cpu.fwd_a), fwd_name(u_cpu.fwd_b),
                  fwd_name(u_cpu.fwd_s), fwd_name(u_cpu.fwd_d));
-        $display("        EX OPS: rn_fwd=0x%08H rm_fwd=0x%08H rs_fwd=0x%08H rd_st_fwd=0x%08H",
+        $display("        EX1 OPS: rn_fwd=0x%08H rm_fwd=0x%08H rs_fwd=0x%08H rd_st_fwd=0x%08H",
                  u_cpu.rn_fwd, u_cpu.rm_fwd, u_cpu.rs_fwd, u_cpu.rd_store_fwd);
-        $display("        EX ALU: a=0x%08H b=0x%08H op=%04b => res=0x%08H flags=%04b | shift_out=0x%08H cout=%b",
-                 u_cpu.rn_fwd, u_cpu.alu_src_b_val, u_cpu.alu_op_ex,
-                 u_cpu.alu_result_ex, u_cpu.alu_flags_ex,
-                 u_cpu.shifted_rm, u_cpu.shifter_cout);
-        $display("        EX CTL: wr1=R%0d en1=%b wr2=R%0d en2=%b | mem_rd=%b mem_wr=%b wb_sel=%s | mul_en=%b multi_cyc=%b",
-                 u_cpu.wr_addr1_ex, u_cpu.wr_en1_ex,
-                 u_cpu.wr_addr2_ex, u_cpu.wr_en2_ex,
-                 u_cpu.mem_read_ex, u_cpu.mem_write_ex, wb_sel_name(u_cpu.wb_sel_ex),
-                 u_cpu.mul_en_ex, u_cpu.is_multi_cycle_ex);
+        $display("        EX1 BS:  rm_shifted=0x%08H cout=%b | alu_b_sel=0x%08H | valid=%b cond=%04b",
+                 u_cpu.bs_dout, u_cpu.shifter_cout, u_cpu.alu_src_b_val_ex1,
+                 u_cpu.valid_ex1, u_cpu.cond_code_ex1);
+        $display("        EX2 ALU: a=0x%08H b=0x%08H op=%04b => res=0x%08H flags=%04b | cond=%04b met=%b valid=%b",
+                 u_cpu.rn_fwd_ex2, u_cpu.alu_b_ex2, u_cpu.alu_op_ex2,
+                 u_cpu.alu_result_ex2, u_cpu.alu_flags_ex2,
+                 u_cpu.cond_code_ex2, u_cpu.cond_met_raw_ex2, u_cpu.valid_ex2);
+        $display("        EX2 CTL: wr1=R%0d en1=%b(g:%b) wr2=R%0d en2=%b(g:%b) | mem_rd=%b(g:%b) mem_wr=%b(g:%b) wb_sel=%s | multi_cyc=%b(g:%b)",
+                 u_cpu.wr_addr1_ex2, u_cpu.wr_en1_ex2, u_cpu.wr_en1_gated_ex2,
+                 u_cpu.wr_addr2_ex2, u_cpu.wr_en2_ex2, u_cpu.wr_en2_gated_ex2,
+                 u_cpu.mem_read_ex2, u_cpu.mem_read_gated_ex2,
+                 u_cpu.mem_write_ex2, u_cpu.mem_write_gated_ex2,
+                 wb_sel_name(u_cpu.wb_sel_ex2),
+                 u_cpu.is_multi_cycle_ex2, u_cpu.is_multi_cycle_gated_ex2);
         $display("        MEM: alu_res=0x%08H addr=0x%08H store=0x%08H | rd=%b wr=%b size=%02b signed=%b | wr1=R%0d en1=%b wr2=R%0d en2=%b",
                  u_cpu.alu_result_mem, u_cpu.mem_addr_mem, u_cpu.store_data_mem,
                  u_cpu.mem_read_mem, u_cpu.mem_write_mem, u_cpu.mem_size_mem, u_cpu.mem_signed_mem,
@@ -319,12 +334,13 @@ always @(posedge clk) begin
                      u_cpu.rf_wr_addr1, u_cpu.rf_wr_data1,
                      u_cpu.rf_wr_addr2, u_cpu.rf_wr_data2,
                      u_cpu.bdtu_busy);
-        $display("        CPSR: %04b (N=%b Z=%b C=%b V=%b) | cpsr_wen_ex=%b new_flags=%04b",
+        $display("        CPSR: %04b (N=%b Z=%b C=%b V=%b) | cpsr_wen_g=%b alu_flags=%04b psr_wr_flags=%b",
                  u_cpu.cpsr_flags,
                  u_cpu.cpsr_flags[`FLAG_N], u_cpu.cpsr_flags[`FLAG_Z],
                  u_cpu.cpsr_flags[`FLAG_C], u_cpu.cpsr_flags[`FLAG_V],
-                 u_cpu.cpsr_wen_ex, u_cpu.new_flags);
-        if ((cycle_cnt % 10 == 0) || u_cpu.branch_taken_ex || (u_cpu.bdtu_busy && !u_cpu.u_bdtu.state[0]))
+                 u_cpu.cpsr_wen_gated_ex2, u_cpu.alu_flags_ex2,
+                 u_cpu.psr_wr_flags_ex2);
+        if ((cycle_cnt % 10 == 0) || u_cpu.branch_taken_ex2 || (u_cpu.bdtu_busy && !u_cpu.u_bdtu.state[0]))
             $display("        REGS: R0=%08H R1=%08H R2=%08H R3=%08H SP=%08H FP=%08H LR=%08H",
                      u_cpu.u_regfile.regs[0],  u_cpu.u_regfile.regs[1],
                      u_cpu.u_regfile.regs[2],  u_cpu.u_regfile.regs[3],
@@ -334,12 +350,12 @@ always @(posedge clk) begin
 
     // Compact trace after verbose window
     if (rst_n && trace_enable && (cycle_cnt >= TRACE_CYCLES) && (cycle_cnt < TRACE_CYCLES + COMPACT_WINDOW)) begin
-        if (u_cpu.branch_taken_ex || (u_cpu.rf_wr_en && !u_cpu.bdtu_busy) ||
+        if (u_cpu.branch_taken_ex2 || (u_cpu.rf_wr_en && !u_cpu.bdtu_busy) ||
             (u_cpu.bdtu_busy && u_cpu.u_bdtu.state == 3'd7) ||
             (cycle_cnt % 50 == 0))
             $display("[C%04d] PC=0x%08H instr=0x%08H | branch=%b bdtu=%s | WR: R%0d<=0x%08H en=%b | CPSR=%04b",
                      cycle_cnt, i_mem_addr, u_cpu.instr_id,
-                     u_cpu.branch_taken_ex,
+                     u_cpu.branch_taken_ex2,
                      bdtu_state_name(u_cpu.u_bdtu.state),
                      u_cpu.rf_wr_addr1, u_cpu.rf_wr_data1, u_cpu.rf_wr_en,
                      u_cpu.cpsr_flags);
@@ -347,10 +363,10 @@ always @(posedge clk) begin
 
     // Sparse trace after compact window
     if (rst_n && trace_enable && (cycle_cnt >= TRACE_CYCLES + COMPACT_WINDOW)) begin
-        if (u_cpu.branch_taken_ex || (cycle_cnt % 200 == 0))
+        if (u_cpu.branch_taken_ex2 || (cycle_cnt % 200 == 0))
             $display("[C%05d] PC=0x%08H instr=0x%08H | branch=%b | CPSR=%04b | R0=%08H R1=%08H R2=%08H R3=%08H",
                      cycle_cnt, i_mem_addr, u_cpu.instr_id,
-                     u_cpu.branch_taken_ex, u_cpu.cpsr_flags,
+                     u_cpu.branch_taken_ex2, u_cpu.cpsr_flags,
                      u_cpu.u_regfile.regs[0], u_cpu.u_regfile.regs[1],
                      u_cpu.u_regfile.regs[2], u_cpu.u_regfile.regs[3]);
     end
@@ -432,8 +448,6 @@ begin
     for (r = 0; r < `REG_DEPTH; r = r + 1)
         u_cpu.u_regfile.regs[r] = {`DATA_WIDTH{1'b0}};
     // Safety: pre-set LR to halt address.
-    // The program overwrites this with MOV LR,#0x200 anyway,
-    // but if the hex file is missing that bootstrap, this saves us.
     u_cpu.u_regfile.regs[14] = HALT_ADDR;
 end
 endtask
@@ -466,11 +480,6 @@ begin
     end
 
     // ── KEY FIX: Place halt instruction at return address ──
-    // The bubble sort program sets LR = 0x200 (via MOV LR, #0x200).
-    // After the function returns with BX LR, the CPU fetches from 0x200.
-    // Without a halt here, it executes zeroed memory (ANDEQ R0,R0,R0 = NOP)
-    // and falls through, corrupting state.  With B . here, the CPU spins
-    // at 0x200 and our detector catches it immediately.
     $display("");
     $display("  Placing halt (B . = 0x%08H) at address 0x%08H (word %0d)",
              HALT_INSTR, HALT_ADDR, HALT_ADDR >> 2);
@@ -549,7 +558,7 @@ begin
     u_cpu.u_regfile.regs[14] = HALT_ADDR;
     rst_n = 1'b1;
 
-    $display("[%0t] Reset released — Bubble Sort", $time);
+    $display("[%0t] Reset released — Bubble Sort (6-stage pipeline)", $time);
     $display("  halt_addr = 0x%08H", HALT_ADDR);
 `ifdef ASYNC_MEM
     $display("  (async memory — data available same cycle as address)");
@@ -581,7 +590,6 @@ begin
             end
 
             // ── Detection 2: PC reached halt address ──
-            // Guard with cycle_cnt > 20 to avoid false trigger during pipeline fill
             if (i_mem_addr == HALT_ADDR && cycle_cnt > 20) begin
                 $display("");
                 $display("[%0t] PC reached halt address 0x%08H at cycle %0d",
@@ -600,11 +608,21 @@ begin
                 $display("  BDTU state=%s busy=%b start(is_mc_mem)=%b",
                          bdtu_state_name(u_cpu.u_bdtu.state),
                          u_cpu.bdtu_busy, u_cpu.is_multi_cycle_mem);
-                $display("  Stalls: if=%b id=%b ex=%b mem=%b",
-                         u_cpu.stall_if, u_cpu.stall_id, u_cpu.stall_ex, u_cpu.stall_mem);
-                $display("  EX: wr1=R%0d en=%b  branch=%b  multi_cyc=%b",
-                         u_cpu.wr_addr1_ex, u_cpu.wr_en1_ex,
-                         u_cpu.branch_taken_ex, u_cpu.is_multi_cycle_ex);
+                $display("  Stalls: if=%b id=%b ex1=%b ex2=%b mem=%b",
+                         u_cpu.stall_if, u_cpu.stall_id, u_cpu.stall_ex1,
+                         u_cpu.stall_ex2, u_cpu.stall_mem);
+                $display("  Hazards: ex2_ex1=%b mem_ld_ex1=%b mc_ex2=%b hazard_stall=%b branch_flush=%b",
+                         u_cpu.u_hdu.ex2_ex1_hazard, u_cpu.u_hdu.mem_load_ex1_hazard,
+                         u_cpu.u_hdu.mc_ex2_hazard, u_cpu.u_hdu.hazard_stall,
+                         u_cpu.u_hdu.branch_flush);
+                $display("  EX1: wr1=R%0d en=%b  branch_en=%b  multi_cyc=%b  valid=%b",
+                         u_cpu.wr_addr1_ex1, u_cpu.wr_en1_ex1,
+                         u_cpu.branch_en_ex1, u_cpu.is_multi_cycle_ex1,
+                         u_cpu.valid_ex1);
+                $display("  EX2: wr1=R%0d en=%b(g:%b) branch=%b cond_met=%b valid=%b multi_cyc=%b(g:%b)",
+                         u_cpu.wr_addr1_ex2, u_cpu.wr_en1_ex2, u_cpu.wr_en1_gated_ex2,
+                         u_cpu.branch_taken_ex2, u_cpu.cond_met_ex2, u_cpu.valid_ex2,
+                         u_cpu.is_multi_cycle_ex2, u_cpu.is_multi_cycle_gated_ex2);
                 $display("  MEM: wr1=R%0d en=%b  rd=%b wr=%b  multi_cyc=%b",
                          u_cpu.wr_addr1_mem, u_cpu.wr_en1_mem,
                          u_cpu.mem_read_mem, u_cpu.mem_write_mem, u_cpu.is_multi_cycle_mem);
@@ -718,8 +736,9 @@ initial begin
 
     $display("");
     $display("╔══════════════════════════════════════════════════════════════╗");
-    $display("║     ARM CPU Testbench — Bubble Sort                        ║");
+    $display("║   ARM CPU Testbench — Bubble Sort (6-stage pipeline v2.1)  ║");
     $display("╠══════════════════════════════════════════════════════════════╣");
+    $display("║  Pipeline  : IF → ID → EX1 → EX2 → MEM → WB              ║");
     $display("║  Program   : %-45s ║", FILE_NAME);
 `ifdef BIN_MODE
     $display("║  Format    : BINARY ($readmemb)                            ║");
@@ -740,7 +759,6 @@ initial begin
     $display("");
 
     rst_n         = 1'b0;
-    ila_debug_sel = {(`REG_ADDR_WIDTH+1){1'b0}};
     trace_enable  = 1'b1;
     sort_count    = 0;
 
@@ -778,6 +796,7 @@ initial begin
     $display("╔══════════════════════════════════════════════════════════════╗");
     $display("║                      SUMMARY                                ║");
     $display("╠══════════════════════════════════════════════════════════════╣");
+    $display("║  Pipeline  : IF → ID → EX1 → EX2 → MEM → WB  (v2.1)      ║");
     $display("║  Cycles     : %6d                                      ║", total_cycles);
     case (run_exit_status)
         0: $display("║  Exit       : CLEAN (cpu_done / halt reached)               ║");

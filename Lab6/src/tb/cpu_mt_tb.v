@@ -1,4 +1,8 @@
 /* cpu_mt_tb.v — Quad-thread ARMv4T multithreaded pipeline testbench
+ * 6-stage pipeline: IF, ID, EX1, EX2, MEM, WB
+ * EX split: EX1 = barrel shifter + operand B mux
+ *           EX2 = ALU + branch resolve + CPSR update
+ *
  * Runs four GCC-compiled network-processing programs simultaneously
  * on the zero-overhead multithreaded CPU
  *
@@ -7,7 +11,7 @@
  *   Thread 2: network_proc2 — counter decrement / threshold check
  *   Thread 3: network_proc3 — field comparison against constant 23
  * Author: Jeremy Cai
- * Date:   Feb. 21, 2026
+ * Date:   Feb. 22, 2026
  */
 `timescale 1ns / 1ps
 `include "define.v"
@@ -22,7 +26,7 @@ parameter CLK_PERIOD   = 10;
 parameter MEM_DEPTH    = 16384;        // 64 KB (16K words)
 parameter MAX_CYCLES   = 10_000;
 parameter TRACE_EN     = 1;
-parameter TRACE_LIMIT  = 600;
+parameter TRACE_LIMIT  = 700;
 parameter SYNC_MEM     = 1;
 
 localparam [31:0] SENTINEL = 32'hEAFF_FFFE;   // B . (branch to self)
@@ -54,15 +58,12 @@ localparam [31:0] T3_RET = 32'h0000_3FFC;
 reg                         clk, rst_n;
 wire [`PC_WIDTH-1:0]        i_mem_addr;
 reg  [`INSTR_WIDTH-1:0]     i_mem_data;
-wire [`DMEM_ADDR_WIDTH-1:0] d_mem_addr;
+wire [`CPU_DMEM_ADDR_WIDTH-1:0] d_mem_addr;
 wire [`DATA_WIDTH-1:0]      d_mem_wdata;
 reg  [`DATA_WIDTH-1:0]      d_mem_rdata;
 wire                        d_mem_wen;
 wire [1:0]                  d_mem_size;
 wire                        cpu_done_w;
-reg  [1:0]                  ila_thread_sel;
-reg  [4:0]                  ila_debug_sel;
-wire [`DATA_WIDTH-1:0]      ila_debug_data;
 
 // ═══════════════════════════════════════════════════════════════════
 //  Unified Memory
@@ -82,10 +83,7 @@ cpu_mt u_cpu_mt (
     .d_mem_data_o   (d_mem_wdata),
     .d_mem_wen_o    (d_mem_wen),
     .d_mem_size_o   (d_mem_size),
-    .cpu_done       (cpu_done_w),
-    .ila_thread_sel (ila_thread_sel),
-    .ila_debug_sel  (ila_debug_sel),
-    .ila_debug_data (ila_debug_data)
+    .cpu_done       (cpu_done_w)
 );
 
 // ═══════════════════════════════════════════════════════════════════
@@ -158,15 +156,16 @@ integer cycle_cnt;
 reg [256*8:1] current_section;
 
 // ═══════════════════════════════════════════════════════════════════
-//  Per-Cycle Trace
+//  Per-Cycle Trace  (updated for 6-stage: IF ID EX1 EX2 MEM WB)
 // ═══════════════════════════════════════════════════════════════════
 always @(posedge clk) begin
     if (TRACE_EN && rst_n && cycle_cnt > 0 && cycle_cnt <= TRACE_LIMIT) begin
-        $display("[C%05d] IF=T%0d PC=0x%08H  @PC=0x%08H | ID=T%0d EX=T%0d MEM=T%0d WB=T%0d | D:a=0x%08H w=%b wd=0x%08H rd=0x%08H",
+        $display("[C%05d] IF=T%0d PC=0x%08H @PC=0x%08H | ID=T%0d EX1=T%0d EX2=T%0d MEM=T%0d WB=T%0d | D:a=0x%08H w=%b wd=0x%08H rd=0x%08H",
                  cycle_cnt,
-                 u_cpu_mt.tid_if,   i_mem_addr, instr_at_pc,
-                 u_cpu_mt.tid_id,   u_cpu_mt.tid_ex,
-                 u_cpu_mt.tid_mem,  u_cpu_mt.tid_wb,
+                 u_cpu_mt.tid_if,    i_mem_addr, instr_at_pc,
+                 u_cpu_mt.tid_id,    u_cpu_mt.tid_ex1,
+                 u_cpu_mt.tid_ex2,   u_cpu_mt.tid_mem,
+                 u_cpu_mt.tid_wb,
                  d_mem_addr, d_mem_wen, d_mem_wdata, d_mem_rdata);
     end
     if (rst_n && d_mem_wen) begin
@@ -646,12 +645,20 @@ begin
     u_cpu_mt.THREAD_RF[3].u_rf.regs[13] = T3_SP;
     u_cpu_mt.THREAD_RF[3].u_rf.regs[14] = T3_RET;
 
+    // ── Clear pipeline validity to avoid stale data from reset ──
+    u_cpu_mt.valid_id  = 1'b0;
+    u_cpu_mt.valid_ex1 = 1'b0;
+    u_cpu_mt.valid_ex2 = 1'b0;
+    u_cpu_mt.valid_mem = 1'b0;
+    u_cpu_mt.valid_wb  = 1'b0;
+
     // ── Place sentinel instructions at return addresses ──
     mem_w(T0_RET, SENTINEL);
     mem_w(T1_RET, SENTINEL);
     mem_w(T2_RET, SENTINEL);
     mem_w(T3_RET, SENTINEL);
 
+    $display("  [INIT] Pipeline: 6-stage (IF → ID → EX1 → EX2 → MEM → WB)");
     $display("  [INIT] PCs: T0=0x%08H T1=0x%08H T2=0x%08H T3=0x%08H",
              T0_CODE, T1_CODE, T2_CODE, T3_CODE);
     $display("  [INIT] SPs: T0=0x%08H T1=0x%08H T2=0x%08H T3=0x%08H",
@@ -667,8 +674,8 @@ begin
 
             // Print thread completion progress periodically
             if (cycle_cnt > 0 && (cycle_cnt % 500 == 0)) begin
-                $display("  [PROGRESS] cycle %0d: sentinel status = %04b",
-                         cycle_cnt, thread_at_sentinel);
+                $display("  [PROGRESS] cycle %0d: sentinel status = %04b  stall=%b",
+                         cycle_cnt, thread_at_sentinel, u_cpu_mt.stall_all);
             end
 
             // All threads done
@@ -688,6 +695,15 @@ begin
                 $display("  PCs: T0=0x%08H T1=0x%08H T2=0x%08H T3=0x%08H",
                          u_cpu_mt.pc_thread[0], u_cpu_mt.pc_thread[1],
                          u_cpu_mt.pc_thread[2], u_cpu_mt.pc_thread[3]);
+                $display("  Pipeline: IF=T%0d(v%b) ID=T%0d(v%b) EX1=T%0d(v%b) EX2=T%0d(v%b) MEM=T%0d(v%b) WB=T%0d(v%b)",
+                         u_cpu_mt.tid_if,  1'b1,
+                         u_cpu_mt.tid_id,  u_cpu_mt.valid_id,
+                         u_cpu_mt.tid_ex1, u_cpu_mt.valid_ex1,
+                         u_cpu_mt.tid_ex2, u_cpu_mt.valid_ex2,
+                         u_cpu_mt.tid_mem, u_cpu_mt.valid_mem,
+                         u_cpu_mt.tid_wb,  u_cpu_mt.valid_wb);
+                $display("  Stall: %b  BDTU busy: %b",
+                         u_cpu_mt.stall_all, u_cpu_mt.bdtu_busy);
                 dump_all_threads();
                 cycles_used = cycle_cnt;
                 disable run_loop;
@@ -1056,13 +1072,14 @@ initial begin
 
     total_pass = 0;
     total_fail = 0;
-    ila_thread_sel = 2'd0;
-    ila_debug_sel  = 5'd0;
     rst_n = 0;
 
     $display("");
     $display("╔══════════════════════════════════════════════════════════════════════╗");
-    $display("║   Quad-Thread ARMv4T Multithreaded Pipeline Testbench              ║");
+    $display("║   Quad-Thread ARMv4T Multithreaded Pipeline Testbench  v2.1        ║");
+    $display("║   6-Stage Pipeline: IF → ID → EX1 → EX2 → MEM → WB               ║");
+    $display("║   EX1 = barrel shifter + operand B mux                             ║");
+    $display("║   EX2 = ALU + branch resolve + CPSR update                         ║");
     $display("║   SYNC_MEM=%0d  TRACE_EN=%0d  MAX_CYCLES=%0d                          ║",
              SYNC_MEM, TRACE_EN, MAX_CYCLES);
     $display("║                                                                    ║");

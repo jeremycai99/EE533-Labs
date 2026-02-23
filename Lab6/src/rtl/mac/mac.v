@@ -6,6 +6,8 @@
  Version: 1.0
  */
 
+ // DO NOT USE FOR SYNTHESIS!
+
 `ifndef MAC_V
 `define MAC_V
 
