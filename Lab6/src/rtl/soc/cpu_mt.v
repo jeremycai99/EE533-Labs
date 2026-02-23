@@ -933,6 +933,9 @@ wire [`CPU_DMEM_ADDR_WIDTH-1:0] mem_addr_ex = addr_pre_idx_ex ? alu_result_ex : 
 wire [`DATA_WIDTH-1:0] store_data_ex = rd_store_val;
 
 reg [`DATA_WIDTH-1:0] alu_result_mem;
+<<<<<<< HEAD
+>>>>>>> refs/remotes/origin/timing_opt
+=======
 >>>>>>> refs/remotes/origin/timing_opt
 reg [`CPU_DMEM_ADDR_WIDTH-1:0] mem_addr_mem;
 reg [`DATA_WIDTH-1:0] store_data_mem;

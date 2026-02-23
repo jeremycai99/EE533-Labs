@@ -10,6 +10,10 @@
  * Phases:
  *   Phase A — Basic MMIO read/write infrastructure tests
  *   Phase B — Multithreaded network processing (4 scenarios loaded/verified via MMIO)
+<<<<<<< HEAD
+=======
+ *   Phase C — ILA Debug Interface with per-thread selection
+>>>>>>> refs/remotes/origin/timing_opt
  *
  * Memory layout (fits IMEM=1024w / DMEM=4096w from define.v):
  *   IMEM code slots (256 B each):
@@ -111,6 +115,14 @@ wire [`MMIO_DATA_WIDTH-1:0]  resp_data;
 wire                         resp_val;
 reg                          resp_rdy;
 
+<<<<<<< HEAD
+=======
+// ── ILA debug interface ───────────────────────────────────────────
+reg  [1:0]                   ila_thread_sel;
+reg  [4:0]                   ila_debug_sel;
+wire [`DATA_WIDTH-1:0]       ila_debug_data;
+
+>>>>>>> refs/remotes/origin/timing_opt
 // ═══════════════════════════════════════════════════════════════════
 //  DUT Instantiation
 // ═══════════════════════════════════════════════════════════════════
@@ -127,7 +139,14 @@ soc_mt u_soc_mt (
     .resp_addr      (resp_addr),
     .resp_data      (resp_data),
     .resp_val       (resp_val),
+<<<<<<< HEAD
     .resp_rdy       (resp_rdy)
+=======
+    .resp_rdy       (resp_rdy),
+    .ila_thread_sel (ila_thread_sel),
+    .ila_debug_sel  (ila_debug_sel),
+    .ila_debug_data (ila_debug_data)
+>>>>>>> refs/remotes/origin/timing_opt
 );
 
 // ═══════════════════════════════════════════════════════════════════
@@ -378,15 +397,27 @@ begin
 end
 endtask
 
+<<<<<<< HEAD
 // ── Check a thread register via hierarchical access ───────────────
 task check_reg_hier;
+=======
+// ── Check a thread register via ILA debug port ────────────────────
+task check_reg_ila;
+>>>>>>> refs/remotes/origin/timing_opt
     input [1:0]     tid;
     input [3:0]     rn;
     input [31:0]    expected;
     input [256*8:1] msg;
     reg [31:0] actual;
 begin
+<<<<<<< HEAD
     actual = get_reg(tid, rn);
+=======
+    ila_thread_sel = tid;
+    ila_debug_sel  = 5'b10000 | {1'b0, rn};
+    @(posedge clk); @(posedge clk); #1;
+    actual = ila_debug_data[31:0];
+>>>>>>> refs/remotes/origin/timing_opt
     if (actual === expected) begin
         $display("    [PASS] T%0d R%0d = 0x%08H  %0s", tid, rn, expected, msg);
         section_pass = section_pass + 1;
@@ -1020,6 +1051,7 @@ begin
     $display("  -- Thread 3: Field Comparison --");
     check_mem_mmio(32'h0400, 32'h0000_0002, "T3: result = 2 (field == 23)");
 
+<<<<<<< HEAD
     // ── Stack pointer restoration (hierarchical) ──────────────
     $display("");
     $display("  -- Stack Pointer Restoration --");
@@ -1027,6 +1059,15 @@ begin
     check_reg_hier(2'd1, 4'd13, T1_SP, "T1: SP restored");
     check_reg_hier(2'd2, 4'd13, T2_SP, "T2: SP restored");
     check_reg_hier(2'd3, 4'd13, T3_SP, "T3: SP restored");
+=======
+    // ── Stack pointer restoration (via ILA) ───────────────────
+    $display("");
+    $display("  -- Stack Pointer Restoration (ILA) --");
+    check_reg_ila(2'd0, 4'd13, T0_SP, "T0: SP restored");
+    check_reg_ila(2'd1, 4'd13, T1_SP, "T1: SP restored");
+    check_reg_ila(2'd2, 4'd13, T2_SP, "T2: SP restored");
+    check_reg_ila(2'd3, 4'd13, T3_SP, "T3: SP restored");
+>>>>>>> refs/remotes/origin/timing_opt
 
     section_end();
 end
@@ -1080,10 +1121,17 @@ begin
 
     // ── SPs ───────────────────────────────────────────────────
     $display("");
+<<<<<<< HEAD
     check_reg_hier(2'd0, 4'd13, T0_SP, "T0: SP restored");
     check_reg_hier(2'd1, 4'd13, T1_SP, "T1: SP restored");
     check_reg_hier(2'd2, 4'd13, T2_SP, "T2: SP restored");
     check_reg_hier(2'd3, 4'd13, T3_SP, "T3: SP restored");
+=======
+    check_reg_ila(2'd0, 4'd13, T0_SP, "T0: SP restored");
+    check_reg_ila(2'd1, 4'd13, T1_SP, "T1: SP restored");
+    check_reg_ila(2'd2, 4'd13, T2_SP, "T2: SP restored");
+    check_reg_ila(2'd3, 4'd13, T3_SP, "T3: SP restored");
+>>>>>>> refs/remotes/origin/timing_opt
 
     section_end();
 end
@@ -1205,6 +1253,11 @@ initial begin
 
     total_pass = 0;
     total_fail = 0;
+<<<<<<< HEAD
+=======
+    ila_thread_sel = 2'd0;
+    ila_debug_sel  = 5'd0;
+>>>>>>> refs/remotes/origin/timing_opt
     rst_n = 0;
     start = 0;
     req_cmd = 0; req_addr = 0; req_data = 0;
@@ -1427,6 +1480,147 @@ initial begin
 
 
     // ═══════════════════════════════════════════════════
+<<<<<<< HEAD
+=======
+    //  PHASE C — ILA Debug Interface with Thread Selection
+    // ═══════════════════════════════════════════════════
+    $display("");
+    $display("--------------------------------------------------");
+    $display("  PHASE C: ILA Debug Interface Verification");
+    $display("--------------------------------------------------");
+    //  CPU is in reset (start=0). Register files retain last values
+    //  from Scenario D. Pipeline registers are cleared.
+
+    // ── C1: Read registers for all threads via ILA ──────
+    $display("\n[C1] Cross-checking ILA register reads vs hierarchical access...");
+    begin : ila_reg_check
+        integer t, r;
+        reg [31:0] ila_val, hier_val;
+        for (t = 0; t < 4; t = t + 1) begin
+            $display("  Thread %0d:", t);
+            for (r = 0; r < 16; r = r + 1) begin
+                ila_thread_sel = t[1:0];
+                ila_debug_sel  = 5'b10000 | r[3:0];
+                @(posedge clk); @(posedge clk); #1;
+                ila_val  = ila_debug_data[31:0];
+                hier_val = get_reg(t[1:0], r[3:0]);
+                if (ila_val !== hier_val) begin
+                    $display("    [FAIL] T%0d R%0d: ILA=0x%08H, hier=0x%08H",
+                             t, r, ila_val, hier_val);
+                    total_fail = total_fail + 1;
+                end else begin
+                    total_pass = total_pass + 1;
+                end
+            end
+            $display("    T%0d: 16 registers cross-checked", t);
+        end
+    end
+
+    // ── C2: Per-thread debug probes ─────────────────────
+    $display("\n[C2] Per-thread system debug probes...");
+    begin : ila_probe_check
+        integer t;
+        reg [31:0] probe_val;
+        for (t = 0; t < 4; t = t + 1) begin
+            ila_thread_sel = t[1:0];
+
+            ila_debug_sel = 5'd0; @(posedge clk); @(posedge clk); #1;
+            $display("  T%0d Sel[0]  PC         = 0x%08H  (CPU in reset, expect 0)",
+                     t, ila_debug_data);
+            if (ila_debug_data == {`DATA_WIDTH{1'b0}})
+                total_pass = total_pass + 1;
+            else begin
+                $display("    [FAIL] PC non-zero while CPU is in reset");
+                total_fail = total_fail + 1;
+            end
+
+            ila_debug_sel = 5'd1; @(posedge clk); @(posedge clk); #1;
+            $display("  T%0d Sel[1]  Instr      = 0x%08H", t, ila_debug_data);
+
+            ila_debug_sel = 5'd4; @(posedge clk); @(posedge clk); #1;
+            $display("  T%0d Sel[4]  ALU result = 0x%08H", t, ila_debug_data);
+
+            ila_debug_sel = 5'd8; @(posedge clk); @(posedge clk); #1;
+            $display("  T%0d Sel[8]  CPSR flags = 0x%08H", t, ila_debug_data);
+        end
+    end
+
+    // ── C3: Non-X sanity check on debug bus ─────────────
+    $display("\n[C3] Debug bus X-check...");
+    begin : ila_x_check
+        integer t;
+        for (t = 0; t < 4; t = t + 1) begin
+            ila_thread_sel = t[1:0];
+            ila_debug_sel  = 5'd0;
+            @(posedge clk); @(posedge clk); #1;
+            if (^ila_debug_data === 1'bx) begin
+                $display("  [FAIL] T%0d: Debug bus contains X values", t);
+                total_fail = total_fail + 1;
+            end else begin
+                $display("  [PASS] T%0d: Debug bus free of X", t);
+                total_pass = total_pass + 1;
+            end
+        end
+    end
+
+    // ── C4: Verify Scenario D register values via ILA ───
+    //  Scenario D was the last to run; register file retains those values.
+    $display("\n[C4] Verify Scenario D SP values via ILA (post-execution retention)...");
+    begin : ila_sp_check
+        reg [31:0] sp_val;
+        // T0 SP
+        ila_thread_sel = 2'd0;
+        ila_debug_sel  = 5'b10000 | 4'd13;
+        @(posedge clk); @(posedge clk); #1;
+        sp_val = ila_debug_data[31:0];
+        if (sp_val === T0_SP) begin
+            $display("  [PASS] ILA T0 SP = 0x%08H", sp_val);
+            total_pass = total_pass + 1;
+        end else begin
+            $display("  [FAIL] ILA T0 SP = 0x%08H, expected 0x%08H", sp_val, T0_SP);
+            total_fail = total_fail + 1;
+        end
+        // T1 SP
+        ila_thread_sel = 2'd1;
+        ila_debug_sel  = 5'b10000 | 4'd13;
+        @(posedge clk); @(posedge clk); #1;
+        sp_val = ila_debug_data[31:0];
+        if (sp_val === T1_SP) begin
+            $display("  [PASS] ILA T1 SP = 0x%08H", sp_val);
+            total_pass = total_pass + 1;
+        end else begin
+            $display("  [FAIL] ILA T1 SP = 0x%08H, expected 0x%08H", sp_val, T1_SP);
+            total_fail = total_fail + 1;
+        end
+        // T2 SP
+        ila_thread_sel = 2'd2;
+        ila_debug_sel  = 5'b10000 | 4'd13;
+        @(posedge clk); @(posedge clk); #1;
+        sp_val = ila_debug_data[31:0];
+        if (sp_val === T2_SP) begin
+            $display("  [PASS] ILA T2 SP = 0x%08H", sp_val);
+            total_pass = total_pass + 1;
+        end else begin
+            $display("  [FAIL] ILA T2 SP = 0x%08H, expected 0x%08H", sp_val, T2_SP);
+            total_fail = total_fail + 1;
+        end
+        // T3 SP
+        ila_thread_sel = 2'd3;
+        ila_debug_sel  = 5'b10000 | 4'd13;
+        @(posedge clk); @(posedge clk); #1;
+        sp_val = ila_debug_data[31:0];
+        if (sp_val === T3_SP) begin
+            $display("  [PASS] ILA T3 SP = 0x%08H", sp_val);
+            total_pass = total_pass + 1;
+        end else begin
+            $display("  [FAIL] ILA T3 SP = 0x%08H, expected 0x%08H", sp_val, T3_SP);
+            total_fail = total_fail + 1;
+        end
+    end
+
+
+    // ═══════════════════════════════════════════════════
+>>>>>>> refs/remotes/origin/timing_opt
     //  Final Summary
     // ═══════════════════════════════════════════════════
     $display("");
