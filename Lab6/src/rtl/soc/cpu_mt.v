@@ -923,9 +923,17 @@ always @(posedge clk or negedge rst_n) begin
     end
 end
 
+<<<<<<< HEAD
 /* ================================================================
    EX2/MEM PIPELINE REGISTER
    ================================================================ */
+=======
+/*  Memory address / store data  */
+wire [`CPU_DMEM_ADDR_WIDTH-1:0] mem_addr_ex = addr_pre_idx_ex ? alu_result_ex : rn_val;
+wire [`DATA_WIDTH-1:0] store_data_ex = rd_store_val;
+
+reg [`DATA_WIDTH-1:0] alu_result_mem;
+>>>>>>> refs/remotes/origin/timing_opt
 reg [`CPU_DMEM_ADDR_WIDTH-1:0] mem_addr_mem;
 reg [`DATA_WIDTH-1:0] store_data_mem;
 reg mem_read_mem, mem_write_mem;
@@ -948,6 +956,7 @@ reg [3:0] swp_rd_mem, swp_rm_mem;
 
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
+<<<<<<< HEAD
         alu_result_mem       <= {`DATA_WIDTH{1'b0}};
         mem_addr_mem         <= {`CPU_DMEM_ADDR_WIDTH{1'b0}};
         store_data_mem       <= {`DATA_WIDTH{1'b0}};
@@ -968,6 +977,30 @@ always @(posedge clk or negedge rst_n) begin
         bdt_load_mem         <= 1'b0;
         bdt_s_mem            <= 1'b0;
         bdt_wb_mem           <= 1'b0;
+=======
+        alu_result_mem <= {`DATA_WIDTH{1'b0}};
+        mem_addr_mem <= {`CPU_DMEM_ADDR_WIDTH{1'b0}};
+        store_data_mem <= {`DATA_WIDTH{1'b0}};
+        mem_read_mem <= 1'b0;
+        mem_write_mem <= 1'b0;
+        mem_size_mem <= 2'd0;
+        mem_signed_mem <= 1'b0;
+        wb_sel_mem <= 3'd0;
+        wr_addr1_mem <= 4'd0;
+        wr_addr2_mem <= 4'd0;
+        wr_en1_mem <= 1'b0;
+        wr_en2_mem <= 1'b0;
+        mac_result_lo_mem <= {`DATA_WIDTH{1'b0}};
+        mac_result_hi_mem <= {`DATA_WIDTH{1'b0}};
+        pc_plus4_mem <= {`PC_WIDTH{1'b0}};
+        is_multi_cycle_mem <= 1'b0;
+        t_bdt_mem <= 1'b0;
+        t_swp_mem <= 1'b0;
+        bdt_list_mem <= 16'd0;
+        bdt_load_mem <= 1'b0;
+        bdt_s_mem <= 1'b0;
+        bdt_wb_mem <= 1'b0;
+>>>>>>> refs/remotes/origin/timing_opt
         addr_pre_idx_bdt_mem <= 1'b0;
         addr_up_bdt_mem      <= 1'b0;
         swap_byte_mem        <= 1'b0;
