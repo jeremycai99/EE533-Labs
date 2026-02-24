@@ -45,24 +45,8 @@ module soc_mt (
     input wire resp_rdy,
 
     // External start signal (Active High, Level Sensitive)
-<<<<<<< HEAD
-<<<<<<< HEAD
     input wire start
-=======
-=======
->>>>>>> refs/remotes/origin/timing_opt
-    input wire start,
-    
-    // Expanded Debug Interface
-    // Bit 4: 0 = System Debug, 1 = Register File Debug
-    // Bits 3-0: Selection index or Register Address
-    input wire [1:0] ila_thread_sel,
-    input wire [4:0] ila_debug_sel,       
-    output wire [`DATA_WIDTH-1:0] ila_debug_data // Full 64-bit debug data output
-<<<<<<< HEAD
->>>>>>> refs/remotes/origin/timing_opt
-=======
->>>>>>> refs/remotes/origin/timing_opt
+
 );
 
 //  Address Region Decode — req_addr[31:30]
@@ -273,21 +257,7 @@ cpu_mt u_cpu_mt (
     .d_mem_data_o(cpu_dmem_wdata),
     .d_mem_wen_o(cpu_dmem_wen),
     .d_mem_size_o(cpu_dmem_size),
-<<<<<<< HEAD
-<<<<<<< HEAD
     .cpu_done(cpu_done)
-=======
-=======
->>>>>>> refs/remotes/origin/timing_opt
-    .cpu_done(cpu_done),
-    
-    .ila_thread_sel(ila_thread_sel),
-    .ila_debug_sel(ila_debug_sel),       
-    .ila_debug_data(ila_debug_data)      
-<<<<<<< HEAD
->>>>>>> refs/remotes/origin/timing_opt
-=======
->>>>>>> refs/remotes/origin/timing_opt
 );
 
 //Make sure that the address space doesn't exceed the size of imem and dmem

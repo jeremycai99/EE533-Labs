@@ -8,10 +8,7 @@
    - Added 2-stage store-path pipeline to break the critical path:
        remaining (FF) → priority encoder → rf_rd_addr → RF read →
        thread mux → mem_wdata byte mux → d_mem_data_o → BRAM
-     into three stages each under 8 ns:
-       Stage 1: remaining → rf_rd_addr_p1        (~4.2 ns)
-       Stage 2: rf_rd_addr_p1 → RF → pipe2_wdata (~6.8 ns)
-       Stage 3: pipe2_wdata → mem_wdata → BRAM    (~2.7 ns)
+     into three stages each under 8 ns
    - Pipeline Reg 1 (rf_rd_addr_p1, pipe1_*) registers the RF read
      address and store control signals (address, valid, size).
    - Pipeline Reg 2 (pipe2_*) registers the RF read data returned
@@ -29,7 +26,6 @@
      remaining!=0) and S_SWP_RD_WAIT, one cycle before the RF
      read data is needed.  This aligns with the rf_rd_addr
      captured in pipe1 on the same posedge.
-   - State encoding widened to accommodate S_MEM_DRAIN (still 4 bits).
  */
 
 `ifndef BDTU_V

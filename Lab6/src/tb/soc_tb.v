@@ -11,12 +11,14 @@
  *  detection, `start` is de-asserted (CPU resets, BRAMs preserved), and DMEM
  *  is read back via MMIO to verify the sorted output.
  *
- *  COMPILATION:
- *      iverilog -o soc_tb soc_tb.v
- *      vvp soc_tb
- *
- *  To override the hex file:
- *      iverilog -DMEM_FILE=\"my_imem.txt\" -o soc_tb soc_tb.v
+ *  v2 — Updated for cpu.v v2.4 / bdtu.v v1.5:
+ *    - bdtu_state_name widened to 4-bit input (BDTU v1.5 states 0–9)
+ *    - Added S_DRAIN (8) and S_MEM_DRAIN (9) state names
+ *    - Fixed stall_ex (nonexistent) → stall_ex1 / stall_ex2
+ *  v3 — Updated for cpu.v v2.5 (8-stage pipeline):
+ *    - pc_if → pc_if1 (IF1 stage PC)
+ *    - stall_if → stall_if1 (+ stall_if2)
+ *    - Added stall_ex3 to diagnostic displays
  */
 
 `timescale 1ns / 1ps
@@ -140,6 +142,8 @@ module soc_tb;
     integer stuck_cnt;
     integer run_exit_status;      // 0=halt 1=stuck 2=timeout
     integer total_sort_cycles;
+    integer dmem_write_cnt;       // total DMEM writes during execution
+    integer dmem_read_cnt;        // total DMEM reads (non-BDTU STR loads)
     integer found_addr;
     reg     found, match;
     reg [`PC_WIDTH-1:0] prev_pc;
@@ -151,19 +155,21 @@ module soc_tb;
     reg [7:0]                   toff;
 
     // ================================================================
-    //  State/Name Decoder
+    //  State/Name Decoder — BDTU v1.5 (4-bit state encoding)
     // ================================================================
     function [7*8:1] bdtu_state_name;
-        input [2:0] st;
+        input [3:0] st;
         case (st)
-            3'd0: bdtu_state_name = "IDLE   ";
-            3'd1: bdtu_state_name = "BDT_XFR";
-            3'd2: bdtu_state_name = "BDT_LST";
-            3'd3: bdtu_state_name = "BDT_WB ";
-            3'd4: bdtu_state_name = "SWP_RD ";
-            3'd5: bdtu_state_name = "SWP_WAT";
-            3'd6: bdtu_state_name = "SWP_WR ";
-            3'd7: bdtu_state_name = "DONE   ";
+            4'd0: bdtu_state_name = "IDLE   ";
+            4'd1: bdtu_state_name = "BDT_XFR";
+            4'd2: bdtu_state_name = "BDT_LST";
+            4'd3: bdtu_state_name = "BDT_WB ";
+            4'd4: bdtu_state_name = "SWP_RD ";
+            4'd5: bdtu_state_name = "SWP_WAT";
+            4'd6: bdtu_state_name = "SWP_WR ";
+            4'd7: bdtu_state_name = "DONE   ";
+            4'd8: bdtu_state_name = "DRAIN  ";
+            4'd9: bdtu_state_name = "MEMDRAI";
             default: bdtu_state_name = "???    ";
         endcase
     endfunction
@@ -738,6 +744,8 @@ module soc_tb;
 
         cycle_cnt       = 0;
         stuck_cnt       = 0;
+        dmem_write_cnt  = 0;
+        dmem_read_cnt   = 0;
         prev_pc         = {`PC_WIDTH{1'b0}};
         run_exit_status = 2;       // default: timeout
 
@@ -745,7 +753,117 @@ module soc_tb;
             forever begin
                 @(posedge clk); #1;
                 cycle_cnt = cycle_cnt + 1;
-                cur_pc = u_soc.u_cpu.pc_if;
+                cur_pc = u_soc.u_cpu.pc_if1;
+
+                // ── Early trace (first 50 cycles): pipeline overview ──
+                if (cycle_cnt <= 50) begin
+                    $display("  C%03d PC=%08H ireg=%08H BDTU=%s busy=%b mc_mem=%b mw_mem=%b wen=%b addr=%08H wdata=%08H SP=%08H",
+                             cycle_cnt,
+                             u_soc.u_cpu.pc_if1,
+                             u_soc.u_cpu.instr_reg_id,
+                             bdtu_state_name(u_soc.u_cpu.u_bdtu.state),
+                             u_soc.u_cpu.bdtu_busy,
+                             u_soc.u_cpu.is_multi_cycle_mem,
+                             u_soc.u_cpu.mem_write_mem,
+                             u_soc.u_cpu.d_mem_wen_o,
+                             u_soc.u_cpu.d_mem_addr_o,
+                             u_soc.u_cpu.d_mem_data_o,
+                             u_soc.u_cpu.u_regfile.regs[13]);
+                    if (u_soc.u_cpu.bdtu_busy)
+                        $display("       BDTU: state=%s rem=%04H addr=%08H wr=%b rd=%b wen1=%b wen2=%b waddr1=%0d waddr2=%0d",
+                                 bdtu_state_name(u_soc.u_cpu.u_bdtu.state),
+                                 u_soc.u_cpu.u_bdtu.remaining,
+                                 u_soc.u_cpu.u_bdtu.cur_addr,
+                                 u_soc.u_cpu.u_bdtu.mem_wr,
+                                 u_soc.u_cpu.u_bdtu.mem_rd,
+                                 u_soc.u_cpu.u_bdtu.wr_en1,
+                                 u_soc.u_cpu.u_bdtu.wr_en2,
+                                 u_soc.u_cpu.u_bdtu.wr_addr1,
+                                 u_soc.u_cpu.u_bdtu.wr_addr2);
+                    // Pipeline instruction addresses (pc_plus4 - 4)
+                    $display("       pipe: ID=%08H EX1=%08H EX2=%08H EX3=%08H MEM=%08H WB=%08H",
+                             u_soc.u_cpu.pc_plus4_id  - 32'd4,
+                             u_soc.u_cpu.pc_plus4_ex1 - 32'd4,
+                             u_soc.u_cpu.pc_plus4_ex2 - 32'd4,
+                             u_soc.u_cpu.pc_plus4_ex3 - 32'd4,
+                             u_soc.u_cpu.pc_plus4_mem - 32'd4,
+                             u_soc.u_cpu.pc_plus4_wb  - 32'd4);
+                    $display("       valid: ID=%b EX1=%b EX2=%b EX3=%b  stalls: if1=%b if2=%b id=%b ex1=%b ex2=%b ex3=%b mem=%b",
+                             u_soc.u_cpu.if2id_valid,
+                             u_soc.u_cpu.valid_ex1,
+                             u_soc.u_cpu.valid_ex2,
+                             u_soc.u_cpu.valid_ex3,
+                             u_soc.u_cpu.stall_if1, u_soc.u_cpu.stall_if2,
+                             u_soc.u_cpu.stall_id,
+                             u_soc.u_cpu.stall_ex1, u_soc.u_cpu.stall_ex2,
+                             u_soc.u_cpu.stall_ex3, u_soc.u_cpu.stall_mem);
+                end
+
+                // ── BDTU flush event ──
+                if (u_soc.u_cpu.bdtu_done_flush) begin
+                    $display("  >>> BDTU FLUSH C%05d: redirecting PC to %08H (pc_plus4_mem)",
+                             cycle_cnt, u_soc.u_cpu.pc_plus4_mem);
+                end
+
+                // ── DMEM WRITE monitor (ALL writes, all cycles) ──
+                if (u_soc.u_cpu.d_mem_wen_o) begin
+                    dmem_write_cnt = dmem_write_cnt + 1;
+                    $display("  WR C%05d: [%08H]->w%04d = %08H (%0d) %s  (MEM_PC=%08H)",
+                             cycle_cnt,
+                             u_soc.u_cpu.d_mem_addr_o,
+                             u_soc.u_cpu.d_mem_addr_o >> 2,
+                             u_soc.u_cpu.d_mem_data_o,
+                             $signed(u_soc.u_cpu.d_mem_data_o),
+                             u_soc.u_cpu.bdtu_busy ? "BDTU" : "STR ",
+                             u_soc.u_cpu.pc_plus4_mem - 32'd4);
+                end
+
+                // ── DMEM READ request (MEM stage presents address for LDR) ──
+                if (u_soc.u_cpu.mem_read_mem && !u_soc.u_cpu.bdtu_busy && !u_soc.u_cpu.stall_mem) begin
+                    dmem_read_cnt = dmem_read_cnt + 1;
+                    $display("  RD C%05d: [%08H]->w%04d  dest=R%-2d  (MEM_PC=%08H)",
+                             cycle_cnt,
+                             u_soc.u_cpu.d_mem_addr_o,
+                             u_soc.u_cpu.d_mem_addr_o >> 2,
+                             u_soc.u_cpu.wr_addr1_mem,
+                             u_soc.u_cpu.pc_plus4_mem - 32'd4);
+                end
+
+                // ── Register writeback from WB stage (port 1) ──
+                if (u_soc.u_cpu.wb_wr_en1) begin
+                    $display("  RF C%05d: R%-2d <- %08H (%0d) [WB]  (WB_PC=%08H)",
+                             cycle_cnt,
+                             u_soc.u_cpu.wb_wr_addr1,
+                             u_soc.u_cpu.wb_wr_data1,
+                             $signed(u_soc.u_cpu.wb_wr_data1),
+                             u_soc.u_cpu.pc_plus4_wb - 32'd4);
+                end
+                // ── Register writeback from WB stage (port 2) ──
+                if (u_soc.u_cpu.wb_wr_en2) begin
+                    $display("  RF C%05d: R%-2d <- %08H (%0d) [WB2] (WB_PC=%08H)",
+                             cycle_cnt,
+                             u_soc.u_cpu.wb_wr_addr2,
+                             u_soc.u_cpu.wb_wr_data2,
+                             $signed(u_soc.u_cpu.wb_wr_data2),
+                             u_soc.u_cpu.pc_plus4_wb - 32'd4);
+                end
+
+                // ── Register writeback from BDTU (port 1) ──
+                if (u_soc.u_cpu.bdtu_wr_en1) begin
+                    $display("  RF C%05d: R%-2d <- %08H (%0d) [BDTU_P1]",
+                             cycle_cnt,
+                             u_soc.u_cpu.bdtu_wr_addr1,
+                             u_soc.u_cpu.bdtu_wr_data1,
+                             $signed(u_soc.u_cpu.bdtu_wr_data1));
+                end
+                // ── Register writeback from BDTU (port 2) ──
+                if (u_soc.u_cpu.bdtu_wr_en2) begin
+                    $display("  RF C%05d: R%-2d <- %08H (%0d) [BDTU_P2]",
+                             cycle_cnt,
+                             u_soc.u_cpu.bdtu_wr_addr2,
+                             u_soc.u_cpu.bdtu_wr_data2,
+                             $signed(u_soc.u_cpu.bdtu_wr_data2));
+                end
 
                 // ── Detection 1: PC reached halt address ──
                 if (cur_pc == HALT_ADDR && cycle_cnt > 20) begin
@@ -767,17 +885,16 @@ module soc_tb;
                 // ── Detection 2: stuck at unexpected address ──
                 if (stuck_cnt > 500 && prev_pc != HALT_ADDR) begin
                     $display("");
-                    $display("╔══════════════════════════════════════════════════╗");
-                    $display("║  *** STUCK: PC=0x%08H for %0d cycles ***",
-                             prev_pc, stuck_cnt);
-                    $display("╚══════════════════════════════════════════════════╝");
-                    $display("  BDTU state=%s busy=%b stall_if=%b",
+                    $display("  *** STUCK: PC=0x%08H for %0d cycles ***", prev_pc, stuck_cnt);
+                    $display("  BDTU state=%s busy=%b stall_if1=%b",
                              bdtu_state_name(u_soc.u_cpu.u_bdtu.state),
                              u_soc.u_cpu.bdtu_busy,
-                             u_soc.u_cpu.stall_if);
-                    $display("  Stalls: if=%b id=%b ex=%b mem=%b",
-                             u_soc.u_cpu.stall_if, u_soc.u_cpu.stall_id,
-                             u_soc.u_cpu.stall_ex, u_soc.u_cpu.stall_mem);
+                             u_soc.u_cpu.stall_if1);
+                    $display("  Stalls: if1=%b if2=%b id=%b ex1=%b ex2=%b ex3=%b mem=%b",
+                             u_soc.u_cpu.stall_if1, u_soc.u_cpu.stall_if2,
+                             u_soc.u_cpu.stall_id,
+                             u_soc.u_cpu.stall_ex1, u_soc.u_cpu.stall_ex2,
+                             u_soc.u_cpu.stall_ex3, u_soc.u_cpu.stall_mem);
                     dump_regs();
                     run_exit_status = 1;
                     repeat (5) @(posedge clk);
@@ -796,18 +913,20 @@ module soc_tb;
 
                 // ── Periodic status ──
                 if (cycle_cnt % STATUS_INTERVAL == 0) begin
-                    $display("  [STATUS C%06d] PC=0x%08H  BDTU=%s  stall_if=%b",
+                    $display("  [STATUS C%06d] PC=0x%08H  BDTU=%s  stall_if1=%b",
                              cycle_cnt,
-                             u_soc.u_cpu.pc_if,
+                             u_soc.u_cpu.pc_if1,
                              bdtu_state_name(u_soc.u_cpu.u_bdtu.state),
-                             u_soc.u_cpu.stall_if);
-                    $display("    R0=%08H R1=%08H R2=%08H R3=%08H SP=%08H LR=%08H",
+                             u_soc.u_cpu.stall_if1);
+                    $display("    R0=%08H R1=%08H R2=%08H R3=%08H SP=%08H LR=%08H R11=%08H R12=%08H",
                              u_soc.u_cpu.u_regfile.regs[0],
                              u_soc.u_cpu.u_regfile.regs[1],
                              u_soc.u_cpu.u_regfile.regs[2],
                              u_soc.u_cpu.u_regfile.regs[3],
                              u_soc.u_cpu.u_regfile.regs[13],
-                             u_soc.u_cpu.u_regfile.regs[14]);
+                             u_soc.u_cpu.u_regfile.regs[14],
+                             u_soc.u_cpu.u_regfile.regs[11],
+                             u_soc.u_cpu.u_regfile.regs[12]);
                 end
             end
         end
@@ -815,8 +934,8 @@ module soc_tb;
         total_sort_cycles = cycle_cnt;
         $display("");
         $display("════════════════════════════════════════════════════════════════");
-        $display("  END-OF-RUN: Bubble Sort  (%0d cycles, exit=%0d)",
-                 total_sort_cycles, run_exit_status);
+        $display("  END-OF-RUN: Bubble Sort  (%0d cycles, exit=%0d, dmem_writes=%0d, dmem_reads=%0d)",
+                 total_sort_cycles, run_exit_status, dmem_write_cnt, dmem_read_cnt);
         $display("════════════════════════════════════════════════════════════════");
         dump_regs();
 
@@ -846,6 +965,30 @@ module soc_tb;
             dmem_snap[i] = rd_data[`DATA_WIDTH-1:0];
         end
         $display("  DMEM readback complete.");
+
+        // Count changed words and show details
+        begin : dmem_analysis
+            integer changed, w2;
+            changed = 0;
+            for (w2 = 0; w2 < dmem_load_extent; w2 = w2 + 1)
+                if (dmem_snap[w2] !== sort_local_mem[w2])
+                    changed = changed + 1;
+            $display("  DMEM words changed from original hex: %0d out of %0d", changed, dmem_load_extent);
+
+            // Show ALL changed words with before/after
+            $display("  -- ALL changed DMEM words (before -> after) --");
+            for (w2 = 0; w2 < dmem_load_extent; w2 = w2 + 1) begin
+                if (dmem_snap[w2] !== sort_local_mem[w2])
+                    $display("    [w%04d / 0x%05H] %08H -> %08H  (%0d -> %0d)",
+                             w2, w2 << 2,
+                             sort_local_mem[w2], dmem_snap[w2],
+                             $signed(sort_local_mem[w2]), $signed(dmem_snap[w2]));
+            end
+
+            $display("  -- DMEM top 16 words (stack region) --");
+            for (w2 = dmem_load_extent - 16; w2 < dmem_load_extent; w2 = w2 + 1)
+                $display("    [word %4d / 0x%04H] = 0x%08H (%0d)", w2, w2 << 2, dmem_snap[w2], $signed(dmem_snap[w2]));
+        end
 
         // Search for the expected sorted sequence
         $display("  Searching for sorted array in DMEM...");

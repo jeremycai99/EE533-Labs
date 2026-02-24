@@ -1,8 +1,17 @@
 /* file: cu.v
  Description: Control unit module for the Arm pipeline CPU design
  Author: Jeremy Cai
- Date: Feb. 17, 2026
- Version: 1.0
+ Date: Feb. 23, 2026
+ Version: 1.1
+ Changes from 1.0:
+   - Rotated immediate fix: imm_dp no longer computes the rotation
+     combinationally.  The raw 8-bit immediate (zero-extended) is
+     output as imm32, and the rotation amount is routed to the barrel
+     shifter control signals (shift_type = ROR, shift_amount = rot_amount).
+     The EX1 barrel shifter performs the rotation from registered inputs,
+     eliminating the ~9ns combinational path that violated 8ns timing.
+   - This also corrects the shifter_carry_out for MOVS/ANDS/etc with
+     rotated immediates (previously always cin; now correct per ARM spec).
  */
 
 `ifndef CU_V
@@ -233,7 +242,20 @@ wire [4:0] rot_amount = {f_rot, 1'b0};
 wire [31:0] imm8_ext = {24'b0, f_imm8}; // Zero-extend the 8-bit immediate value to 32 bits
 wire [31:0] imm_sdt = {20'b0, f_off12};
 wire [31:0] imm_hdt = {24'b0, f_rs, f_rm}; 
-wire [31:0] imm_dp = (rot_amount == 0) ? imm8_ext : (imm8_ext >> rot_amount) | (imm8_ext << (32 - rot_amount));
+
+/* v1.1 FIX: Rotation deferred to EX1 barrel shifter.
+ *
+ * OLD (timing violation — ~9ns combinational path in ID stage):
+ *   wire [31:0] imm_dp = (rot_amount == 0) ? imm8_ext
+ *       : (imm8_ext >> rot_amount) | (imm8_ext << (32 - rot_amount));
+ *
+ * NEW: Output the raw unrotated immediate.  The rotation is performed
+ * by the EX1 barrel shifter using shift_type=ROR, shift_amount=rot_amount
+ * (see Step 6 below).  The barrel shifter operates on registered inputs
+ * from the ID/EX1 pipe reg, well within the 8ns timing budget (~3-4ns).
+ */
+wire [31:0] imm_dp = imm8_ext;
+
 wire [31:0] imm_br = {{6{f_off24[23]}}, f_off24, 2'b00}; // Sign-extend the 24-bit branch offset to 32 bits and shift left by 2 (multiply by 4)
 
 always @(*) begin
@@ -261,10 +283,30 @@ assign alu_src_b = dec_dp_imm | dec_msr_imm | dec_sdt_immo | dec_hdt_immo; // Us
 assign cpsr_wen = cond_met & ((is_dp | dec_mul | dec_mull) & f_s);
 
 // Step 6: Generate barrel shifter control signals
+/* v1.1 FIX: For dp_imm / msr_imm with non-zero rotation, route the
+ * rotation through the EX1 barrel shifter instead of computing it
+ * combinationally in imm_dp.
+ *
+ * Priority: sh_active (dp_reg, sdt_rego) > imm_rot_active (dp_imm, msr_imm)
+ * These are mutually exclusive instruction types, so no conflict.
+ *
+ * When imm_rot_active:
+ *   shift_type   = ROR  (rotate right)
+ *   shift_amount = rot_amount = {f_rot, 1'b0}  (0-30 in steps of 2)
+ *   shift_src    = 0  (immediate shift amount, not register)
+ *
+ * cpu_mt.v EX1 must feed imm32 (instead of Rm) into the barrel shifter
+ * when alu_src_b=1.  See cpu_mt.v v2.6 changes.
+ */
 wire sh_active = dec_dp_reg | dec_sdt_rego;
+wire imm_rot_active = (dec_dp_imm | dec_msr_imm) & (rot_amount != 5'd0);
 
-assign shift_type = sh_active ? f_sh : 2'b00;
-assign shift_amount = sh_active ? f_shamt : 5'b0;
+assign shift_type = sh_active      ? f_sh       :
+                    imm_rot_active  ? `SHIFT_ROR : 2'b00;
+
+assign shift_amount = sh_active             ? f_shamt    :
+                      (dec_dp_imm | dec_msr_imm) ? rot_amount : 5'b0;
+
 assign shift_src = dec_dp_reg & f_bit4; // For data processing instructions with register operand, if bit 4 is 1 then the shift amount is specified in Rs, otherwise it's specified in the immediate shift amount field
 
 // Step 7: Single-cycle memory control signal generation

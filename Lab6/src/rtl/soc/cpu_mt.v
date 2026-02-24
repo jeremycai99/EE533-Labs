@@ -8,7 +8,20 @@
               MAC and ILA debug removed.
  Author: Jeremy Cai
  Date: Feb. 23, 2026
- Version: 2.5
+ Version: 2.6
+ Changes from 2.5:
+   - Rotated-immediate timing fix: CU v1.1 no longer computes the
+     rotation combinationally (~9ns path that violated 8ns budget).
+     Instead, CU outputs the raw unrotated imm8 and sets shift_type=ROR,
+     shift_amount=rot_amount.  In EX1, the barrel shifter input is muxed:
+       bs_din = alu_src_b ? imm32 : Rm
+     so dp_imm rotations go through the existing barrel shifter from
+     registered inputs (~3-4ns, well within budget).  alu_src_b_val is
+     now always bs_dout (the mux that bypassed the barrel shifter for
+     immediates is removed).  For non-rotated immediates (rot=0), the
+     barrel shifter is identity (LSL #0).
+   - Bonus: shifter_carry_out is now correct for rotated immediates
+     (previously always cin; now bit[31] of rotated result per ARM spec).
  Changes from 2.4:
    - Deferred Z flag: alu_flags_ex3 no longer captures ALU's combinational
      Z flag.  Instead, N/C/V are registered from the ALU (fast paths),
@@ -601,6 +614,12 @@ end
    v2.5: WB bypass and PC-adjust now applied here from registered
    values, instead of in ID.
 
+   v2.6: Barrel shifter input muxed between Rm and imm32 based on
+   alu_src_b.  For dp_imm with rotation, CU sets shift_type=ROR
+   and shift_amount=rot_amount, so the barrel shifter performs the
+   rotation from registered inputs.  alu_src_b_val is always
+   bs_dout (no bypass mux).
+
    Bypass safety proof for 7-stage / 4-thread:
      At cycle C:  ID has thread T, WB has thread T (tid_wb==tid_id).
      At posedge C: raw RF data -> rn_data_ex1, WB info -> fwd_*_ex1.
@@ -647,17 +666,32 @@ wire [`DATA_WIDTH-1:0] rm_val_ex1 =
 wire [`DATA_WIDTH-1:0] rs_val_ex1 = rs_bypassed_ex1;
 wire [`DATA_WIDTH-1:0] rd_val_ex1 = rd_bypassed_ex1;
 
-/* ── Barrel shifter + operand B mux (unchanged) ── */
+/* ── Barrel shifter + operand B mux ── */
 wire [3:0] cpsr_flags_ex1 = cpsr_flags[tid_ex1];
 
 wire [`SHIFT_AMOUNT_WIDTH-1:0] actual_shamt_ex1 =
     shift_src_ex1 ? rs_val_ex1[`SHIFT_AMOUNT_WIDTH-1:0] : shift_amount_ex1;
 
+/* v2.6 FIX: Barrel shifter input mux.
+ *
+ * When alu_src_b=1 (dp_imm, msr_imm, sdt_immo, hdt_immo), feed
+ * the immediate value into the barrel shifter instead of Rm.
+ *   - dp_imm with rotation: CU sets shift_type=ROR, shift_amount=
+ *     rot_amount → barrel shifter rotates the raw imm8 → correct result.
+ *   - dp_imm without rotation: shift_amount=0, shift_type=LSL →
+ *     barrel shifter is identity → imm32 passes through unchanged.
+ *   - sdt_immo / hdt_immo: shift_amount=0, shift_type=LSL →
+ *     barrel shifter is identity → imm32 passes through unchanged.
+ *
+ * When alu_src_b=0 (dp_reg, sdt_rego), feed Rm as before.
+ */
+wire [`DATA_WIDTH-1:0] bs_din_ex1 = alu_src_b_ex1 ? imm32_ex1 : rm_val_ex1;
+
 wire [`DATA_WIDTH-1:0] bs_dout_ex1;
 wire                   shifter_cout_ex1;
 
 barrel_shifter u_barrel_shifter (
-    .din        (rm_val_ex1),
+    .din        (bs_din_ex1),
     .shamt      (actual_shamt_ex1),
     .shift_type (shift_type_ex1),
     .is_imm_shift (~shift_src_ex1),
@@ -666,8 +700,22 @@ barrel_shifter u_barrel_shifter (
     .cout       (shifter_cout_ex1)
 );
 
-wire [`DATA_WIDTH-1:0] alu_src_b_val_ex1 =
-    alu_src_b_ex1 ? imm32_ex1 : bs_dout_ex1;
+/* v2.6 FIX: Always use barrel shifter output for operand B.
+ *
+ * OLD (v2.5): alu_src_b_val = alu_src_b ? imm32 : bs_dout
+ *   This bypassed the barrel shifter for immediates, which was fine
+ *   when CU pre-rotated imm_dp.  Now that CU outputs raw imm8,
+ *   the barrel shifter must always be in the path.
+ *
+ * For all instruction types, bs_dout is correct:
+ *   dp_imm (rot!=0): bs_dout = ROR(imm8, rot_amount) ✓
+ *   dp_imm (rot==0): bs_dout = imm8 (identity) ✓
+ *   dp_reg:          bs_dout = shifted Rm ✓
+ *   sdt_immo:        bs_dout = imm12 (identity, shift=0) ✓
+ *   sdt_rego:        bs_dout = shifted Rm ✓
+ *   hdt_immo:        bs_dout = imm8 (identity, shift=0) ✓
+ */
+wire [`DATA_WIDTH-1:0] alu_src_b_val_ex1 = bs_dout_ex1;
 
 wire [`PC_WIDTH-1:0] branch_target_br_ex1 =
     pc_plus4_ex1 + 32'd4 + imm32_ex1;
@@ -923,20 +971,9 @@ always @(posedge clk or negedge rst_n) begin
     end
 end
 
-<<<<<<< HEAD
 /* ================================================================
    EX2/MEM PIPELINE REGISTER
    ================================================================ */
-=======
-/*  Memory address / store data  */
-wire [`CPU_DMEM_ADDR_WIDTH-1:0] mem_addr_ex = addr_pre_idx_ex ? alu_result_ex : rn_val;
-wire [`DATA_WIDTH-1:0] store_data_ex = rd_store_val;
-
-reg [`DATA_WIDTH-1:0] alu_result_mem;
-<<<<<<< HEAD
->>>>>>> refs/remotes/origin/timing_opt
-=======
->>>>>>> refs/remotes/origin/timing_opt
 reg [`CPU_DMEM_ADDR_WIDTH-1:0] mem_addr_mem;
 reg [`DATA_WIDTH-1:0] store_data_mem;
 reg mem_read_mem, mem_write_mem;
@@ -959,7 +996,6 @@ reg [3:0] swp_rd_mem, swp_rm_mem;
 
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-<<<<<<< HEAD
         alu_result_mem       <= {`DATA_WIDTH{1'b0}};
         mem_addr_mem         <= {`CPU_DMEM_ADDR_WIDTH{1'b0}};
         store_data_mem       <= {`DATA_WIDTH{1'b0}};
@@ -980,30 +1016,6 @@ always @(posedge clk or negedge rst_n) begin
         bdt_load_mem         <= 1'b0;
         bdt_s_mem            <= 1'b0;
         bdt_wb_mem           <= 1'b0;
-=======
-        alu_result_mem <= {`DATA_WIDTH{1'b0}};
-        mem_addr_mem <= {`CPU_DMEM_ADDR_WIDTH{1'b0}};
-        store_data_mem <= {`DATA_WIDTH{1'b0}};
-        mem_read_mem <= 1'b0;
-        mem_write_mem <= 1'b0;
-        mem_size_mem <= 2'd0;
-        mem_signed_mem <= 1'b0;
-        wb_sel_mem <= 3'd0;
-        wr_addr1_mem <= 4'd0;
-        wr_addr2_mem <= 4'd0;
-        wr_en1_mem <= 1'b0;
-        wr_en2_mem <= 1'b0;
-        mac_result_lo_mem <= {`DATA_WIDTH{1'b0}};
-        mac_result_hi_mem <= {`DATA_WIDTH{1'b0}};
-        pc_plus4_mem <= {`PC_WIDTH{1'b0}};
-        is_multi_cycle_mem <= 1'b0;
-        t_bdt_mem <= 1'b0;
-        t_swp_mem <= 1'b0;
-        bdt_list_mem <= 16'd0;
-        bdt_load_mem <= 1'b0;
-        bdt_s_mem <= 1'b0;
-        bdt_wb_mem <= 1'b0;
->>>>>>> refs/remotes/origin/timing_opt
         addr_pre_idx_bdt_mem <= 1'b0;
         addr_up_bdt_mem      <= 1'b0;
         swap_byte_mem        <= 1'b0;
