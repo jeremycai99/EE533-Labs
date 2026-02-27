@@ -5,7 +5,7 @@
  Version: 1.0
  Revision history:
     - Feb. 25, 2026: Initial implementation of the CUDA-like SM core pipeline.
- */
+*/
 
 `ifndef SM_CORE_V
 `define SM_CORE_V

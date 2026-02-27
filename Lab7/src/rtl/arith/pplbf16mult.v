@@ -11,7 +11,7 @@
  Version: 1.0
  Revision history:
     - Feb. 24, 2026: Initial implementation of pipelined BF16 multiplication.
- */
+*/
 
 `ifndef PPLBF16MULT_V
 `define PPLBF16MULT_V
