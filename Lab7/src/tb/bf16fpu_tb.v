@@ -1,4 +1,4 @@
-/* file: bf16fpu_tb.v
+/* file: tb_bf16fpu.v
  * Description: Testbench for the BF16 FPU module.
  *   - Tests 1-cycle ops: ABS, NEG, MAX, MIN, SELP, SET, SETP
  *   - Tests multi-cycle ops: MUL (3 cyc), ADD (4 cyc), SUB (4 cyc),
@@ -467,6 +467,20 @@ module bf16fpu_tb;
         test_multicyc_op(`OP_ADDI, BF16_FOUR, BF16_THREE, 16'h0000,
                          BF16_SEVEN, "ADDI: 4.0 + 3.0 = 7.0");
 
+        // ── Diagnostic: exact operands FMA would inject into addsub ──
+        // These test the addsub DIRECTLY with the same values
+        // that FMA(-1*2+5) would produce, to isolate addsub vs inject.
+        $display("\n--- Section 4b: Diagnostic ADD (FMA operand match) ---");
+
+        // Direct ADD: -2.0 + 5.0 = 3.0  (operand_a=0xC000, operand_b=0x40A0)
+        // This is EXACTLY what FMA should inject: mult_result + op_c_reg
+        test_multicyc_op(`OP_ADD, 16'hC000, 16'h40A0, 16'h0000,
+                         16'h4040, "DIAG ADD: -2.0+5.0=3.0");
+
+        // Direct ADD: 2.0 + 5.0 = 7.0  (positive version for comparison)
+        test_multicyc_op(`OP_ADD, BF16_TWO, BF16_FIVE, 16'h0000,
+                         BF16_SEVEN, "DIAG ADD: +2.0+5.0=7.0");
+
         // ═════════════════════════════════════════════════════════════════
         // Section 5: FMA (3-cycle mult + 4-cycle add = 7 cycles)
         //   FMA computes: op_a * op_b + op_c
@@ -490,8 +504,47 @@ module bf16fpu_tb;
                          BF16_THREE, "FMA: 3*1+0 = 3.0");
 
         // FMA: -1.0 * 2.0 + 5.0 = 3.0
-        test_multicyc_op(`OP_FMA, BF16_NEG_ONE, BF16_TWO, BF16_FIVE,
-                         BF16_THREE, "FMA: -1*2+5 = 3.0");
+        // VERBOSE VERSION: dump internal addsub pipeline regs to find where sign is lost
+        begin : fma_debug_block
+            $display("\n--- FMA DEBUG: -1*2+5 ---");
+            @(negedge clk);
+            alu_op   = `OP_FMA;
+            op_a     = BF16_NEG_ONE;  // BF80
+            op_b     = BF16_TWO;      // 4000
+            op_c     = BF16_FIVE;     // 40A0
+            cmp_mode = 2'b00;
+            pred_val = 1'b0;
+            valid_in = 1'b1;
+            @(negedge clk);
+            valid_in = 1'b0;
+
+            // Monitor every posedge until valid_out
+            begin : fma_monitor
+                integer cyc;
+                cyc = 0;
+                while (!valid_out && cyc < 20) begin
+                    @(posedge clk); #1;
+                    cyc = cyc + 1;
+                    $display("  [cyc %0d] state=%0d busy=%b mult_vo=%b mult_res=%04h | add_feed=%b fma_inj=%b add_vo=%b add_res=%04h | addsub_a=%04h addsub_b=%04h sub=%b",
+                        cyc, u_dut.state, busy, u_dut.mult_valid_out, u_dut.mult_result,
+                        u_dut.add_feed, u_dut.fma_inject, u_dut.add_valid_out, u_dut.add_result,
+                        u_dut.addsub_a, u_dut.addsub_b, u_dut.addsub_sub);
+                    $display("           s1: valid=%b eff_sub=%b sign_lg=%b exp_lg=%0d mant_lg=%02h mant_sm=%02h exp_diff=%0d special=%b",
+                        u_dut.u_addsub.s1_valid, u_dut.u_addsub.s1_eff_sub,
+                        u_dut.u_addsub.s1_sign_lg, u_dut.u_addsub.s1_exp_lg,
+                        u_dut.u_addsub.s1_mant_lg, u_dut.u_addsub.s1_mant_sm,
+                        u_dut.u_addsub.s1_exp_diff, u_dut.u_addsub.s1_special);
+                    $display("           s2: valid=%b sign_lg=%b mant_sum=%03h exp_lg=%0d special=%b",
+                        u_dut.u_addsub.s2_valid, u_dut.u_addsub.s2_sign_lg, u_dut.u_addsub.s2_mant_sum,
+                        u_dut.u_addsub.s2_exp_lg, u_dut.u_addsub.s2_special);
+                end
+            end
+            // valid_out is high RIGHT NOW — check immediately
+            $display("  [RESULT] result=%04h valid_out=%b valid_fma=%b add_result=%04h",
+                result, valid_out, u_dut.valid_fma, u_dut.add_result);
+            check(BF16_THREE, "FMA: -1*2+5 = 3.0");
+            @(negedge clk); @(negedge clk);
+        end
 
         // ═════════════════════════════════════════════════════════════════
         // Section 6: Busy signal and handshake verification
