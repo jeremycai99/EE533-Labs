@@ -16,10 +16,10 @@
 module bf16comp (
     input wire [15:0] a,
     input wire [15:0] b,
-    output wire eq,     // a == b
-    output wire ne,     // a != b
-    output wire lt,     // a <  b
-    output wire le      // a <= b
+    output wire eq, // a == b
+    output wire ne, // a != b
+    output wire lt, // a <  b
+    output wire le  // a <= b
 );
     // Sign, exponent, mantissa
     wire a_sign = a[15];
@@ -56,10 +56,10 @@ module bf16comp (
     // Case 4: a positive, b negative → a >= b
     wire ord_lt;
     assign ord_lt = both_zero          ? 1'b0 :
-                    (a_sign & ~b_sign) ? 1'b1 :            // a<0, b>=0
-                    (~a_sign & b_sign) ? 1'b0 :            // a>=0, b<0
-                    (~a_sign)          ? mag_lt :           // both positive
-                                         mag_gt;           // both negative
+                    (a_sign & ~b_sign) ? 1'b1 : // a<0, b>=0
+                    (~a_sign & b_sign) ? 1'b0 : // a>=0, b<0
+                    (~a_sign)          ? mag_lt : // both positive
+                                         mag_gt; // both negative
 
     // Final outputs with NaN handling
     assign eq = ~has_nan & ord_eq;
