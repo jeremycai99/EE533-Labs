@@ -14,6 +14,8 @@
  *  10. Reset clears all pending bits
  */
 
+ // Test OUT OF DATE after scoreboard redesign.
+
 `timescale 1ns / 1ps
 
 `include "scoreboard.v"
