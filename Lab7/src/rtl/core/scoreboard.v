@@ -28,16 +28,16 @@ module scoreboard (
     // From SIMT controller
     input  wire [3:0] active_mask,   // current active thread mask. 1111 for now
     // Issue handshake
-    input  wire        issue,         // instruction issued this cycle
+    input  wire issue,         // instruction issued this cycle
                                       // (decode_valid & ~stall & ~global_stall)
     // From WB stage (pipeline sideband)
-    input  wire [3:0]  wb_rD_addr,    // register being written back
-    input  wire        wb_rf_we,      // WB has a valid GPR write
-    input  wire [3:0]  wb_active_mask,// active mask snapshot from issue time
+    input wire [3:0] wb_rD_addr,    // register being written back
+    input wire wb_rf_we,      // WB has a valid GPR write
+    input wire [3:0] wb_active_mask,// active mask snapshot from issue time
 
     // Outputs
-    output wire        stall,         // RAW hazard → freeze IF+ID, bubble EX
-    output wire        any_pending    // any register in-flight (for WMMA drain)
+    output wire stall,         // RAW hazard → freeze IF+ID, bubble EX
+    output wire any_pending    // any register in-flight (for WMMA drain)
 );
     // Pending registers: 4 threads × 16 bits = 64 FFs
     reg [15:0] pending [0:3];
