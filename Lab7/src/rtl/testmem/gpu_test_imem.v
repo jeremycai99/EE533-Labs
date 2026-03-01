@@ -18,13 +18,13 @@ module gpu_test_imem (
     output reg [`GPU_IMEM_DATA_WIDTH-1:0] douta,
 
     input wire clkb,
-    input wire [`GPU_DMEM_ADDR_WIDTH-1:0] addrb,
-    input wire [`GPU_DMEM_DATA_WIDTH-1:0] dinb,
+    input wire [`GPU_IMEM_ADDR_WIDTH-1:0] addrb,
+    input wire [`GPU_IMEM_DATA_WIDTH-1:0] dinb,
     input wire web,
-    output reg [`GPU_DMEM_DATA_WIDTH-1:0] doutb
+    output reg [`GPU_IMEM_DATA_WIDTH-1:0] doutb
 );
 
-reg [`GPU_DMEM_DATA_WIDTH-1:0] mem [0:(1<<`GPU_DMEM_ADDR_WIDTH)-1];
+reg [`GPU_IMEM_DATA_WIDTH-1:0] mem [0:(1<<`GPU_IMEM_ADDR_WIDTH)-1];
 // Synchronous read and write logic for Port A
 always @(posedge clka) begin
     if (wea) begin

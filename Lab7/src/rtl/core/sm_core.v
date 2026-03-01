@@ -1,18 +1,11 @@
 /* file: sm_core.v
- * SM core — all GPU pipeline logic.
- * Integrates: fetch unit, SM decoder, 4× SP cores,
- * scoreboard, TC top (tensor core controller), and
- * inline burst controller (WMMA.LOAD/STORE).
- *
- * BRAMs (IMEM + per-SP DMEM) are NOT instantiated here.
- * Port-A BRAM signals are exposed as module I/O.
- *
- * Pipeline: IF → ID → EX → MEM → WB
- *
- * Author: Jeremy Cai
- * Date: Mar. 1, 2026
- * Version: 2.0 — tc_top extracted, sm_decoder renamed
- */
+ Description: This file implements the Streaming Multiprocessor (SM) core, which includes the fetch unit,
+    decoder, scoreboard, multiple SP cores, and a tensor core. 
+ Date: Feb. 28, 2026
+ Version: 1.0
+ Revision history:
+    - Feb. 28, 2026: Initial implementation of the SM core.
+*/
 
 `ifndef SM_CORE_V
 `define SM_CORE_V
@@ -28,29 +21,29 @@ module sm_core (
     input wire clk,
     input wire rst_n,
 
-    // ── IMEM BRAM port-A (read-only by GPU) ──────────────
+    // IMEM BRAM port-A (read-only by GPU)
     output wire [`GPU_IMEM_ADDR_WIDTH-1:0] imem_addr,
     input wire [`GPU_IMEM_DATA_WIDTH-1:0] imem_rdata,
 
-    // ── Per-SP DMEM BRAM port-A (GPU read/write) ─────────
+    // Per-SP DMEM BRAM port-A (GPU read/write)
     // Flat buses: bits [W*t +: W] = SP t
     output wire [4*`GPU_DMEM_ADDR_WIDTH-1:0] dmem_addra,
     output wire [4*`GPU_DMEM_DATA_WIDTH-1:0] dmem_dina,
     output wire [3:0] dmem_wea,
     input wire [4*`GPU_DMEM_DATA_WIDTH-1:0] dmem_douta,
 
-    // ── Kernel control ───────────────────────────────────
+    // Kernel control
     input wire kernel_start,
     input wire [`GPU_PC_WIDTH-1:0] kernel_entry_pc,
     output wire kernel_done,
 
-    // ── Debug RF read (testbench observation) ────────────
+    // Debug RF read (testbench observation)
     input wire [3:0] debug_rf_addr,
     output wire [4*`GPU_DMEM_DATA_WIDTH-1:0] debug_rf_data
 );
 
     // ================================================================
-    // 1. Internal signal declarations
+    // Internal signal declarations
     // ================================================================
     wire [`GPU_PC_WIDTH-1:0] if_id_pc;
     wire fetch_valid;
@@ -146,38 +139,29 @@ module sm_core (
                                    sp_rf_r3_data[1], sp_rf_r3_data[0]};
 
     // ================================================================
-    // 2. Fetch Unit
+    // Fetch Unit
     // ================================================================
     wire branch_taken;
     wire [`GPU_PC_WIDTH-1:0] branch_target;
     wire ret_detected;
 
     fetch_unit u_fetch (
-        .clk(clk), .rst_n(rst_n),
-        .imem_addr(imem_addr),
-        .kernel_start(kernel_start),
-        .kernel_entry_pc(kernel_entry_pc),
-        .kernel_done(kernel_done),
-        .running(fu_running),
-        .branch_taken(branch_taken),
-        .branch_target(branch_target),
-        .front_stall(front_stall),
-        .ret_detected(ret_detected),
-        .if_id_pc(if_id_pc),
-        .fetch_valid(fetch_valid)
+        .clk (clk), .rst_n (rst_n),
+        .imem_addr (imem_addr),
+        .kernel_start (kernel_start),
+        .kernel_entry_pc (kernel_entry_pc),
+        .kernel_done (kernel_done),
+        .running (fu_running),
+        .branch_taken (branch_taken),
+        .branch_target (branch_target),
+        .front_stall (front_stall),
+        .ret_detected (ret_detected),
+        .if_id_pc (if_id_pc),
+        .fetch_valid (fetch_valid)
     );
 
     // ================================================================
-    // 2b. IR Latch — hold instruction during scoreboard stall
-    //
-    // Problem: sync-read BRAM delivers instruction one cycle after
-    // PC presents the address. By the time a stall fires (combinational
-    // from decoder output), PC has already advanced and the BRAM will
-    // overwrite the stalled instruction next cycle.
-    //
-    // Fix: on the first cycle of a stall, latch imem_rdata. Feed the
-    // latch to the decoder on subsequent stall cycles. When the stall
-    // clears, the latched instruction issues and ir_latched resets.
+    // IR Latch — hold instruction during scoreboard stall
     // ================================================================
     reg [31:0] ir_latch;
     reg ir_latched;
@@ -197,44 +181,44 @@ module sm_core (
     wire [31:0] dec_ir = ir_latched ? ir_latch : imem_rdata;
 
     // ================================================================
-    // 3. SM Decoder
+    // SM Decoder
     // ================================================================
     sm_decoder u_dec (
-        .ir(dec_ir),
-        .dec_opcode(dec_opcode),
-        .dec_dt(dec_dt),
-        .dec_cmp_mode(dec_cmp_mode),
-        .dec_rD_addr(dec_rD_addr),
-        .dec_rA_addr(dec_rA_addr),
-        .dec_rB_addr(dec_rB_addr),
-        .dec_rC_addr(dec_rC_addr),
-        .dec_imm16(dec_imm16),
-        .dec_rf_we(dec_rf_we),
-        .dec_pred_we(dec_pred_we),
-        .dec_pred_wr_sel(dec_pred_wr_sel),
-        .dec_pred_rd_sel(dec_pred_rd_sel),
-        .dec_wb_src(dec_wb_src),
-        .dec_use_imm(dec_use_imm),
-        .dec_uses_rA(dec_uses_rA),
-        .dec_uses_rB(dec_uses_rB),
-        .dec_is_fma(dec_is_fma),
-        .dec_is_st(dec_is_st),
-        .dec_is_branch(dec_is_branch),
-        .dec_is_pbra(dec_is_pbra),
-        .dec_is_ret(dec_is_ret),
-        .dec_is_ld(dec_is_ld),
-        .dec_is_store(dec_is_store),
-        .dec_is_lds(dec_is_lds),
-        .dec_is_sts(dec_is_sts),
-        .dec_is_wmma_mma(dec_is_wmma_mma),
-        .dec_is_wmma_load(dec_is_wmma_load),
-        .dec_is_wmma_store(dec_is_wmma_store),
-        .dec_wmma_sel(dec_wmma_sel),
-        .dec_branch_target(dec_branch_target)
+        .ir (dec_ir),
+        .dec_opcode (dec_opcode),
+        .dec_dt (dec_dt),
+        .dec_cmp_mode (dec_cmp_mode),
+        .dec_rD_addr (dec_rD_addr),
+        .dec_rA_addr (dec_rA_addr),
+        .dec_rB_addr (dec_rB_addr),
+        .dec_rC_addr (dec_rC_addr),
+        .dec_imm16 (dec_imm16),
+        .dec_rf_we (dec_rf_we),
+        .dec_pred_we (dec_pred_we),
+        .dec_pred_wr_sel (dec_pred_wr_sel),
+        .dec_pred_rd_sel (dec_pred_rd_sel),
+        .dec_wb_src (dec_wb_src),
+        .dec_use_imm (dec_use_imm),
+        .dec_uses_rA (dec_uses_rA),
+        .dec_uses_rB (dec_uses_rB),
+        .dec_is_fma (dec_is_fma),
+        .dec_is_st (dec_is_st),
+        .dec_is_branch (dec_is_branch),
+        .dec_is_pbra (dec_is_pbra),
+        .dec_is_ret (dec_is_ret),
+        .dec_is_ld (dec_is_ld),
+        .dec_is_store (dec_is_store),
+        .dec_is_lds (dec_is_lds),
+        .dec_is_sts (dec_is_sts),
+        .dec_is_wmma_mma (dec_is_wmma_mma),
+        .dec_is_wmma_load (dec_is_wmma_load),
+        .dec_is_wmma_store (dec_is_wmma_store),
+        .dec_wmma_sel (dec_wmma_sel),
+        .dec_branch_target (dec_branch_target)
     );
 
     // ================================================================
-    // 4. Stall / Flush / Issue Control
+    // Stall / Flush / Issue Control
     // ================================================================
     // WMMA ops must wait for pipeline to drain before triggering.
     // Stall the front-end while waiting to prevent PC from advancing.
@@ -256,34 +240,34 @@ module sm_core (
     wire sb_issue = id_can_issue & dec_rf_we;
 
     // ================================================================
-    // 5. Scoreboard
+    // Scoreboard
     // ================================================================
     wire [3:0] wb_active_mask_sb = {sp_wb_active[3], sp_wb_active[2],
                                     sp_wb_active[1], sp_wb_active[0]};
 
     scoreboard u_sb (
-        .clk(clk), .rst_n(rst_n),
-        .rA_addr(dec_rA_addr),
-        .rB_addr(dec_rB_addr),
-        .rD_addr(dec_rD_addr),
-        .uses_rA(dec_uses_rA),
-        .uses_rB(dec_uses_rB),
-        .is_fma(dec_is_fma),
-        .is_st(dec_is_st),
-        .rf_we(dec_rf_we),
-        .active_mask(active_mask),
-        .issue(sb_issue),
-        .wb_rD_addr(sp_wb_rD_addr[0]),
-        .wb_rf_we(sp_wb_rf_we[0]),
-        .wb_active_mask(wb_active_mask_sb),
-        .stall(sb_stall),
-        .any_pending(sb_any_pending)
+        .clk (clk), .rst_n (rst_n),
+        .rA_addr (dec_rA_addr),
+        .rB_addr (dec_rB_addr),
+        .rD_addr (dec_rD_addr),
+        .uses_rA (dec_uses_rA),
+        .uses_rB (dec_uses_rB),
+        .is_fma (dec_is_fma),
+        .is_st (dec_is_st),
+        .rf_we (dec_rf_we),
+        .active_mask (active_mask),
+        .issue (sb_issue),
+        .wb_rD_addr (sp_wb_rD_addr[0]),
+        .wb_rf_we (sp_wb_rf_we[0]),
+        .wb_active_mask (wb_active_mask_sb),
+        .stall (sb_stall),
+        .any_pending (sb_any_pending)
     );
 
     wire sb_any_pending;
 
     // ================================================================
-    // 6. Tensor Core Top
+    // Tensor Core Top
     // ================================================================
     // WMMA ops must wait for pipeline to drain — the TC gather reads RF
     // directly, bypassing the scoreboard hazard check.
@@ -293,35 +277,35 @@ module sm_core (
                     & pipeline_drained;
 
     tc_top u_tc_top (
-        .clk(clk), .rst_n(rst_n),
-        .trigger(tc_trigger),
-        .dec_rA_addr(dec_rA_addr),
-        .dec_rB_addr(dec_rB_addr),
-        .dec_rC_addr(dec_rC_addr),
-        .dec_rD_addr(dec_rD_addr),
-        .sp_rf_r0_data(flat_rf_r0),
-        .sp_rf_r1_data(flat_rf_r1),
-        .sp_rf_r2_data(flat_rf_r2),
-        .sp_rf_r3_data(flat_rf_r3),
-        .busy(tc_busy),
-        .rf_addr_override(tc_rf_override),
-        .rf_r0_addr(tc_rf_r0),
-        .rf_r1_addr(tc_rf_r1),
-        .rf_r2_addr(tc_rf_r2),
-        .rf_r3_addr(tc_rf_r3),
-        .scat_w1_addr(tc_w1_addr),
-        .scat_w1_data(tc_w1_data),
-        .scat_w1_we(tc_w1_we),
-        .scat_w2_addr(tc_w2_addr),
-        .scat_w2_data(tc_w2_data),
-        .scat_w2_we(tc_w2_we),
-        .scat_w3_addr(tc_w3_addr),
-        .scat_w3_data(tc_w3_data),
-        .scat_w3_we(tc_w3_we)
+        .clk (clk), .rst_n (rst_n),
+        .trigger (tc_trigger),
+        .dec_rA_addr (dec_rA_addr),
+        .dec_rB_addr (dec_rB_addr),
+        .dec_rC_addr (dec_rC_addr),
+        .dec_rD_addr (dec_rD_addr),
+        .sp_rf_r0_data (flat_rf_r0),
+        .sp_rf_r1_data (flat_rf_r1),
+        .sp_rf_r2_data (flat_rf_r2),
+        .sp_rf_r3_data (flat_rf_r3),
+        .busy (tc_busy),
+        .rf_addr_override (tc_rf_override),
+        .rf_r0_addr (tc_rf_r0),
+        .rf_r1_addr (tc_rf_r1),
+        .rf_r2_addr (tc_rf_r2),
+        .rf_r3_addr (tc_rf_r3),
+        .scat_w1_addr (tc_w1_addr),
+        .scat_w1_data (tc_w1_data),
+        .scat_w1_we (tc_w1_we),
+        .scat_w2_addr (tc_w2_addr),
+        .scat_w2_data (tc_w2_data),
+        .scat_w2_we (tc_w2_we),
+        .scat_w3_addr (tc_w3_addr),
+        .scat_w3_data (tc_w3_data),
+        .scat_w3_we (tc_w3_we)
     );
 
     // ================================================================
-    // 7. Burst Controller — WMMA.LOAD / WMMA.STORE (inline)
+    // Burst Controller — WMMA.LOAD / WMMA.STORE (inline)
     // ================================================================
     localparam [2:0] BU_IDLE       = 3'd0,
                      BU_LOAD_ADDR  = 3'd1,
@@ -441,7 +425,7 @@ module sm_core (
     end
 
     // ================================================================
-    // 8. RF Read Address Mux
+    // RF Read Address Mux
     // ================================================================
     always @(*) begin
         // Default: decoder-driven
@@ -471,7 +455,7 @@ module sm_core (
                             sp_rf_r0_data[1], sp_rf_r0_data[0]};
 
     // ================================================================
-    // 9. External RF Write Mux (TC scatter / burst load)
+    // External RF Write Mux (TC scatter / burst load)
     // ================================================================
     reg [3:0] ext_w1_addr [0:3];
     reg [15:0] ext_w1_data [0:3];
@@ -507,63 +491,63 @@ module sm_core (
     end
 
     // ================================================================
-    // 10. Generate: 4× SP Core
+    // Generate: 4× SP Core
     // ================================================================
     genvar t;
     generate
         for (t = 0; t < 4; t = t + 1) begin : SP_LANE
             sp_core #(.TID(t[1:0])) u_sp (
-                .clk(clk), .rst_n(rst_n),
-                .stall(sp_stall),
-                .flush_id(sp_flush_id),
-                .rf_r0_addr(rf_r0_addr_mux),
-                .rf_r1_addr(rf_r1_addr_mux),
-                .rf_r2_addr(rf_r2_addr_mux),
-                .rf_r3_addr(rf_r3_addr_mux),
-                .rf_r0_data(sp_rf_r0_data[t]),
-                .rf_r1_data(sp_rf_r1_data[t]),
-                .rf_r2_data(sp_rf_r2_data[t]),
-                .rf_r3_data(sp_rf_r3_data[t]),
-                .pred_rd_sel(dec_pred_rd_sel),
-                .pred_rd_val(sp_pred_rd_val[t]),
-                .id_opcode(dec_opcode),
-                .id_dt(dec_dt),
-                .id_cmp_mode(dec_cmp_mode),
-                .id_rf_we(dec_rf_we),
-                .id_pred_we(dec_pred_we),
-                .id_rD_addr(dec_rD_addr),
-                .id_pred_wr_sel(dec_pred_wr_sel),
-                .id_valid(sp_id_valid),
-                .id_active(active_mask[t]),
-                .id_wb_src(dec_wb_src),
-                .id_use_imm(dec_use_imm),
-                .id_imm16(dec_imm16),
-                .ex_mem_result_out(sp_ex_mem_result[t]),
-                .ex_mem_store_out(sp_ex_mem_store[t]),
-                .ex_mem_valid_out(sp_ex_mem_valid[t]),
-                .ex_busy(sp_ex_busy[t]),
-                .mem_rdata(dmem_dout_a[t]),
-                .wb_ext_w1_addr(ext_w1_addr[t]),
-                .wb_ext_w1_data(ext_w1_data[t]),
-                .wb_ext_w1_we(ext_w1_we[t]),
-                .wb_ext_w2_addr(ext_w2_addr[t]),
-                .wb_ext_w2_data(ext_w2_data[t]),
-                .wb_ext_w2_we(ext_w2_we[t]),
-                .wb_ext_w3_addr(ext_w3_addr[t]),
-                .wb_ext_w3_data(ext_w3_data[t]),
-                .wb_ext_w3_we(ext_w3_we[t]),
-                .mem_is_load(sp_mem_is_load[t]),
-                .mem_is_store(sp_mem_is_store[t]),
-                .wb_rD_addr(sp_wb_rD_addr[t]),
-                .wb_rf_we(sp_wb_rf_we[t]),
-                .wb_active(sp_wb_active[t]),
-                .wb_valid(sp_wb_valid[t])
+                .clk (clk), .rst_n (rst_n),
+                .stall (sp_stall),
+                .flush_id (sp_flush_id),
+                .rf_r0_addr (rf_r0_addr_mux),
+                .rf_r1_addr (rf_r1_addr_mux),
+                .rf_r2_addr (rf_r2_addr_mux),
+                .rf_r3_addr (rf_r3_addr_mux),
+                .rf_r0_data (sp_rf_r0_data[t]),
+                .rf_r1_data (sp_rf_r1_data[t]),
+                .rf_r2_data (sp_rf_r2_data[t]),
+                .rf_r3_data (sp_rf_r3_data[t]),
+                .pred_rd_sel (dec_pred_rd_sel),
+                .pred_rd_val (sp_pred_rd_val[t]),
+                .id_opcode (dec_opcode),
+                .id_dt (dec_dt),
+                .id_cmp_mode (dec_cmp_mode),
+                .id_rf_we (dec_rf_we),
+                .id_pred_we (dec_pred_we),
+                .id_rD_addr (dec_rD_addr),
+                .id_pred_wr_sel (dec_pred_wr_sel),
+                .id_valid (sp_id_valid),
+                .id_active (active_mask[t]),
+                .id_wb_src (dec_wb_src),
+                .id_use_imm (dec_use_imm),
+                .id_imm16 (dec_imm16),
+                .ex_mem_result_out (sp_ex_mem_result[t]),
+                .ex_mem_store_out (sp_ex_mem_store[t]),
+                .ex_mem_valid_out (sp_ex_mem_valid[t]),
+                .ex_busy (sp_ex_busy[t]),
+                .mem_rdata (dmem_dout_a[t]),
+                .wb_ext_w1_addr (ext_w1_addr[t]),
+                .wb_ext_w1_data (ext_w1_data[t]),
+                .wb_ext_w1_we (ext_w1_we[t]),
+                .wb_ext_w2_addr (ext_w2_addr[t]),
+                .wb_ext_w2_data (ext_w2_data[t]),
+                .wb_ext_w2_we (ext_w2_we[t]),
+                .wb_ext_w3_addr (ext_w3_addr[t]),
+                .wb_ext_w3_data (ext_w3_data[t]),
+                .wb_ext_w3_we (ext_w3_we[t]),
+                .mem_is_load (sp_mem_is_load[t]),
+                .mem_is_store (sp_mem_is_store[t]),
+                .wb_rD_addr (sp_wb_rD_addr[t]),
+                .wb_rf_we (sp_wb_rf_we[t]),
+                .wb_active (sp_wb_active[t]),
+                .wb_valid (sp_wb_valid[t])
             );
         end
     endgenerate
 
     // ================================================================
-    // 11. DMEM Port-A Mux (normal vs burst)
+    // DMEM Port-A Mux (normal vs burst)
     // ================================================================
     genvar d;
     generate

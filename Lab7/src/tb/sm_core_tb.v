@@ -1,4 +1,4 @@
-/* file: tb_sm_core.v
+/* file: sm_core_tb.v
  * Testbench for sm_core — streaming multiprocessor core.
  * Instantiates sm_core + IMEM/DMEM BRAM models, loads test
  * programs, launches kernels, and verifies GPR / DMEM results.
@@ -16,7 +16,7 @@
 `include "gpu_define.v"
 `include "sm_core.v"
 
-module tb_sm_core;
+module sm_core_tb;
 
     // ================================================================
     // Clock / Reset
@@ -138,12 +138,20 @@ module tb_sm_core;
         enc_movi = {`OP_MOVI, 1'b0, 2'b00, rd, 4'd0, imm};
     endfunction
 
-    // M-type: LD/ST rD, rA, offset16
+    // M-type: LD/ST rD, rA, offset16 (DT=0, int16)
     function [31:0] enc_m;
         input [4:0] op;
         input [3:0] rd, ra;
         input [15:0] offset;
         enc_m = {op, 1'b0, 2'b00, rd, ra, offset};
+    endfunction
+
+    // M-type bf16: LD/ST rD, rA, offset16 (DT=1, bf16)
+    function [31:0] enc_m_f;
+        input [4:0] op;
+        input [3:0] rd, ra;
+        input [15:0] offset;
+        enc_m_f = {op, 1'b1, 2'b00, rd, ra, offset};
     endfunction
 
     // BRA target (absolute 27-bit)
@@ -326,8 +334,8 @@ module tb_sm_core;
     // Waveform Dump
     // ================================================================
     initial begin
-        $dumpfile("tb_sm_core.vcd");
-        $dumpvars(0, tb_sm_core);
+        $dumpfile("sm_core_tb.vcd");
+        $dumpvars(0, sm_core_tb);
     end
 
     // Global timeout
@@ -544,15 +552,28 @@ module tb_sm_core;
     task dump_rf_range;
         input [3:0] r_start;
         input [3:0] r_end;
-        integer ri;
+        integer ri, si;
     begin
-        $write("  RF dump SP0: ");
-        for (ri = r_start; ri <= r_end; ri = ri + 1) begin
-            debug_rf_addr = ri[3:0];
-            #1;
-            $write("R%0d=0x%04h ", ri, debug_rf_data[0*16 +: 16]);
-        end
+        // Header
+        $write("  RF dump     ");
+        for (ri = r_start; ri <= r_end; ri = ri + 1)
+            $write("  R%-2d  ", ri);
         $write("\n");
+        // Per-SP rows
+        for (si = 0; si < 4; si = si + 1) begin
+            $write("       SP%0d:  ", si);
+            for (ri = r_start; ri <= r_end; ri = ri + 1) begin
+                debug_rf_addr = ri[3:0];
+                #1;
+                case (si)
+                    0: $write(" %04h ", debug_rf_data[0*16 +: 16]);
+                    1: $write(" %04h ", debug_rf_data[1*16 +: 16]);
+                    2: $write(" %04h ", debug_rf_data[2*16 +: 16]);
+                    3: $write(" %04h ", debug_rf_data[3*16 +: 16]);
+                endcase
+            end
+            $write("\n");
+        end
     end
     endtask
 
@@ -565,12 +586,6 @@ module tb_sm_core;
         $display("============================================");
 
         // ── K1: Basic ALU (MOVI + ADD) ───────────────────
-        // Program:
-        //   addr 0: MOVI R1, 100
-        //   addr 1: MOVI R2, 200
-        //   addr 2: ADD  R3, R1, R2   → R3 = 300
-        //   addr 3: RET
-        // Expected: R1=100, R2=200, R3=300 for all SPs
         begin
             $display("\n--- K1: Basic ALU (MOVI + ADD) ---");
             reset_dut;
@@ -590,13 +605,6 @@ module tb_sm_core;
         end
 
         // ── K2: Memory LD / ST ───────────────────────────
-        // Pre-load: DMEM[10] = 0xABCD (all SPs)
-        // Program:
-        //   addr 0: MOVI R1, 10         ; base addr
-        //   addr 1: LD   R2, R1, 0      ; R2 = DMEM[10] = 0xABCD
-        //   addr 2: ADDI R3, R2, 1      ; R3 = 0xABCE
-        //   addr 3: ST   R3, R1, 5      ; DMEM[15] = R3
-        //   addr 4: RET
         begin
             $display("\n--- K2: Memory LD / ST ---");
             reset_dut;
@@ -609,7 +617,7 @@ module tb_sm_core;
             imem[0] = enc_movi(4'd1, 16'd10);
             imem[1] = enc_m(`OP_LD, 4'd2, 4'd1, 16'd0);
             imem[2] = enc_i(`OP_ADDI, 1'b0, 4'd3, 4'd2, 16'd1);
-            imem[3] = enc_m(`OP_ST, 4'd3, 4'd1, 16'd5);  // ST rD=R3, rA=R1, off=5 → addr=15
+            imem[3] = enc_m(`OP_ST, 4'd3, 4'd1, 16'd5);
             imem[4] = INST_RET;
             launch_kernel(32'd0);
             wait_kernel_done(100);
@@ -620,21 +628,14 @@ module tb_sm_core;
         end
 
         // ── K3: Branch (BRA skips instruction) ───────────
-        // Program:
-        //   addr 0: MOVI R1, 42
-        //   addr 1: BRA  4              ; jump to addr 4
-        //   addr 2: MOVI R1, 99         ; skipped
-        //   addr 3: MOVI R1, 88         ; skipped
-        //   addr 4: MOVI R2, 55
-        //   addr 5: RET
         begin
             $display("\n--- K3: Branch (BRA) ---");
             reset_dut;
             clear_dmem;
             imem[0] = enc_movi(4'd1, 16'd42);
             imem[1] = enc_bra(27'd4);
-            imem[2] = enc_movi(4'd1, 16'd99);  // should be skipped
-            imem[3] = enc_movi(4'd1, 16'd88);  // should be skipped
+            imem[2] = enc_movi(4'd1, 16'd99);
+            imem[3] = enc_movi(4'd1, 16'd88);
             imem[4] = enc_movi(4'd2, 16'd55);
             imem[5] = INST_RET;
             launch_kernel(32'd0);
@@ -645,12 +646,6 @@ module tb_sm_core;
         end
 
         // ── K4: Multi-cycle MUL + Scoreboard Stall ───────
-        // Program:
-        //   addr 0: MOVI R1, 3
-        //   addr 1: MOVI R2, 7
-        //   addr 2: MUL  R3, R1, R2     ; R3=21 (2-cycle EX)
-        //   addr 3: ADD  R4, R3, R1     ; R4=24 (stalls for R3)
-        //   addr 4: RET
         begin
             $display("\n--- K4: MUL + Scoreboard Stall ---");
             reset_dut;
@@ -670,9 +665,6 @@ module tb_sm_core;
         end
 
         // ── K5: MOV.TID — Thread Identity ────────────────
-        // Program:
-        //   addr 0: MOV.TID R1          ; R1 = thread_id
-        //   addr 1: RET
         begin
             $display("\n--- K5: MOV.TID ---");
             reset_dut;
@@ -688,15 +680,7 @@ module tb_sm_core;
             check_gpr(2'd3, 4'd1, 16'd3, "K5 SP3.R1=TID3");
         end
 
-        // ── K6: Back-to-back NOPs + MOVI (no hazard) ────
-        // Tests pipeline throughput with no scoreboard stalls.
-        // Program:
-        //   addr 0: MOVI R1, 10
-        //   addr 1: MOVI R2, 20
-        //   addr 2: MOVI R3, 30
-        //   addr 3: MOVI R4, 40
-        //   addr 4: MOVI R5, 50
-        //   addr 5: RET
+        // ── K6: Back-to-back MOVI (no hazard) ────────────
         begin
             $display("\n--- K6: Back-to-back MOVI (no hazard) ---");
             reset_dut;
@@ -718,13 +702,6 @@ module tb_sm_core;
         end
 
         // ── K7: Per-thread LD/ST with MOV.TID offset ────
-        // Each SP stores to a unique DMEM address.
-        // Program:
-        //   addr 0: MOV.TID R1           ; R1 = tid
-        //   addr 1: MOVI    R2, 0xCAFE
-        //   addr 2: ST      R2, R1, 100  ; DMEM[100+tid] = 0xCAFE
-        //   addr 3: LD      R3, R1, 100  ; R3 = DMEM[100+tid]
-        //   addr 4: RET
         begin
             $display("\n--- K7: Per-thread LD/ST ---");
             reset_dut;
@@ -737,7 +714,6 @@ module tb_sm_core;
             launch_kernel(32'd0);
             wait_kernel_done(100);
 
-            // SP0: tid=0, stores to DMEM[100], loads from DMEM[100]
             check_dmem(2'd0, 10'd100, 16'hCAFE, "K7 SP0 DMEM[100]");
             check_dmem(2'd1, 10'd101, 16'hCAFE, "K7 SP1 DMEM[101]");
             check_dmem(2'd2, 10'd102, 16'hCAFE, "K7 SP2 DMEM[102]");
@@ -746,15 +722,6 @@ module tb_sm_core;
         end
 
         // ── K8: Logic + Shift ────────────────────────────
-        // Program:
-        //   addr 0: MOVI R1, 0x00FF
-        //   addr 1: MOVI R2, 0x0F0F
-        //   addr 2: AND  R3, R1, R2     ; R3 = 0x000F
-        //   addr 3: OR   R4, R1, R2     ; R4 = 0x0FFF
-        //   addr 4: XOR  R5, R1, R2     ; R5 = 0x0FF0
-        //   addr 5: SHL  R6, R1, 4      ; R6 = 0x0FF0
-        //   addr 6: SHR  R7, R1, 4      ; R7 = 0x000F (arithmetic, R1 positive)
-        //   addr 7: RET
         begin
             $display("\n--- K8: Logic + Shift ---");
             reset_dut;
@@ -778,15 +745,6 @@ module tb_sm_core;
         end
 
         // ── K9: FMA (R3 = R1*R2 + R3) ───────────────────
-        // FMA is 2-cycle MUL + 1-cycle add = multi-cycle EX
-        // Program:
-        //   addr 0: MOVI R1, 5
-        //   addr 1: MOVI R2, 6
-        //   addr 2: MOVI R3, 10          ; accumulator
-        //   addr 3: FMA  R3, R1, R2      ; R3 = 5*6 + 10 = 40
-        //   addr 4: RET
-        // FMA encoding: R-type with rD=R3 (acc), rA=R1, rB=R2
-        // dec_is_fma=1 → rD is read source (rf_r2_addr_mux = rD)
         begin
             $display("\n--- K9: FMA ---");
             reset_dut;
@@ -803,8 +761,6 @@ module tb_sm_core;
         end
 
         // ── K10: Non-zero entry PC ───────────────────────
-        // Program loaded at addr 10..12
-        // Tests that kernel_entry_pc is respected.
         begin
             $display("\n--- K10: Non-zero entry PC ---");
             reset_dut;
@@ -820,14 +776,6 @@ module tb_sm_core;
         end
 
         // ── K11: SUB + NEG + ABS ─────────────────────────
-        // Program:
-        //   addr 0: MOVI R1, 30
-        //   addr 1: MOVI R2, 50
-        //   addr 2: SUB  R3, R1, R2     ; R3 = 30-50 = -20 = 0xFFEC
-        //   addr 3: NEG  R4, R3, x      ; R4 = -R3 = 20
-        //   addr 4: ABS  R5, R3, x      ; R5 = |R3| = 20
-        //   addr 5: RET
-        // NEG and ABS: rA is source, rB unused. use_imm=0 for both.
         begin
             $display("\n--- K11: SUB + NEG + ABS ---");
             reset_dut;
@@ -847,13 +795,6 @@ module tb_sm_core;
         end
 
         // ── K12: ADDI chain (dependent, scoreboard stalls) ─
-        // Program:
-        //   addr 0: MOVI R1, 0
-        //   addr 1: ADDI R1, R1, 1      ; R1 = 1 (RAW on R1)
-        //   addr 2: ADDI R1, R1, 1      ; R1 = 2
-        //   addr 3: ADDI R1, R1, 1      ; R1 = 3
-        //   addr 4: ADDI R1, R1, 1      ; R1 = 4
-        //   addr 5: RET
         begin
             $display("\n--- K12: ADDI chain (scoreboard stress) ---");
             reset_dut;
@@ -873,12 +814,6 @@ module tb_sm_core;
         end
 
         // ── K13: MAX / MIN ───────────────────────────────
-        // Program:
-        //   addr 0: MOVI R1, 100
-        //   addr 1: MOVI R2, 200
-        //   addr 2: MAX  R3, R1, R2     ; R3 = 200
-        //   addr 3: MIN  R4, R1, R2     ; R4 = 100
-        //   addr 4: RET
         begin
             $display("\n--- K13: MAX / MIN ---");
             reset_dut;
@@ -895,17 +830,11 @@ module tb_sm_core;
             check_gpr_all(4'd4, 16'd100, "K13 MIN(100,200)=100");
         end
 
-        // ── K14: WMMA.LOAD basic ─────────────────────────────
-        // Pre-load DMEM[200..203] = {0x1111,0x2222,0x3333,0x4444}
-        // Program:
-        //   addr 0: MOVI R15, 200       ; base addr
-        //   addr 1: WMMA.LOAD R4, R15, 0 ; R4..R7 ← DMEM[200..203]
-        //   addr 2: RET
+        // ── K14: WMMA.LOAD basic ─────────────────────────
         begin
             $display("\n--- K14: WMMA.LOAD basic ---");
             reset_dut;
             clear_dmem;
-            // Pre-load DMEM for all SPs
             dmem0[200] = 16'h1111; dmem0[201] = 16'h2222;
             dmem0[202] = 16'h3333; dmem0[203] = 16'h4444;
             dmem1[200] = 16'h1111; dmem1[201] = 16'h2222;
@@ -926,15 +855,7 @@ module tb_sm_core;
             check_gpr_all(4'd7, 16'h4444, "K14 R7=0x4444");
         end
 
-        // ── K15: WMMA.STORE basic ────────────────────────────
-        // Program:
-        //   addr 0: MOVI R0, 0x1234
-        //   addr 1: MOVI R1, 0x5678
-        //   addr 2: MOVI R2, 0x9ABC
-        //   addr 3: MOVI R3, 0xDEF0
-        //   addr 4: MOVI R8, 300       ; base addr
-        //   addr 5: WMMA.STORE R0, R8, 0 ; DMEM[300..303] ← R0..R3
-        //   addr 6: RET
+        // ── K15: WMMA.STORE basic ────────────────────────
         begin
             $display("\n--- K15: WMMA.STORE basic ---");
             reset_dut;
@@ -955,29 +876,19 @@ module tb_sm_core;
             check_dmem_all(10'd303, 16'hDEF0, "K15 DMEM[303]=0xDEF0");
         end
 
-        // ── K16: WMMA.MMA uniform (1.0×1.0 + 0 = 4.0) ──────
-        // Math: D[i][j] = sum_{k=0}^{3} A[i][k]*B[k][j] + C[i][j]
-        //   A[i][k] = 1.0 for all i,k (bf16 0x3F80)
-        //   B[k][j] = 1.0 for all k,j (bf16 0x3F80)
-        //   C[i][j] = 0.0 for all i,j (reset default)
-        //   D[i][j] = 4 * (1.0*1.0) + 0.0 = 4.0 = bf16(0x4080)
-        //
-        // Register map: A=R0..R3, B=R4..R7, C=R8..R11, D=R12..R15
-        // Thread layout: Thread t holds row t of each matrix
-        //   Thread t, R{base+j} = Matrix[t][j]
+        // ── K16: WMMA.MMA uniform (1.0×1.0 + 0 = 4.0) ──
         begin
             $display("\n--- K16: WMMA.MMA uniform 1*1+0=4.0 ---");
             reset_dut;
             clear_dmem;
-            imem[0] = enc_movi(4'd0,  16'h3F80); // A[t][0] = 1.0
-            imem[1] = enc_movi(4'd1,  16'h3F80); // A[t][1] = 1.0
-            imem[2] = enc_movi(4'd2,  16'h3F80); // A[t][2] = 1.0
-            imem[3] = enc_movi(4'd3,  16'h3F80); // A[t][3] = 1.0
-            imem[4] = enc_movi(4'd4,  16'h3F80); // B[t][0] = 1.0
-            imem[5] = enc_movi(4'd5,  16'h3F80); // B[t][1] = 1.0
-            imem[6] = enc_movi(4'd6,  16'h3F80); // B[t][2] = 1.0
-            imem[7] = enc_movi(4'd7,  16'h3F80); // B[t][3] = 1.0
-            // C=R8..R11 = 0 from reset
+            imem[0] = enc_movi(4'd0,  16'h3F80);
+            imem[1] = enc_movi(4'd1,  16'h3F80);
+            imem[2] = enc_movi(4'd2,  16'h3F80);
+            imem[3] = enc_movi(4'd3,  16'h3F80);
+            imem[4] = enc_movi(4'd4,  16'h3F80);
+            imem[5] = enc_movi(4'd5,  16'h3F80);
+            imem[6] = enc_movi(4'd6,  16'h3F80);
+            imem[7] = enc_movi(4'd7,  16'h3F80);
             imem[8] = enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
             imem[9] = INST_RET;
 
@@ -997,29 +908,22 @@ module tb_sm_core;
         end
 
         // ── K17: WMMA.MMA with accumulate (2×3 + 1 = 25.0) ──
-        // Math: D[i][j] = sum_{k=0}^{3} A[i][k]*B[k][j] + C[i][j]
-        //   A[i][k] = 2.0 (bf16 0x4000)
-        //   B[k][j] = 3.0 (bf16 0x4040)
-        //   C[i][j] = 1.0 (bf16 0x3F80)
-        //   D[i][j] = 4*(2.0*3.0) + 1.0 = 24+1 = 25.0 = bf16(0x41C8)
-        //
-        // Register map: A=R0..R3, B=R4..R7, C=R8..R11, D=R12..R15
         begin
             $display("\n--- K17: WMMA.MMA 2*3+1=25.0 ---");
             reset_dut;
             clear_dmem;
-            imem[0]  = enc_movi(4'd0,  16'h4000); // A[t][0] = 2.0
-            imem[1]  = enc_movi(4'd1,  16'h4000); // A[t][1] = 2.0
-            imem[2]  = enc_movi(4'd2,  16'h4000); // A[t][2] = 2.0
-            imem[3]  = enc_movi(4'd3,  16'h4000); // A[t][3] = 2.0
-            imem[4]  = enc_movi(4'd4,  16'h4040); // B[t][0] = 3.0
-            imem[5]  = enc_movi(4'd5,  16'h4040); // B[t][1] = 3.0
-            imem[6]  = enc_movi(4'd6,  16'h4040); // B[t][2] = 3.0
-            imem[7]  = enc_movi(4'd7,  16'h4040); // B[t][3] = 3.0
-            imem[8]  = enc_movi(4'd8,  16'h3F80); // C[t][0] = 1.0
-            imem[9]  = enc_movi(4'd9,  16'h3F80); // C[t][1] = 1.0
-            imem[10] = enc_movi(4'd10, 16'h3F80); // C[t][2] = 1.0
-            imem[11] = enc_movi(4'd11, 16'h3F80); // C[t][3] = 1.0
+            imem[0]  = enc_movi(4'd0,  16'h4000);
+            imem[1]  = enc_movi(4'd1,  16'h4000);
+            imem[2]  = enc_movi(4'd2,  16'h4000);
+            imem[3]  = enc_movi(4'd3,  16'h4000);
+            imem[4]  = enc_movi(4'd4,  16'h4040);
+            imem[5]  = enc_movi(4'd5,  16'h4040);
+            imem[6]  = enc_movi(4'd6,  16'h4040);
+            imem[7]  = enc_movi(4'd7,  16'h4040);
+            imem[8]  = enc_movi(4'd8,  16'h3F80);
+            imem[9]  = enc_movi(4'd9,  16'h3F80);
+            imem[10] = enc_movi(4'd10, 16'h3F80);
+            imem[11] = enc_movi(4'd11, 16'h3F80);
             imem[12] = enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
             imem[13] = INST_RET;
 
@@ -1039,23 +943,11 @@ module tb_sm_core;
             check_gpr_all(4'd15, 16'h41C8, "K17 D[i][3]=25.0");
         end
 
-        // ── K18: WMMA full pipeline LOAD → MMA → STORE ──────
-        // Pre-load per-SP identity matrix A in DMEM[200..203]:
-        //   SP0 row: {1.0, 0, 0, 0}  SP1 row: {0, 1.0, 0, 0}
-        //   SP2 row: {0, 0, 1.0, 0}  SP3 row: {0, 0, 0, 1.0}
-        // Pre-load B = all bf16(2.0) in DMEM[204..207]
-        // Pre-load C = zeros in DMEM[208..211]
-        //
-        // Math: D = I(4×4) × 2*ones(4×4) + zeros = 2*ones
-        //   D[i][j] = 2.0 = bf16(0x4000)
-        //
-        // Register map: A=R0..R3, B=R4..R7, C=R8..R11, D=R12..R15
-        // NOTE: Use R0 (not R15) for store base to avoid clobbering D[3]
+        // ── K18: WMMA full pipeline LOAD → MMA → STORE ──
         begin
             $display("\n--- K18: WMMA full pipeline LOAD->MMA->STORE ---");
             reset_dut;
             clear_dmem;
-            // Identity matrix A (per-SP): SPt row = e_t
             dmem0[200] = 16'h3F80; dmem0[201] = 16'h0000;
             dmem0[202] = 16'h0000; dmem0[203] = 16'h0000;
             dmem1[200] = 16'h0000; dmem1[201] = 16'h3F80;
@@ -1064,7 +956,6 @@ module tb_sm_core;
             dmem2[202] = 16'h3F80; dmem2[203] = 16'h0000;
             dmem3[200] = 16'h0000; dmem3[201] = 16'h0000;
             dmem3[202] = 16'h0000; dmem3[203] = 16'h3F80;
-            // B = all 2.0 (all SPs)
             dmem0[204] = 16'h4000; dmem0[205] = 16'h4000;
             dmem0[206] = 16'h4000; dmem0[207] = 16'h4000;
             dmem1[204] = 16'h4000; dmem1[205] = 16'h4000;
@@ -1073,27 +964,25 @@ module tb_sm_core;
             dmem2[206] = 16'h4000; dmem2[207] = 16'h4000;
             dmem3[204] = 16'h4000; dmem3[205] = 16'h4000;
             dmem3[206] = 16'h4000; dmem3[207] = 16'h4000;
-            // C = zeros (already cleared)
 
-            imem[0] = enc_movi(4'd0, 16'd200);       // base addr for LOADs
-            imem[1] = enc_m(`WMMA_LOAD,  4'd4,  4'd0, 16'd0); // A→R4..R7 (using R4 base to avoid R0 clobber)
-            imem[2] = enc_m(`WMMA_LOAD,  4'd8,  4'd0, 16'd4); // B→R8..R11
-            // Use NOP to let pipeline drain before overwriting R0
+            imem[0] = enc_movi(4'd0, 16'd200);
+            imem[1] = enc_m(`WMMA_LOAD,  4'd4,  4'd0, 16'd0);
+            imem[2] = enc_m(`WMMA_LOAD,  4'd8,  4'd0, 16'd4);
             imem[3] = INST_NOP;
             imem[4] = INST_NOP;
             imem[5] = INST_NOP;
             imem[6] = INST_NOP;
-            imem[7] = enc_movi(4'd0, 16'd0);         // C[t][0] = 0
-            imem[8] = enc_movi(4'd1, 16'd0);         // C[t][1] = 0
-            imem[9] = enc_movi(4'd2, 16'd0);         // C[t][2] = 0
-            imem[10] = enc_movi(4'd3, 16'd0);        // C[t][3] = 0
-            imem[11] = enc_wmma_mma(4'd12, 4'd4, 4'd8, 4'd0); // D=R12..15, A=R4..7, B=R8..11, C=R0..3
-            imem[12] = INST_NOP;   // drain pipeline before store setup
+            imem[7] = enc_movi(4'd0, 16'd0);
+            imem[8] = enc_movi(4'd1, 16'd0);
+            imem[9] = enc_movi(4'd2, 16'd0);
+            imem[10] = enc_movi(4'd3, 16'd0);
+            imem[11] = enc_wmma_mma(4'd12, 4'd4, 4'd8, 4'd0);
+            imem[12] = INST_NOP;
             imem[13] = INST_NOP;
             imem[14] = INST_NOP;
             imem[15] = INST_NOP;
-            imem[16] = enc_movi(4'd0, 16'd300);      // store base addr (R0 safe, C no longer needed)
-            imem[17] = enc_m(`WMMA_STORE, 4'd12, 4'd0, 16'd0); // D → DMEM[300..303]
+            imem[16] = enc_movi(4'd0, 16'd300);
+            imem[17] = enc_m(`WMMA_STORE, 4'd12, 4'd0, 16'd0);
             imem[18] = INST_RET;
 
             $display("  DMEM pre-load: A=I(4x4) @200, B=2.0*ones @204, C=0 @208");
@@ -1106,16 +995,553 @@ module tb_sm_core;
             $display("  Post-exec RF dump:");
             dump_rf_range(4'd0, 4'd15);
 
-            // Check D registers (R12-R15)
             check_gpr_all(4'd12, 16'h4000, "K18 D[i][0]=2.0");
             check_gpr_all(4'd13, 16'h4000, "K18 D[i][1]=2.0");
             check_gpr_all(4'd14, 16'h4000, "K18 D[i][2]=2.0");
             check_gpr_all(4'd15, 16'h4000, "K18 D[i][3]=2.0");
-            // Check DMEM store results
             check_dmem_all(10'd300, 16'h4000, "K18 DMEM[300]=2.0");
             check_dmem_all(10'd301, 16'h4000, "K18 DMEM[301]=2.0");
             check_dmem_all(10'd302, 16'h4000, "K18 DMEM[302]=2.0");
             check_dmem_all(10'd303, 16'h4000, "K18 DMEM[303]=2.0");
+        end
+
+        // ── K19: MMA zero matrix passthrough (0×B + C = C) ──
+        begin
+            $display("\n--- K19: MMA zero passthrough 0*3+5=5.0 ---");
+            reset_dut;
+            clear_dmem;
+            imem[0] = enc_movi(4'd4,  16'h4040);
+            imem[1] = enc_movi(4'd5,  16'h4040);
+            imem[2] = enc_movi(4'd6,  16'h4040);
+            imem[3] = enc_movi(4'd7,  16'h4040);
+            imem[4] = enc_movi(4'd8,  16'h40A0);
+            imem[5] = enc_movi(4'd9,  16'h40A0);
+            imem[6] = enc_movi(4'd10, 16'h40A0);
+            imem[7] = enc_movi(4'd11, 16'h40A0);
+            imem[8] = enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
+            imem[9] = INST_RET;
+
+            $display("  Computation: D = 0*3 + 5 = 5.0 (accumulate passthrough)");
+            print_program(0, 10);
+            launch_kernel(32'd0);
+            wait_kernel_done(200);
+            dump_rf_range(4'd0, 4'd15);
+
+            check_gpr_all(4'd12, 16'h40A0, "K19 D[i][0]=5.0");
+            check_gpr_all(4'd13, 16'h40A0, "K19 D[i][1]=5.0");
+            check_gpr_all(4'd14, 16'h40A0, "K19 D[i][2]=5.0");
+            check_gpr_all(4'd15, 16'h40A0, "K19 D[i][3]=5.0");
+        end
+
+        // ── K20: MMA negative values (-1×2 + 0 = -8.0) ──
+        begin
+            $display("\n--- K20: MMA negative -1*2+0=-8.0 ---");
+            reset_dut;
+            clear_dmem;
+            imem[0] = enc_movi(4'd0,  16'hBF80);
+            imem[1] = enc_movi(4'd1,  16'hBF80);
+            imem[2] = enc_movi(4'd2,  16'hBF80);
+            imem[3] = enc_movi(4'd3,  16'hBF80);
+            imem[4] = enc_movi(4'd4,  16'h4000);
+            imem[5] = enc_movi(4'd5,  16'h4000);
+            imem[6] = enc_movi(4'd6,  16'h4000);
+            imem[7] = enc_movi(4'd7,  16'h4000);
+            imem[8] = enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
+            imem[9] = INST_RET;
+
+            $display("  Computation: D = 4*(-1*2) + 0 = -8.0");
+            print_program(0, 10);
+            launch_kernel(32'd0);
+            wait_kernel_done(200);
+            dump_rf_range(4'd0, 4'd15);
+
+            check_gpr_all(4'd12, 16'hC100, "K20 D[i][0]=-8.0");
+            check_gpr_all(4'd13, 16'hC100, "K20 D[i][1]=-8.0");
+            check_gpr_all(4'd14, 16'hC100, "K20 D[i][2]=-8.0");
+            check_gpr_all(4'd15, 16'hC100, "K20 D[i][3]=-8.0");
+        end
+
+        // ── K21: MMA mixed sign accumulate (1×1 + (-2) = 2.0) ──
+        begin
+            $display("\n--- K21: MMA mixed 1*1+(-2)=2.0 ---");
+            reset_dut;
+            clear_dmem;
+            imem[0]  = enc_movi(4'd0,  16'h3F80);
+            imem[1]  = enc_movi(4'd1,  16'h3F80);
+            imem[2]  = enc_movi(4'd2,  16'h3F80);
+            imem[3]  = enc_movi(4'd3,  16'h3F80);
+            imem[4]  = enc_movi(4'd4,  16'h3F80);
+            imem[5]  = enc_movi(4'd5,  16'h3F80);
+            imem[6]  = enc_movi(4'd6,  16'h3F80);
+            imem[7]  = enc_movi(4'd7,  16'h3F80);
+            imem[8]  = enc_movi(4'd8,  16'hC000);
+            imem[9]  = enc_movi(4'd9,  16'hC000);
+            imem[10] = enc_movi(4'd10, 16'hC000);
+            imem[11] = enc_movi(4'd11, 16'hC000);
+            imem[12] = enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
+            imem[13] = INST_RET;
+
+            $display("  Computation: D = 4*(1*1) + (-2) = 4 - 2 = 2.0");
+            print_program(0, 14);
+            launch_kernel(32'd0);
+            wait_kernel_done(200);
+            dump_rf_range(4'd0, 4'd15);
+
+            check_gpr_all(4'd12, 16'h4000, "K21 D[i][0]=2.0");
+            check_gpr_all(4'd13, 16'h4000, "K21 D[i][1]=2.0");
+            check_gpr_all(4'd14, 16'h4000, "K21 D[i][2]=2.0");
+            check_gpr_all(4'd15, 16'h4000, "K21 D[i][3]=2.0");
+        end
+
+        // ── K22: MMA fractional (0.5×0.5 + 0 = 1.0) ──
+        begin
+            $display("\n--- K22: MMA fractional 0.5*0.5+0=1.0 ---");
+            reset_dut;
+            clear_dmem;
+            imem[0] = enc_movi(4'd0,  16'h3F00);
+            imem[1] = enc_movi(4'd1,  16'h3F00);
+            imem[2] = enc_movi(4'd2,  16'h3F00);
+            imem[3] = enc_movi(4'd3,  16'h3F00);
+            imem[4] = enc_movi(4'd4,  16'h3F00);
+            imem[5] = enc_movi(4'd5,  16'h3F00);
+            imem[6] = enc_movi(4'd6,  16'h3F00);
+            imem[7] = enc_movi(4'd7,  16'h3F00);
+            imem[8] = enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
+            imem[9] = INST_RET;
+
+            $display("  Computation: D = 4*(0.5*0.5) + 0 = 1.0");
+            print_program(0, 10);
+            launch_kernel(32'd0);
+            wait_kernel_done(200);
+            dump_rf_range(4'd0, 4'd15);
+
+            check_gpr_all(4'd12, 16'h3F80, "K22 D[i][0]=1.0");
+            check_gpr_all(4'd13, 16'h3F80, "K22 D[i][1]=1.0");
+            check_gpr_all(4'd14, 16'h3F80, "K22 D[i][2]=1.0");
+            check_gpr_all(4'd15, 16'h3F80, "K22 D[i][3]=1.0");
+        end
+
+        // ── K23: Chained MMA (D1=A*B, then D2=D1*B) ──
+        begin
+            $display("\n--- K23: Chained MMA D1=4.0, D2=D1*1+0=16.0 ---");
+            reset_dut;
+            clear_dmem;
+            imem[0] = enc_movi(4'd0,  16'h3F80);
+            imem[1] = enc_movi(4'd1,  16'h3F80);
+            imem[2] = enc_movi(4'd2,  16'h3F80);
+            imem[3] = enc_movi(4'd3,  16'h3F80);
+            imem[4] = enc_movi(4'd4,  16'h3F80);
+            imem[5] = enc_movi(4'd5,  16'h3F80);
+            imem[6] = enc_movi(4'd6,  16'h3F80);
+            imem[7] = enc_movi(4'd7,  16'h3F80);
+            imem[8] = enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
+            imem[9] = enc_wmma_mma(4'd0, 4'd12, 4'd4, 4'd8);
+            imem[10] = INST_RET;
+
+            $display("  Step 1: D1 = 4*(1*1)+0 = 4.0");
+            $display("  Step 2: D2 = 4*(4*1)+0 = 16.0 (chained)");
+            print_program(0, 11);
+            launch_kernel(32'd0);
+            wait_kernel_done(400);
+            dump_rf_range(4'd0, 4'd15);
+
+            check_gpr_all(4'd12, 16'h4080, "K23 D1[i][0]=4.0");
+            check_gpr_all(4'd13, 16'h4080, "K23 D1[i][1]=4.0");
+            check_gpr_all(4'd14, 16'h4080, "K23 D1[i][2]=4.0");
+            check_gpr_all(4'd15, 16'h4080, "K23 D1[i][3]=4.0");
+            check_gpr_all(4'd0, 16'h4180, "K23 D2[i][0]=16.0");
+            check_gpr_all(4'd1, 16'h4180, "K23 D2[i][1]=16.0");
+            check_gpr_all(4'd2, 16'h4180, "K23 D2[i][2]=16.0");
+            check_gpr_all(4'd3, 16'h4180, "K23 D2[i][3]=16.0");
+        end
+
+        // ── K24: Per-thread SIMT via DMEM (diagonal A, uniform B) ─
+        begin
+            $display("\n--- K24: Per-thread SIMT diag(2)*3+1=7.0 ---");
+            reset_dut;
+            clear_dmem;
+            dmem0[100] = 16'h4000; dmem0[101] = 16'h0000;
+            dmem0[102] = 16'h0000; dmem0[103] = 16'h0000;
+            dmem1[100] = 16'h0000; dmem1[101] = 16'h4000;
+            dmem1[102] = 16'h0000; dmem1[103] = 16'h0000;
+            dmem2[100] = 16'h0000; dmem2[101] = 16'h0000;
+            dmem2[102] = 16'h4000; dmem2[103] = 16'h0000;
+            dmem3[100] = 16'h0000; dmem3[101] = 16'h0000;
+            dmem3[102] = 16'h0000; dmem3[103] = 16'h4000;
+
+            imem[0]  = enc_movi(4'd0, 16'd100);
+            imem[1]  = enc_m(`WMMA_LOAD, 4'd0, 4'd0, 16'd0);
+            imem[2]  = enc_movi(4'd4,  16'h4040);
+            imem[3]  = enc_movi(4'd5,  16'h4040);
+            imem[4]  = enc_movi(4'd6,  16'h4040);
+            imem[5]  = enc_movi(4'd7,  16'h4040);
+            imem[6]  = enc_movi(4'd8,  16'h3F80);
+            imem[7]  = enc_movi(4'd9,  16'h3F80);
+            imem[8]  = enc_movi(4'd10, 16'h3F80);
+            imem[9]  = enc_movi(4'd11, 16'h3F80);
+            imem[10] = enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
+            imem[11] = INST_RET;
+
+            $display("  DMEM pre-load: A=diag(2.0) @100 (per-SP rows)");
+            $display("  Computation: D = diag(2)*3*ones + ones = 7*ones");
+            print_program(0, 12);
+            launch_kernel(32'd0);
+            wait_kernel_done(300);
+            dump_rf_range(4'd0, 4'd15);
+
+            check_gpr_all(4'd12, 16'h40E0, "K24 D[i][0]=7.0");
+            check_gpr_all(4'd13, 16'h40E0, "K24 D[i][1]=7.0");
+            check_gpr_all(4'd14, 16'h40E0, "K24 D[i][2]=7.0");
+            check_gpr_all(4'd15, 16'h40E0, "K24 D[i][3]=7.0");
+        end
+
+        // ================================================================
+        // PTX-Mapped Kernel Tests (K25–K30)
+        // These tests implement the exact ISA assembly from the
+        // PTX line-by-line mapping SVG for all 6 CUDA kernels.
+        // Each follows: MOV.TID R0 (hw-init), then the SVG assembly.
+        // Memory layout: base + tid*2 word-addressing for scalar,
+        //                base + tid*8 for WMMA row stride.
+        // ================================================================
+
+        // ── K25: PTX K1 — vec_add C[tid]=A[tid]+B[tid] (int16) ──
+        // Assembly (12 instr from SVG + 1 MOV.TID):
+        //   MOV.TID R0             ; R0 = tid
+        //   MOVI R1, 0             ; base_A
+        //   MOVI R2, 16            ; base_B
+        //   MOVI R3, 32            ; base_C
+        //   SHL  R4, R0, 1         ; byte offset = tid*2
+        //   ADD  R5, R1, R4        ; &A[tid]
+        //   LD   R5, R5, 0         ; R5 = A[tid]
+        //   ADD  R6, R2, R4        ; &B[tid]
+        //   LD   R6, R6, 0         ; R6 = B[tid]
+        //   ADD  R7, R6, R5        ; ★ compute
+        //   ADD  R8, R3, R4        ; &C[tid]
+        //   ST   R7, R8, 0         ; C[tid] = result
+        //   RET
+        begin
+            $display("\n--- K25: PTX K1 vec_add int16 ---");
+            reset_dut;
+            clear_dmem;
+            // Pre-load A: SP0@[0]=10, SP1@[2]=20, SP2@[4]=30, SP3@[6]=40
+            dmem0[0] = 16'd10; dmem1[2] = 16'd20;
+            dmem2[4] = 16'd30; dmem3[6] = 16'd40;
+            // Pre-load B: SP0@[16]=5, SP1@[18]=15, SP2@[20]=25, SP3@[22]=35
+            dmem0[16] = 16'd5;  dmem1[18] = 16'd15;
+            dmem2[20] = 16'd25; dmem3[22] = 16'd35;
+
+            imem[0]  = enc_mov_tid(4'd0);
+            imem[1]  = enc_movi(4'd1, 16'd0);
+            imem[2]  = enc_movi(4'd2, 16'd16);
+            imem[3]  = enc_movi(4'd3, 16'd32);
+            imem[4]  = enc_i(`OP_SHL, 1'b0, 4'd4, 4'd0, 16'd1);
+            imem[5]  = enc_r(`OP_ADD, 1'b0, 4'd5, 4'd1, 4'd4);
+            imem[6]  = enc_m(`OP_LD, 4'd5, 4'd5, 16'd0);
+            imem[7]  = enc_r(`OP_ADD, 1'b0, 4'd6, 4'd2, 4'd4);
+            imem[8]  = enc_m(`OP_LD, 4'd6, 4'd6, 16'd0);
+            imem[9]  = enc_r(`OP_ADD, 1'b0, 4'd7, 4'd6, 4'd5);   // ★ ADD
+            imem[10] = enc_r(`OP_ADD, 1'b0, 4'd8, 4'd3, 4'd4);
+            imem[11] = enc_m(`OP_ST, 4'd7, 4'd8, 16'd0);
+            imem[12] = INST_RET;
+
+            print_program(0, 13);
+            enable_trace;
+            launch_kernel(32'd0);
+            wait_kernel_done(200);
+            disable_trace;
+
+            // SP0: 10+5=15, SP1: 20+15=35, SP2: 30+25=55, SP3: 40+35=75
+            check_dmem(2'd0, 10'd32, 16'd15, "K25 SP0 C[0]=10+5");
+            check_dmem(2'd1, 10'd34, 16'd35, "K25 SP1 C[1]=20+15");
+            check_dmem(2'd2, 10'd36, 16'd55, "K25 SP2 C[2]=30+25");
+            check_dmem(2'd3, 10'd38, 16'd75, "K25 SP3 C[3]=40+35");
+        end
+
+        // ── K26: PTX K2 — vec_sub C[tid]=A[tid]-B[tid] (int16) ──
+        // Identical to K25 except line 9: SUB R7, R5, R6
+        begin
+            $display("\n--- K26: PTX K2 vec_sub int16 ---");
+            reset_dut;
+            clear_dmem;
+            dmem0[0] = 16'd100; dmem1[2] = 16'd200;
+            dmem2[4] = 16'd300; dmem3[6] = 16'd400;
+            dmem0[16] = 16'd30; dmem1[18] = 16'd50;
+            dmem2[20] = 16'd100; dmem3[22] = 16'd150;
+
+            imem[0]  = enc_mov_tid(4'd0);
+            imem[1]  = enc_movi(4'd1, 16'd0);
+            imem[2]  = enc_movi(4'd2, 16'd16);
+            imem[3]  = enc_movi(4'd3, 16'd32);
+            imem[4]  = enc_i(`OP_SHL, 1'b0, 4'd4, 4'd0, 16'd1);
+            imem[5]  = enc_r(`OP_ADD, 1'b0, 4'd5, 4'd1, 4'd4);
+            imem[6]  = enc_m(`OP_LD, 4'd5, 4'd5, 16'd0);
+            imem[7]  = enc_r(`OP_ADD, 1'b0, 4'd6, 4'd2, 4'd4);
+            imem[8]  = enc_m(`OP_LD, 4'd6, 4'd6, 16'd0);
+            imem[9]  = enc_r(`OP_SUB, 1'b0, 4'd7, 4'd5, 4'd6);   // ★ SUB
+            imem[10] = enc_r(`OP_ADD, 1'b0, 4'd8, 4'd3, 4'd4);
+            imem[11] = enc_m(`OP_ST, 4'd7, 4'd8, 16'd0);
+            imem[12] = INST_RET;
+
+            print_program(0, 13);
+            launch_kernel(32'd0);
+            wait_kernel_done(200);
+
+            // SP0: 100-30=70, SP1: 200-50=150, SP2: 300-100=200, SP3: 400-150=250
+            check_dmem(2'd0, 10'd32, 16'd70,  "K26 SP0 C[0]=100-30");
+            check_dmem(2'd1, 10'd34, 16'd150, "K26 SP1 C[1]=200-50");
+            check_dmem(2'd2, 10'd36, 16'd200, "K26 SP2 C[2]=300-100");
+            check_dmem(2'd3, 10'd38, 16'd250, "K26 SP3 C[3]=400-150");
+        end
+
+        // ── K27: PTX K3 — bf16_vector_mul C[tid]=A[tid]*B[tid] ──
+        // Key difference: DT=1 for MUL (bf16 datapath)
+        // PTX: fma.rn.bf16 + mov.b16(-0) → MUL.f (native)
+        // A=2.0(0x4000), B=3.0(0x4040) → C=6.0(0x40C0)
+        begin
+            $display("\n--- K27: PTX K3 bf16_vector_mul ---");
+            reset_dut;
+            clear_dmem;
+            // A = 2.0 for all threads
+            dmem0[0] = 16'h4000; dmem1[2] = 16'h4000;
+            dmem2[4] = 16'h4000; dmem3[6] = 16'h4000;
+            // B = 3.0 for all threads
+            dmem0[16] = 16'h4040; dmem1[18] = 16'h4040;
+            dmem2[20] = 16'h4040; dmem3[22] = 16'h4040;
+
+            imem[0]  = enc_mov_tid(4'd0);
+            imem[1]  = enc_movi(4'd1, 16'd0);
+            imem[2]  = enc_movi(4'd2, 16'd16);
+            imem[3]  = enc_movi(4'd3, 16'd32);
+            imem[4]  = enc_i(`OP_SHL, 1'b0, 4'd4, 4'd0, 16'd1);
+            imem[5]  = enc_r(`OP_ADD, 1'b0, 4'd5, 4'd1, 4'd4);
+            imem[6]  = enc_m_f(`OP_LD, 4'd5, 4'd5, 16'd0);         // LD.bf16
+            imem[7]  = enc_r(`OP_ADD, 1'b0, 4'd6, 4'd2, 4'd4);
+            imem[8]  = enc_m_f(`OP_LD, 4'd6, 4'd6, 16'd0);         // LD.bf16
+            imem[9]  = enc_r(`OP_MUL, 1'b1, 4'd7, 4'd5, 4'd6);   // ★ MUL.f DT=1
+            imem[10] = enc_r(`OP_ADD, 1'b0, 4'd8, 4'd3, 4'd4);
+            imem[11] = enc_m_f(`OP_ST, 4'd7, 4'd8, 16'd0);         // ST.bf16
+            imem[12] = INST_RET;
+
+            print_program(0, 13);
+            launch_kernel(32'd0);
+            wait_kernel_done(200);
+
+            // 2.0 * 3.0 = 6.0 = bf16(0x40C0) for all threads
+            check_gpr_all(4'd7, 16'h40C0, "K27 MUL.f 2*3=6.0");
+            check_dmem(2'd0, 10'd32, 16'h40C0, "K27 SP0 C=6.0");
+            check_dmem(2'd1, 10'd34, 16'h40C0, "K27 SP1 C=6.0");
+            check_dmem(2'd2, 10'd36, 16'h40C0, "K27 SP2 C=6.0");
+            check_dmem(2'd3, 10'd38, 16'h40C0, "K27 SP3 C=6.0");
+        end
+
+        // ── K28: PTX K4 — bf16_fma D[tid]=A[tid]*B[tid]+C[tid] ──
+        // 4 pointers, 3 loads, FMA (rD read+write), 1 store
+        // A=2.0, B=3.0, C=1.0 → D = 2*3+1 = 7.0 = bf16(0x40E0)
+        begin
+            $display("\n--- K28: PTX K4 bf16_fma ---");
+            reset_dut;
+            clear_dmem;
+            // A=2.0, B=3.0, C=1.0 per thread
+            dmem0[0] = 16'h4000; dmem1[2] = 16'h4000;
+            dmem2[4] = 16'h4000; dmem3[6] = 16'h4000;
+            dmem0[16] = 16'h4040; dmem1[18] = 16'h4040;
+            dmem2[20] = 16'h4040; dmem3[22] = 16'h4040;
+            dmem0[32] = 16'h3F80; dmem1[34] = 16'h3F80;
+            dmem2[36] = 16'h3F80; dmem3[38] = 16'h3F80;
+
+            imem[0]  = enc_mov_tid(4'd0);
+            imem[1]  = enc_movi(4'd1, 16'd0);       // base_A
+            imem[2]  = enc_movi(4'd2, 16'd16);      // base_B
+            imem[3]  = enc_movi(4'd3, 16'd32);      // base_C
+            imem[4]  = enc_movi(4'd9, 16'd48);      // base_D
+            imem[5]  = enc_i(`OP_SHL, 1'b0, 4'd4, 4'd0, 16'd1);
+            // Load A
+            imem[6]  = enc_r(`OP_ADD, 1'b0, 4'd5, 4'd1, 4'd4);
+            imem[7]  = enc_m_f(`OP_LD, 4'd5, 4'd5, 16'd0);         // LD.bf16
+            // Load B
+            imem[8]  = enc_r(`OP_ADD, 1'b0, 4'd6, 4'd2, 4'd4);
+            imem[9]  = enc_m_f(`OP_LD, 4'd6, 4'd6, 16'd0);         // LD.bf16
+            // Load C into R7 (accumulator for FMA)
+            imem[10] = enc_r(`OP_ADD, 1'b0, 4'd7, 4'd3, 4'd4);
+            imem[11] = enc_m_f(`OP_LD, 4'd7, 4'd7, 16'd0);         // LD.bf16
+            // FMA: R7 = R5*R6 + R7
+            imem[12] = enc_r(`OP_FMA, 1'b1, 4'd7, 4'd5, 4'd6);   // ★ FMA.f DT=1
+            // Store D
+            imem[13] = enc_r(`OP_ADD, 1'b0, 4'd8, 4'd9, 4'd4);
+            imem[14] = enc_m_f(`OP_ST, 4'd7, 4'd8, 16'd0);         // ST.bf16
+            imem[15] = INST_RET;
+
+            $display("  D = A*B + C = 2.0*3.0 + 1.0 = 7.0 (0x40E0)");
+            print_program(0, 16);
+            enable_trace;
+            launch_kernel(32'd0);
+            wait_kernel_done(200);
+            disable_trace;
+
+            check_gpr_all(4'd7, 16'h40E0, "K28 FMA.f 2*3+1=7.0");
+            check_dmem(2'd0, 10'd48, 16'h40E0, "K28 SP0 D=7.0");
+            check_dmem(2'd1, 10'd50, 16'h40E0, "K28 SP1 D=7.0");
+            check_dmem(2'd2, 10'd52, 16'h40E0, "K28 SP2 D=7.0");
+            check_dmem(2'd3, 10'd54, 16'h40E0, "K28 SP3 D=7.0");
+        end
+
+        // ── K29: PTX K5 — relu out[tid]=max(in[tid],0.0) (bf16) ──
+        // Per-thread divergent values: mix of positive and negative
+        //   SP0: in=-1.0(0xBF80) → out=0.0(0x0000)
+        //   SP1: in= 2.0(0x4000) → out=2.0(0x4000)
+        //   SP2: in=-3.0(0xC040) → out=0.0(0x0000)
+        //   SP3: in= 5.0(0x40A0) → out=5.0(0x40A0)
+        begin
+            $display("\n--- K29: PTX K5 relu bf16 ---");
+            reset_dut;
+            clear_dmem;
+            // Input per-thread at base_in=0, offset=tid*2
+            dmem0[0] = 16'hBF80; // SP0: -1.0
+            dmem1[2] = 16'h4000; // SP1:  2.0
+            dmem2[4] = 16'hC040; // SP2: -3.0
+            dmem3[6] = 16'h40A0; // SP3:  5.0
+
+            imem[0]  = enc_mov_tid(4'd0);
+            imem[1]  = enc_movi(4'd1, 16'd0);       // base_in
+            imem[2]  = enc_movi(4'd2, 16'd16);      // base_out
+            imem[3]  = enc_i(`OP_SHL, 1'b0, 4'd4, 4'd0, 16'd1);
+            // Load input
+            imem[4]  = enc_r(`OP_ADD, 1'b0, 4'd5, 4'd1, 4'd4);
+            imem[5]  = enc_m_f(`OP_LD, 4'd5, 4'd5, 16'd0);         // LD.bf16
+            // bf16 zero constant
+            imem[6]  = enc_movi(4'd8, 16'h0000);    // R8 = bf16(0.0)
+            // ReLU: max(input, 0.0)
+            imem[7]  = enc_r(`OP_MAX, 1'b1, 4'd6, 4'd5, 4'd8);   // ★ MAX.f DT=1
+            // Store output
+            imem[8]  = enc_r(`OP_ADD, 1'b0, 4'd7, 4'd2, 4'd4);
+            imem[9]  = enc_m_f(`OP_ST, 4'd6, 4'd7, 16'd0);         // ST.bf16
+            imem[10] = INST_RET;
+
+            $display("  ReLU: max(x, 0) — per-thread divergent inputs");
+            print_program(0, 11);
+            enable_trace;
+            launch_kernel(32'd0);
+            wait_kernel_done(200);
+            disable_trace;
+
+            // GPR checks (per-SP divergent results)
+            check_gpr(2'd0, 4'd6, 16'h0000, "K29 SP0 relu(-1)=0");
+            check_gpr(2'd1, 4'd6, 16'h4000, "K29 SP1 relu(2)=2.0");
+            check_gpr(2'd2, 4'd6, 16'h0000, "K29 SP2 relu(-3)=0");
+            check_gpr(2'd3, 4'd6, 16'h40A0, "K29 SP3 relu(5)=5.0");
+            // DMEM checks
+            check_dmem(2'd0, 10'd16, 16'h0000, "K29 SP0 out=0.0");
+            check_dmem(2'd1, 10'd18, 16'h4000, "K29 SP1 out=2.0");
+            check_dmem(2'd2, 10'd20, 16'h0000, "K29 SP2 out=0.0");
+            check_dmem(2'd3, 10'd22, 16'h40A0, "K29 SP3 out=5.0");
+        end
+
+        // ── K30: PTX K6 — wmma_bf16 4×4 matmul D=A*B+C ─────────
+        // Exact assembly from SVG K6 (16 instructions + MOV.TID):
+        //   MOV.TID R0          ; tid
+        //   MOVI R1, base_A     ; 0
+        //   MOVI R2, base_B     ; 32
+        //   MOVI R3, base_D     ; 64
+        //   SHL  R4, R0, 3      ; row_offset = tid*8
+        //   ADD  R1, R1, R4     ; R1 = &A[my_row][0]
+        //   ADD  R2, R2, R4     ; R2 = &B[my_row][0]
+        //   ADD  R3, R3, R4     ; R3 = &D[my_row][0]
+        //   WMMA.LOAD R4,R1,0   ; A frag → R4..R7
+        //   WMMA.LOAD R8,R2,0   ; B frag → R8..R11
+        //   MOVI R12, 0         ; C[0]=0
+        //   MOVI R13, 0         ; C[1]=0
+        //   MOVI R14, 0         ; C[2]=0
+        //   MOVI R15, 0         ; C[3]=0
+        //   WMMA.MMA R12,R4,R8,R12  ; D = A*B + C
+        //   WMMA.STORE R12,R3,0     ; store D
+        //   RET
+        //
+        // Math: A=I(4×4), B=2*ones(4×4), C=0 → D=2*ones
+        // Row stride = tid*8 → SP0@base, SP1@base+8, SP2@base+16, SP3@base+24
+        begin
+            $display("\n--- K30: PTX K6 wmma_bf16 4x4 matmul ---");
+            reset_dut;
+            clear_dmem;
+
+            // Pre-load A = identity matrix (per-SP rows)
+            // SP0 row 0 @[0..3]: {1.0, 0, 0, 0}
+            dmem0[0] = 16'h3F80; dmem0[1] = 16'h0000;
+            dmem0[2] = 16'h0000; dmem0[3] = 16'h0000;
+            // SP1 row 1 @[8..11]: {0, 1.0, 0, 0}
+            dmem1[8] = 16'h0000; dmem1[9] = 16'h3F80;
+            dmem1[10] = 16'h0000; dmem1[11] = 16'h0000;
+            // SP2 row 2 @[16..19]: {0, 0, 1.0, 0}
+            dmem2[16] = 16'h0000; dmem2[17] = 16'h0000;
+            dmem2[18] = 16'h3F80; dmem2[19] = 16'h0000;
+            // SP3 row 3 @[24..27]: {0, 0, 0, 1.0}
+            dmem3[24] = 16'h0000; dmem3[25] = 16'h0000;
+            dmem3[26] = 16'h0000; dmem3[27] = 16'h3F80;
+
+            // Pre-load B = 2.0 everywhere (base_B=32)
+            // SP0 @[32..35]
+            dmem0[32] = 16'h4000; dmem0[33] = 16'h4000;
+            dmem0[34] = 16'h4000; dmem0[35] = 16'h4000;
+            // SP1 @[40..43]
+            dmem1[40] = 16'h4000; dmem1[41] = 16'h4000;
+            dmem1[42] = 16'h4000; dmem1[43] = 16'h4000;
+            // SP2 @[48..51]
+            dmem2[48] = 16'h4000; dmem2[49] = 16'h4000;
+            dmem2[50] = 16'h4000; dmem2[51] = 16'h4000;
+            // SP3 @[56..59]
+            dmem3[56] = 16'h4000; dmem3[57] = 16'h4000;
+            dmem3[58] = 16'h4000; dmem3[59] = 16'h4000;
+
+            imem[0]  = enc_mov_tid(4'd0);
+            imem[1]  = enc_movi(4'd1, 16'd0);                     // base_A
+            imem[2]  = enc_movi(4'd2, 16'd32);                    // base_B
+            imem[3]  = enc_movi(4'd3, 16'd64);                    // base_D
+            imem[4]  = enc_i(`OP_SHL, 1'b0, 4'd4, 4'd0, 16'd3);  // R4 = tid*8
+            imem[5]  = enc_r(`OP_ADD, 1'b0, 4'd1, 4'd1, 4'd4);   // R1 = &A[row]
+            imem[6]  = enc_r(`OP_ADD, 1'b0, 4'd2, 4'd2, 4'd4);   // R2 = &B[row]
+            imem[7]  = enc_r(`OP_ADD, 1'b0, 4'd3, 4'd3, 4'd4);   // R3 = &D[row]
+            imem[8]  = enc_m_f(`WMMA_LOAD, 4'd4, 4'd1, 16'd0);    // A→R4..R7 DT=1
+            imem[9]  = enc_m_f(`WMMA_LOAD, 4'd8, 4'd2, 16'd0);    // B→R8..R11 DT=1
+            imem[10] = enc_movi(4'd12, 16'h0000);                 // C[0]=0
+            imem[11] = enc_movi(4'd13, 16'h0000);                 // C[1]=0
+            imem[12] = enc_movi(4'd14, 16'h0000);                 // C[2]=0
+            imem[13] = enc_movi(4'd15, 16'h0000);                 // C[3]=0
+            imem[14] = enc_wmma_mma(4'd12, 4'd4, 4'd8, 4'd12);   // D=A*B+C
+            imem[15] = enc_m_f(`WMMA_STORE, 4'd12, 4'd3, 16'd0);  // D→DMEM DT=1
+            imem[16] = INST_RET;
+
+            $display("  D = I(4x4) * 2*ones(4x4) + 0 = 2*ones");
+            $display("  Row stride = tid*8, base_A=0, base_B=32, base_D=64");
+            print_program(0, 17);
+            enable_trace;
+            launch_kernel(32'd0);
+            wait_kernel_done(400);
+            disable_trace;
+            $display("  Post-exec RF dump:");
+            dump_rf_range(4'd0, 4'd15);
+
+            // D = 2.0 everywhere (0x4000)
+            check_gpr_all(4'd12, 16'h4000, "K30 D[i][0]=2.0");
+            check_gpr_all(4'd13, 16'h4000, "K30 D[i][1]=2.0");
+            check_gpr_all(4'd14, 16'h4000, "K30 D[i][2]=2.0");
+            check_gpr_all(4'd15, 16'h4000, "K30 D[i][3]=2.0");
+            // Check DMEM store results
+            // SP0: D row @[64..67], SP1 @[72..75], SP2 @[80..83], SP3 @[88..91]
+            check_dmem(2'd0, 10'd64, 16'h4000, "K30 SP0 D[0][0]=2.0");
+            check_dmem(2'd0, 10'd65, 16'h4000, "K30 SP0 D[0][1]=2.0");
+            check_dmem(2'd0, 10'd66, 16'h4000, "K30 SP0 D[0][2]=2.0");
+            check_dmem(2'd0, 10'd67, 16'h4000, "K30 SP0 D[0][3]=2.0");
+            check_dmem(2'd1, 10'd72, 16'h4000, "K30 SP1 D[1][0]=2.0");
+            check_dmem(2'd1, 10'd73, 16'h4000, "K30 SP1 D[1][1]=2.0");
+            check_dmem(2'd1, 10'd74, 16'h4000, "K30 SP1 D[1][2]=2.0");
+            check_dmem(2'd1, 10'd75, 16'h4000, "K30 SP1 D[1][3]=2.0");
+            check_dmem(2'd2, 10'd80, 16'h4000, "K30 SP2 D[2][0]=2.0");
+            check_dmem(2'd2, 10'd81, 16'h4000, "K30 SP2 D[2][1]=2.0");
+            check_dmem(2'd2, 10'd82, 16'h4000, "K30 SP2 D[2][2]=2.0");
+            check_dmem(2'd2, 10'd83, 16'h4000, "K30 SP2 D[2][3]=2.0");
+            check_dmem(2'd3, 10'd88, 16'h4000, "K30 SP3 D[3][0]=2.0");
+            check_dmem(2'd3, 10'd89, 16'h4000, "K30 SP3 D[3][1]=2.0");
+            check_dmem(2'd3, 10'd90, 16'h4000, "K30 SP3 D[3][2]=2.0");
+            check_dmem(2'd3, 10'd91, 16'h4000, "K30 SP3 D[3][3]=2.0");
         end
 
         // ── Summary ──────────────────────────────────────

@@ -1,0 +1,1206 @@
+VCD info: dumpfile sm_core_tb.vcd opened for output.
+============================================
+  SM Core Testbench — Starting
+============================================
+
+--- K1: Basic ALU (MOVI + ADD) ---
+  [C000] PC=0 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C001] PC=0 ir=20100064 dec=20100064 MOVI     fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C002] PC=1 ir=20100064 dec=20100064 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C003] PC=2 ir=202000c8 dec=202000c8 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C004] PC=3 ir=30312000 dec=30312000 ADD      fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0006 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C005] PC=3 ir=c8000000 dec=30312000 ADD      fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0006 | SP0.w0: we=1 a=1 d=0064 | done=0
+  [C006] PC=3 ir=c8000000 dec=30312000 ADD      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0004 | SP0.w0: we=1 a=2 d=00c8 | done=0
+  [C007] PC=4 ir=c8000000 dec=c8000000 RET      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0008 | SP0.w0: we=0 a=2 d=00c8 | done=0
+  [C008] PC=4 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0008 | SP0.w0: we=0 a=2 d=00c8 | done=0
+  [C009] PC=4 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0008 | SP0.w0: we=1 a=3 d=012c | done=0
+  [C010] PC=4 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C011] PC=4 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=1
+[PASS] T1: K1 R1=100  SP0.R1 = 0x0064
+[PASS] T2: K1 R1=100  SP1.R1 = 0x0064
+[PASS] T3: K1 R1=100  SP2.R1 = 0x0064
+[PASS] T4: K1 R1=100  SP3.R1 = 0x0064
+[PASS] T5: K1 R2=200  SP0.R2 = 0x00c8
+[PASS] T6: K1 R2=200  SP1.R2 = 0x00c8
+[PASS] T7: K1 R2=200  SP2.R2 = 0x00c8
+[PASS] T8: K1 R2=200  SP3.R2 = 0x00c8
+[PASS] T9: K1 R3=300  SP0.R3 = 0x012c
+[PASS] T10: K1 R3=300  SP1.R3 = 0x012c
+[PASS] T11: K1 R3=300  SP2.R3 = 0x012c
+[PASS] T12: K1 R3=300  SP3.R3 = 0x012c
+
+--- K2: Memory LD / ST ---
+[PASS] T13: K2 R2=DMEM[10]  SP0.R2 = 0xabcd
+[PASS] T14: K2 R2=DMEM[10]  SP1.R2 = 0xabcd
+[PASS] T15: K2 R2=DMEM[10]  SP2.R2 = 0xabcd
+[PASS] T16: K2 R2=DMEM[10]  SP3.R2 = 0xabcd
+[PASS] T17: K2 R3=R2+1  SP0.R3 = 0xabce
+[PASS] T18: K2 R3=R2+1  SP1.R3 = 0xabce
+[PASS] T19: K2 R3=R2+1  SP2.R3 = 0xabce
+[PASS] T20: K2 R3=R2+1  SP3.R3 = 0xabce
+[PASS] T21: K2 DMEM[15]=R3  SP0.DMEM[15] = 0xabce
+[PASS] T22: K2 DMEM[15]=R3  SP1.DMEM[15] = 0xabce
+[PASS] T23: K2 DMEM[15]=R3  SP2.DMEM[15] = 0xabce
+[PASS] T24: K2 DMEM[15]=R3  SP3.DMEM[15] = 0xabce
+
+--- K3: Branch (BRA) ---
+[PASS] T25: K3 R1=42 (not overwritten)  SP0.R1 = 0x002a
+[PASS] T26: K3 R1=42 (not overwritten)  SP1.R1 = 0x002a
+[PASS] T27: K3 R1=42 (not overwritten)  SP2.R1 = 0x002a
+[PASS] T28: K3 R1=42 (not overwritten)  SP3.R1 = 0x002a
+[PASS] T29: K3 R2=55 (after branch)  SP0.R2 = 0x0037
+[PASS] T30: K3 R2=55 (after branch)  SP1.R2 = 0x0037
+[PASS] T31: K3 R2=55 (after branch)  SP2.R2 = 0x0037
+[PASS] T32: K3 R2=55 (after branch)  SP3.R2 = 0x0037
+
+--- K4: MUL + Scoreboard Stall ---
+  [C000] PC=0 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C001] PC=0 ir=20100003 dec=20100003 MOVI     fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C002] PC=1 ir=20100003 dec=20100003 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C003] PC=2 ir=20200007 dec=20200007 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C004] PC=3 ir=40312000 dec=40312000 MUL      fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0006 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C005] PC=3 ir=30431000 dec=40312000 MUL      fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0006 | SP0.w0: we=1 a=1 d=0003 | done=0
+  [C006] PC=3 ir=30431000 dec=40312000 MUL      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0004 | SP0.w0: we=1 a=2 d=0007 | done=0
+  [C007] PC=4 ir=30431000 dec=30431000 ADD      fv=1 lat=0 | fstl=1 sb=1 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0008 | SP0.w0: we=0 a=2 d=0007 | done=0
+  [C008] PC=4 ir=c8000000 dec=30431000 ADD      fv=1 lat=1 | fstl=1 sb=1 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0008 | SP0.w0: we=0 a=2 d=0007 | done=0
+  [C009] PC=4 ir=c8000000 dec=30431000 ADD      fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0008 | SP0.w0: we=0 a=2 d=0007 | done=0
+  [C010] PC=4 ir=c8000000 dec=30431000 ADD      fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0008 | SP0.w0: we=0 a=2 d=0007 | done=0
+  [C011] PC=4 ir=c8000000 dec=30431000 ADD      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0008 | SP0.w0: we=1 a=3 d=0015 | done=0
+  [C012] PC=5 ir=c8000000 dec=c8000000 RET      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0010 | SP0.w0: we=0 a=3 d=0015 | done=0
+  [C013] PC=5 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0010 | SP0.w0: we=0 a=3 d=0015 | done=0
+  [C014] PC=5 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0010 | SP0.w0: we=1 a=4 d=0018 | done=0
+  [C015] PC=5 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C016] PC=5 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=1
+[PASS] T33: K4 R3=3*7=21  SP0.R3 = 0x0015
+[PASS] T34: K4 R3=3*7=21  SP1.R3 = 0x0015
+[PASS] T35: K4 R3=3*7=21  SP2.R3 = 0x0015
+[PASS] T36: K4 R3=3*7=21  SP3.R3 = 0x0015
+[PASS] T37: K4 R4=21+3=24  SP0.R4 = 0x0018
+[PASS] T38: K4 R4=21+3=24  SP1.R4 = 0x0018
+[PASS] T39: K4 R4=21+3=24  SP2.R4 = 0x0018
+[PASS] T40: K4 R4=21+3=24  SP3.R4 = 0x0018
+
+--- K5: MOV.TID ---
+[PASS] T41: K5 SP0.R1=TID0  SP0.R1 = 0x0000
+[PASS] T42: K5 SP1.R1=TID1  SP1.R1 = 0x0001
+[PASS] T43: K5 SP2.R1=TID2  SP2.R1 = 0x0002
+[PASS] T44: K5 SP3.R1=TID3  SP3.R1 = 0x0003
+
+--- K6: Back-to-back MOVI (no hazard) ---
+[PASS] T45: K6 R1=10  SP0.R1 = 0x000a
+[PASS] T46: K6 R1=10  SP1.R1 = 0x000a
+[PASS] T47: K6 R1=10  SP2.R1 = 0x000a
+[PASS] T48: K6 R1=10  SP3.R1 = 0x000a
+[PASS] T49: K6 R2=20  SP0.R2 = 0x0014
+[PASS] T50: K6 R2=20  SP1.R2 = 0x0014
+[PASS] T51: K6 R2=20  SP2.R2 = 0x0014
+[PASS] T52: K6 R2=20  SP3.R2 = 0x0014
+[PASS] T53: K6 R3=30  SP0.R3 = 0x001e
+[PASS] T54: K6 R3=30  SP1.R3 = 0x001e
+[PASS] T55: K6 R3=30  SP2.R3 = 0x001e
+[PASS] T56: K6 R3=30  SP3.R3 = 0x001e
+[PASS] T57: K6 R4=40  SP0.R4 = 0x0028
+[PASS] T58: K6 R4=40  SP1.R4 = 0x0028
+[PASS] T59: K6 R4=40  SP2.R4 = 0x0028
+[PASS] T60: K6 R4=40  SP3.R4 = 0x0028
+[PASS] T61: K6 R5=50  SP0.R5 = 0x0032
+[PASS] T62: K6 R5=50  SP1.R5 = 0x0032
+[PASS] T63: K6 R5=50  SP2.R5 = 0x0032
+[PASS] T64: K6 R5=50  SP3.R5 = 0x0032
+
+--- K7: Per-thread LD/ST ---
+[PASS] T65: K7 SP0 DMEM[100]  SP0.DMEM[100] = 0xcafe
+[PASS] T66: K7 SP1 DMEM[101]  SP1.DMEM[101] = 0xcafe
+[PASS] T67: K7 SP2 DMEM[102]  SP2.DMEM[102] = 0xcafe
+[PASS] T68: K7 SP3 DMEM[103]  SP3.DMEM[103] = 0xcafe
+[PASS] T69: K7 R3=loaded CAFE  SP0.R3 = 0xcafe
+[PASS] T70: K7 R3=loaded CAFE  SP1.R3 = 0xcafe
+[PASS] T71: K7 R3=loaded CAFE  SP2.R3 = 0xcafe
+[PASS] T72: K7 R3=loaded CAFE  SP3.R3 = 0xcafe
+
+--- K8: Logic + Shift ---
+[PASS] T73: K8 AND  SP0.R3 = 0x000f
+[PASS] T74: K8 AND  SP1.R3 = 0x000f
+[PASS] T75: K8 AND  SP2.R3 = 0x000f
+[PASS] T76: K8 AND  SP3.R3 = 0x000f
+[PASS] T77: K8 OR  SP0.R4 = 0x0fff
+[PASS] T78: K8 OR  SP1.R4 = 0x0fff
+[PASS] T79: K8 OR  SP2.R4 = 0x0fff
+[PASS] T80: K8 OR  SP3.R4 = 0x0fff
+[PASS] T81: K8 XOR  SP0.R5 = 0x0ff0
+[PASS] T82: K8 XOR  SP1.R5 = 0x0ff0
+[PASS] T83: K8 XOR  SP2.R5 = 0x0ff0
+[PASS] T84: K8 XOR  SP3.R5 = 0x0ff0
+[PASS] T85: K8 SHL 4  SP0.R6 = 0x0ff0
+[PASS] T86: K8 SHL 4  SP1.R6 = 0x0ff0
+[PASS] T87: K8 SHL 4  SP2.R6 = 0x0ff0
+[PASS] T88: K8 SHL 4  SP3.R6 = 0x0ff0
+[PASS] T89: K8 SHR 4  SP0.R7 = 0x000f
+[PASS] T90: K8 SHR 4  SP1.R7 = 0x000f
+[PASS] T91: K8 SHR 4  SP2.R7 = 0x000f
+[PASS] T92: K8 SHR 4  SP3.R7 = 0x000f
+
+--- K9: FMA ---
+[PASS] T93: K9 FMA 5*6+10=40  SP0.R3 = 0x0028
+[PASS] T94: K9 FMA 5*6+10=40  SP1.R3 = 0x0028
+[PASS] T95: K9 FMA 5*6+10=40  SP2.R3 = 0x0028
+[PASS] T96: K9 FMA 5*6+10=40  SP3.R3 = 0x0028
+
+--- K10: Non-zero entry PC ---
+[PASS] T97: K10 R1=0xBEEF  SP0.R1 = 0xbeef
+[PASS] T98: K10 R1=0xBEEF  SP1.R1 = 0xbeef
+[PASS] T99: K10 R1=0xBEEF  SP2.R1 = 0xbeef
+[PASS] T100: K10 R1=0xBEEF  SP3.R1 = 0xbeef
+[PASS] T101: K10 R2=0xDEAD  SP0.R2 = 0xdead
+[PASS] T102: K10 R2=0xDEAD  SP1.R2 = 0xdead
+[PASS] T103: K10 R2=0xDEAD  SP2.R2 = 0xdead
+[PASS] T104: K10 R2=0xDEAD  SP3.R2 = 0xdead
+
+--- K11: SUB + NEG + ABS ---
+[PASS] T105: K11 SUB 30-50=-20  SP0.R3 = 0xffec
+[PASS] T106: K11 SUB 30-50=-20  SP1.R3 = 0xffec
+[PASS] T107: K11 SUB 30-50=-20  SP2.R3 = 0xffec
+[PASS] T108: K11 SUB 30-50=-20  SP3.R3 = 0xffec
+[PASS] T109: K11 NEG(-20)=20  SP0.R4 = 0x0014
+[PASS] T110: K11 NEG(-20)=20  SP1.R4 = 0x0014
+[PASS] T111: K11 NEG(-20)=20  SP2.R4 = 0x0014
+[PASS] T112: K11 NEG(-20)=20  SP3.R4 = 0x0014
+[PASS] T113: K11 ABS(-20)=20  SP0.R5 = 0x0014
+[PASS] T114: K11 ABS(-20)=20  SP1.R5 = 0x0014
+[PASS] T115: K11 ABS(-20)=20  SP2.R5 = 0x0014
+[PASS] T116: K11 ABS(-20)=20  SP3.R5 = 0x0014
+
+--- K12: ADDI chain (scoreboard stress) ---
+  [C000] PC=0 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C001] PC=0 ir=20100000 dec=20100000 MOVI     fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C002] PC=1 ir=20100000 dec=20100000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C003] PC=2 ir=98110001 dec=98110001 ADDI     fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C004] PC=2 ir=98110001 dec=98110001 ADDI     fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C005] PC=2 ir=98110001 dec=98110001 ADDI     fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=1 a=1 d=0000 | done=0
+  [C006] PC=3 ir=98110001 dec=98110001 ADDI     fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=0 a=1 d=0000 | done=0
+  [C007] PC=3 ir=98110001 dec=98110001 ADDI     fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=0 a=1 d=0000 | done=0
+  [C008] PC=3 ir=98110001 dec=98110001 ADDI     fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=1 a=1 d=0001 | done=0
+  [C009] PC=4 ir=98110001 dec=98110001 ADDI     fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=0 a=1 d=0001 | done=0
+  [C010] PC=4 ir=98110001 dec=98110001 ADDI     fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=0 a=1 d=0001 | done=0
+  [C011] PC=4 ir=98110001 dec=98110001 ADDI     fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=1 a=1 d=0002 | done=0
+  [C012] PC=5 ir=98110001 dec=98110001 ADDI     fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=0 a=1 d=0002 | done=0
+  [C013] PC=5 ir=c8000000 dec=98110001 ADDI     fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=0 a=1 d=0002 | done=0
+  [C014] PC=5 ir=c8000000 dec=98110001 ADDI     fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=1 a=1 d=0003 | done=0
+  [C015] PC=6 ir=c8000000 dec=c8000000 RET      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=0 a=1 d=0003 | done=0
+  [C016] PC=6 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=0 a=1 d=0003 | done=0
+  [C017] PC=6 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=1 a=1 d=0004 | done=0
+  [C018] PC=6 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C019] PC=6 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=1
+[PASS] T117: K12 ADDI chain R1=4  SP0.R1 = 0x0004
+[PASS] T118: K12 ADDI chain R1=4  SP1.R1 = 0x0004
+[PASS] T119: K12 ADDI chain R1=4  SP2.R1 = 0x0004
+[PASS] T120: K12 ADDI chain R1=4  SP3.R1 = 0x0004
+
+--- K13: MAX / MIN ---
+[PASS] T121: K13 MAX(100,200)=200  SP0.R3 = 0x00c8
+[PASS] T122: K13 MAX(100,200)=200  SP1.R3 = 0x00c8
+[PASS] T123: K13 MAX(100,200)=200  SP2.R3 = 0x00c8
+[PASS] T124: K13 MAX(100,200)=200  SP3.R3 = 0x00c8
+[PASS] T125: K13 MIN(100,200)=100  SP0.R4 = 0x0064
+[PASS] T126: K13 MIN(100,200)=100  SP1.R4 = 0x0064
+[PASS] T127: K13 MIN(100,200)=100  SP2.R4 = 0x0064
+[PASS] T128: K13 MIN(100,200)=100  SP3.R4 = 0x0064
+
+--- K14: WMMA.LOAD basic ---
+[PASS] T129: K14 R4=0x1111  SP0.R4 = 0x1111
+[PASS] T130: K14 R4=0x1111  SP1.R4 = 0x1111
+[PASS] T131: K14 R4=0x1111  SP2.R4 = 0x1111
+[PASS] T132: K14 R4=0x1111  SP3.R4 = 0x1111
+[PASS] T133: K14 R5=0x2222  SP0.R5 = 0x2222
+[PASS] T134: K14 R5=0x2222  SP1.R5 = 0x2222
+[PASS] T135: K14 R5=0x2222  SP2.R5 = 0x2222
+[PASS] T136: K14 R5=0x2222  SP3.R5 = 0x2222
+[PASS] T137: K14 R6=0x3333  SP0.R6 = 0x3333
+[PASS] T138: K14 R6=0x3333  SP1.R6 = 0x3333
+[PASS] T139: K14 R6=0x3333  SP2.R6 = 0x3333
+[PASS] T140: K14 R6=0x3333  SP3.R6 = 0x3333
+[PASS] T141: K14 R7=0x4444  SP0.R7 = 0x4444
+[PASS] T142: K14 R7=0x4444  SP1.R7 = 0x4444
+[PASS] T143: K14 R7=0x4444  SP2.R7 = 0x4444
+[PASS] T144: K14 R7=0x4444  SP3.R7 = 0x4444
+
+--- K15: WMMA.STORE basic ---
+[PASS] T145: K15 DMEM[300]=0x1234  SP0.DMEM[300] = 0x1234
+[PASS] T146: K15 DMEM[300]=0x1234  SP1.DMEM[300] = 0x1234
+[PASS] T147: K15 DMEM[300]=0x1234  SP2.DMEM[300] = 0x1234
+[PASS] T148: K15 DMEM[300]=0x1234  SP3.DMEM[300] = 0x1234
+[PASS] T149: K15 DMEM[301]=0x5678  SP0.DMEM[301] = 0x5678
+[PASS] T150: K15 DMEM[301]=0x5678  SP1.DMEM[301] = 0x5678
+[PASS] T151: K15 DMEM[301]=0x5678  SP2.DMEM[301] = 0x5678
+[PASS] T152: K15 DMEM[301]=0x5678  SP3.DMEM[301] = 0x5678
+[PASS] T153: K15 DMEM[302]=0x9ABC  SP0.DMEM[302] = 0x9abc
+[PASS] T154: K15 DMEM[302]=0x9ABC  SP1.DMEM[302] = 0x9abc
+[PASS] T155: K15 DMEM[302]=0x9ABC  SP2.DMEM[302] = 0x9abc
+[PASS] T156: K15 DMEM[302]=0x9ABC  SP3.DMEM[302] = 0x9abc
+[PASS] T157: K15 DMEM[303]=0xDEF0  SP0.DMEM[303] = 0xdef0
+[PASS] T158: K15 DMEM[303]=0xDEF0  SP1.DMEM[303] = 0xdef0
+[PASS] T159: K15 DMEM[303]=0xDEF0  SP2.DMEM[303] = 0xdef0
+[PASS] T160: K15 DMEM[303]=0xDEF0  SP3.DMEM[303] = 0xdef0
+
+--- K16: WMMA.MMA uniform 1*1+0=4.0 ---
+  Computation: D = A*B + C = ones(4)*ones(4) + zeros(4) = 4*ones(4)
+  Program listing:
+    [ 0] 20003f80  MOVI    R0, 16256 (0x3f80)
+    [ 1] 20103f80  MOVI    R1, 16256 (0x3f80)
+    [ 2] 20203f80  MOVI    R2, 16256 (0x3f80)
+    [ 3] 20303f80  MOVI    R3, 16256 (0x3f80)
+    [ 4] 20403f80  MOVI    R4, 16256 (0x3f80)
+    [ 5] 20503f80  MOVI    R5, 16256 (0x3f80)
+    [ 6] 20603f80  MOVI    R6, 16256 (0x3f80)
+    [ 7] 20703f80  MOVI    R7, 16256 (0x3f80)
+    [ 8] ecc04800  WMMA.MMA  D=R12..15, A=R0..3, B=R4..7, C=R8..11
+    [ 9] c8000000  RET
+  [C000] PC=0 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C001] PC=0 ir=20003f80 dec=20003f80 MOVI     fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C002] PC=1 ir=20003f80 dec=20003f80 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C003] PC=2 ir=20103f80 dec=20103f80 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0001 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C004] PC=3 ir=20203f80 dec=20203f80 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0003 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C005] PC=4 ir=20303f80 dec=20303f80 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0007 | SP0.w0: we=1 a=0 d=3f80 | done=0
+  [C006] PC=5 ir=20403f80 dec=20403f80 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=000e | SP0.w0: we=1 a=1 d=3f80 | done=0
+  [C007] PC=6 ir=20503f80 dec=20503f80 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=001c | SP0.w0: we=1 a=2 d=3f80 | done=0
+  [C008] PC=7 ir=20603f80 dec=20603f80 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0038 | SP0.w0: we=1 a=3 d=3f80 | done=0
+  [C009] PC=8 ir=20703f80 dec=20703f80 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0070 | SP0.w0: we=1 a=4 d=3f80 | done=0
+  [C010] PC=9 ir=ecc04800 dec=ecc04800 WMMA.MMA fv=1 lat=0 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=00e0 | SP0.w0: we=1 a=5 d=3f80 | done=0
+  [C011] PC=9 ir=c8000000 dec=ecc04800 WMMA.MMA fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=00c0 | SP0.w0: we=1 a=6 d=3f80 | done=0
+  [C012] PC=9 ir=c8000000 dec=ecc04800 WMMA.MMA fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=1 a=7 d=3f80 | done=0
+  [C013] PC=9 ir=c8000000 dec=ecc04800 WMMA.MMA fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C014] PC=10 ir=c8000000 dec=c8000000 RET      fv=1 lat=0 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=GATH_A   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C015] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=GATH_B   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C016] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=GATH_C   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C017] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C018] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C019] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C020] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C021] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C022] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C023] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C024] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C025] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C026] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C027] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C028] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C029] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C030] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C031] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C032] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C033] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C034] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C035] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C036] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C037] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C038] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C039] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C040] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C041] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C042] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C043] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C044] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C045] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C046] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C047] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C048] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C049] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C050] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C051] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C052] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C053] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C054] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C055] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=SCAT_0   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C056] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=SCAT_1   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C057] PC=10 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C058] PC=10 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C059] PC=10 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C060] PC=10 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C061] PC=10 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=1
+  Post-exec RF dump:
+  RF dump       R0     R1     R2     R3     R4     R5     R6     R7     R8     R9     R10    R11    R12    R13    R14    R15  
+       SP0:   3f80  3f80  3f80  3f80  3f80  3f80  3f80  3f80  0000  0000  0000  0000  4080  4080  4080  4080 
+       SP1:   3f80  3f80  3f80  3f80  3f80  3f80  3f80  3f80  0000  0000  0000  0000  4080  4080  4080  4080 
+       SP2:   3f80  3f80  3f80  3f80  3f80  3f80  3f80  3f80  0000  0000  0000  0000  4080  4080  4080  4080 
+       SP3:   3f80  3f80  3f80  3f80  3f80  3f80  3f80  3f80  0000  0000  0000  0000  4080  4080  4080  4080 
+[PASS] T161: K16 D[i][0]=4.0  SP0.R12 = 0x4080
+[PASS] T162: K16 D[i][0]=4.0  SP1.R12 = 0x4080
+[PASS] T163: K16 D[i][0]=4.0  SP2.R12 = 0x4080
+[PASS] T164: K16 D[i][0]=4.0  SP3.R12 = 0x4080
+[PASS] T165: K16 D[i][1]=4.0  SP0.R13 = 0x4080
+[PASS] T166: K16 D[i][1]=4.0  SP1.R13 = 0x4080
+[PASS] T167: K16 D[i][1]=4.0  SP2.R13 = 0x4080
+[PASS] T168: K16 D[i][1]=4.0  SP3.R13 = 0x4080
+[PASS] T169: K16 D[i][2]=4.0  SP0.R14 = 0x4080
+[PASS] T170: K16 D[i][2]=4.0  SP1.R14 = 0x4080
+[PASS] T171: K16 D[i][2]=4.0  SP2.R14 = 0x4080
+[PASS] T172: K16 D[i][2]=4.0  SP3.R14 = 0x4080
+[PASS] T173: K16 D[i][3]=4.0  SP0.R15 = 0x4080
+[PASS] T174: K16 D[i][3]=4.0  SP1.R15 = 0x4080
+[PASS] T175: K16 D[i][3]=4.0  SP2.R15 = 0x4080
+[PASS] T176: K16 D[i][3]=4.0  SP3.R15 = 0x4080
+
+--- K17: WMMA.MMA 2*3+1=25.0 ---
+  Computation: D = A*B + C = 2*ones(4) * 3*ones(4) + ones(4)
+             = 4*(2*3)*ones(4) + ones(4) = 24+1 = 25.0
+  Program listing:
+    [ 0] 20004000  MOVI    R0, 16384 (0x4000)
+    [ 1] 20104000  MOVI    R1, 16384 (0x4000)
+    [ 2] 20204000  MOVI    R2, 16384 (0x4000)
+    [ 3] 20304000  MOVI    R3, 16384 (0x4000)
+    [ 4] 20404040  MOVI    R4, 16448 (0x4040)
+    [ 5] 20504040  MOVI    R5, 16448 (0x4040)
+    [ 6] 20604040  MOVI    R6, 16448 (0x4040)
+    [ 7] 20704040  MOVI    R7, 16448 (0x4040)
+    [ 8] 20803f80  MOVI    R8, 16256 (0x3f80)
+    [ 9] 20903f80  MOVI    R9, 16256 (0x3f80)
+    [10] 20a03f80  MOVI    R10, 16256 (0x3f80)
+    [11] 20b03f80  MOVI    R11, 16256 (0x3f80)
+    [12] ecc04800  WMMA.MMA  D=R12..15, A=R0..3, B=R4..7, C=R8..11
+    [13] c8000000  RET
+  [C000] PC=0 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C001] PC=0 ir=20004000 dec=20004000 MOVI     fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C002] PC=1 ir=20004000 dec=20004000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C003] PC=2 ir=20104000 dec=20104000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0001 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C004] PC=3 ir=20204000 dec=20204000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0003 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C005] PC=4 ir=20304000 dec=20304000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0007 | SP0.w0: we=1 a=0 d=4000 | done=0
+  [C006] PC=5 ir=20404040 dec=20404040 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=000e | SP0.w0: we=1 a=1 d=4000 | done=0
+  [C007] PC=6 ir=20504040 dec=20504040 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=001c | SP0.w0: we=1 a=2 d=4000 | done=0
+  [C008] PC=7 ir=20604040 dec=20604040 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0038 | SP0.w0: we=1 a=3 d=4000 | done=0
+  [C009] PC=8 ir=20704040 dec=20704040 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0070 | SP0.w0: we=1 a=4 d=4040 | done=0
+  [C010] PC=9 ir=20803f80 dec=20803f80 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=00e0 | SP0.w0: we=1 a=5 d=4040 | done=0
+  [C011] PC=10 ir=20903f80 dec=20903f80 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=01c0 | SP0.w0: we=1 a=6 d=4040 | done=0
+  [C012] PC=11 ir=20a03f80 dec=20a03f80 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0380 | SP0.w0: we=1 a=7 d=4040 | done=0
+  [C013] PC=12 ir=20b03f80 dec=20b03f80 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0700 | SP0.w0: we=1 a=8 d=3f80 | done=0
+  [C014] PC=13 ir=ecc04800 dec=ecc04800 WMMA.MMA fv=1 lat=0 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0e00 | SP0.w0: we=1 a=9 d=3f80 | done=0
+  [C015] PC=13 ir=c8000000 dec=ecc04800 WMMA.MMA fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0c00 | SP0.w0: we=1 a=10 d=3f80 | done=0
+  [C016] PC=13 ir=c8000000 dec=ecc04800 WMMA.MMA fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0800 | SP0.w0: we=1 a=11 d=3f80 | done=0
+  [C017] PC=13 ir=c8000000 dec=ecc04800 WMMA.MMA fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C018] PC=14 ir=c8000000 dec=c8000000 RET      fv=1 lat=0 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=GATH_A   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C019] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=GATH_B   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C020] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=GATH_C   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C021] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C022] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C023] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C024] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C025] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C026] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C027] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C028] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C029] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C030] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C031] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C032] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C033] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C034] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C035] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C036] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C037] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C038] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C039] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C040] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C041] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C042] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C043] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C044] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C045] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C046] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C047] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C048] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C049] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C050] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C051] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C052] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C053] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C054] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C055] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C056] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C057] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C058] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C059] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=SCAT_0   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C060] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=SCAT_1   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C061] PC=14 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C062] PC=14 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C063] PC=14 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=11 d=3f80 | done=0
+  [C064] PC=14 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C065] PC=14 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=1
+  Post-exec RF dump:
+  RF dump       R0     R1     R2     R3     R4     R5     R6     R7     R8     R9     R10    R11    R12    R13    R14    R15  
+       SP0:   4000  4000  4000  4000  4040  4040  4040  4040  3f80  3f80  3f80  3f80  41c8  41c8  41c8  41c8 
+       SP1:   4000  4000  4000  4000  4040  4040  4040  4040  3f80  3f80  3f80  3f80  41c8  41c8  41c8  41c8 
+       SP2:   4000  4000  4000  4000  4040  4040  4040  4040  3f80  3f80  3f80  3f80  41c8  41c8  41c8  41c8 
+       SP3:   4000  4000  4000  4000  4040  4040  4040  4040  3f80  3f80  3f80  3f80  41c8  41c8  41c8  41c8 
+[PASS] T177: K17 D[i][0]=25.0  SP0.R12 = 0x41c8
+[PASS] T178: K17 D[i][0]=25.0  SP1.R12 = 0x41c8
+[PASS] T179: K17 D[i][0]=25.0  SP2.R12 = 0x41c8
+[PASS] T180: K17 D[i][0]=25.0  SP3.R12 = 0x41c8
+[PASS] T181: K17 D[i][1]=25.0  SP0.R13 = 0x41c8
+[PASS] T182: K17 D[i][1]=25.0  SP1.R13 = 0x41c8
+[PASS] T183: K17 D[i][1]=25.0  SP2.R13 = 0x41c8
+[PASS] T184: K17 D[i][1]=25.0  SP3.R13 = 0x41c8
+[PASS] T185: K17 D[i][2]=25.0  SP0.R14 = 0x41c8
+[PASS] T186: K17 D[i][2]=25.0  SP1.R14 = 0x41c8
+[PASS] T187: K17 D[i][2]=25.0  SP2.R14 = 0x41c8
+[PASS] T188: K17 D[i][2]=25.0  SP3.R14 = 0x41c8
+[PASS] T189: K17 D[i][3]=25.0  SP0.R15 = 0x41c8
+[PASS] T190: K17 D[i][3]=25.0  SP1.R15 = 0x41c8
+[PASS] T191: K17 D[i][3]=25.0  SP2.R15 = 0x41c8
+[PASS] T192: K17 D[i][3]=25.0  SP3.R15 = 0x41c8
+
+--- K18: WMMA full pipeline LOAD->MMA->STORE ---
+  DMEM pre-load: A=I(4x4) @200, B=2.0*ones @204, C=0 @208
+  Computation: D = I*2*ones + 0 = 2*ones => all 2.0 (0x4000)
+  Program listing:
+    [ 0] 200000c8  MOVI    R0, 200 (0x00c8)
+    [ 1] f0400000  WMMA.LOAD R4..7, [R0 + 0]
+    [ 2] f0800004  WMMA.LOAD R8..11, [R0 + 4]
+    [ 3] 00000000  NOP
+    [ 4] 00000000  NOP
+    [ 5] 00000000  NOP
+    [ 6] 00000000  NOP
+    [ 7] 20000000  MOVI    R0, 0 (0x0000)
+    [ 8] 20100000  MOVI    R1, 0 (0x0000)
+    [ 9] 20200000  MOVI    R2, 0 (0x0000)
+    [10] 20300000  MOVI    R3, 0 (0x0000)
+    [11] ecc48000  WMMA.MMA  D=R12..15, A=R4..7, B=R8..11, C=R0..3
+    [12] 00000000  NOP
+    [13] 00000000  NOP
+    [14] 00000000  NOP
+    [15] 00000000  NOP
+    [16] 2000012c  MOVI    R0, 300 (0x012c)
+    [17] f8c00000  WMMA.STORE R12..15, [R0 + 0]
+    [18] c8000000  RET
+  [C000] PC=0 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C001] PC=0 ir=200000c8 dec=200000c8 MOVI     fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C002] PC=1 ir=200000c8 dec=200000c8 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C003] PC=2 ir=f0400000 dec=f0400000 WMMA.LD  fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0001 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C004] PC=2 ir=f0800004 dec=f0400000 WMMA.LD  fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0001 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C005] PC=2 ir=f0800004 dec=f0400000 WMMA.LD  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0001 | SP0.w0: we=1 a=0 d=00c8 | done=0
+  [C006] PC=2 ir=f0800004 dec=f0400000 WMMA.LD  fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=00c8 | done=0
+  [C007] PC=3 ir=f0800004 dec=f0800004 WMMA.LD  fv=1 lat=0 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_ADDR  | pend0=0000 | SP0.w0: we=0 a=0 d=00c8 | done=0
+  [C008] PC=3 ir=00000000 dec=f0800004 WMMA.LD  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=0 d=00c8 | done=0
+  [C009] PC=3 ir=00000000 dec=f0800004 WMMA.LD  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=0 d=00c8 | done=0
+  [C010] PC=3 ir=00000000 dec=f0800004 WMMA.LD  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=0 d=00c8 | done=0
+  [C011] PC=3 ir=00000000 dec=f0800004 WMMA.LD  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=0 d=00c8 | done=0
+  [C012] PC=3 ir=00000000 dec=f0800004 WMMA.LD  fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=00c8 | done=0
+  [C013] PC=4 ir=00000000 dec=00000000 NOP      fv=1 lat=0 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_ADDR  | pend0=0000 | SP0.w0: we=0 a=0 d=00c8 | done=0
+  [C014] PC=4 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=0 d=00c8 | done=0
+  [C015] PC=4 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=0 d=00c8 | done=0
+  [C016] PC=4 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=0 d=00c8 | done=0
+  [C017] PC=4 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=0 d=00c8 | done=0
+  [C018] PC=4 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=00c8 | done=0
+  [C019] PC=5 ir=00000000 dec=00000000 NOP      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=00c8 | done=0
+  [C020] PC=6 ir=00000000 dec=00000000 NOP      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=00c8 | done=0
+  [C021] PC=7 ir=00000000 dec=00000000 NOP      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C022] PC=8 ir=20000000 dec=20000000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C023] PC=9 ir=20100000 dec=20100000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0001 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C024] PC=10 ir=20200000 dec=20200000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0003 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C025] PC=11 ir=20300000 dec=20300000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0007 | SP0.w0: we=1 a=0 d=0000 | done=0
+  [C026] PC=12 ir=ecc48000 dec=ecc48000 WMMA.MMA fv=1 lat=0 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=000e | SP0.w0: we=1 a=1 d=0000 | done=0
+  [C027] PC=12 ir=00000000 dec=ecc48000 WMMA.MMA fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=000c | SP0.w0: we=1 a=2 d=0000 | done=0
+  [C028] PC=12 ir=00000000 dec=ecc48000 WMMA.MMA fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0008 | SP0.w0: we=1 a=3 d=0000 | done=0
+  [C029] PC=12 ir=00000000 dec=ecc48000 WMMA.MMA fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C030] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=0 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=GATH_A   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C031] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=GATH_B   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C032] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=GATH_C   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C033] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C034] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C035] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C036] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C037] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C038] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C039] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C040] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C041] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C042] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C043] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C044] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C045] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C046] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C047] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C048] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C049] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C050] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C051] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C052] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C053] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C054] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C055] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C056] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C057] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C058] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C059] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C060] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C061] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C062] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C063] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C064] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C065] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C066] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C067] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C068] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C069] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C070] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C071] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=SCAT_0   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C072] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=SCAT_1   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C073] PC=13 ir=00000000 dec=00000000 NOP      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C074] PC=14 ir=00000000 dec=00000000 NOP      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C075] PC=15 ir=00000000 dec=00000000 NOP      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0000 | done=0
+  [C076] PC=16 ir=00000000 dec=00000000 NOP      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C077] PC=17 ir=2000012c dec=2000012c MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C078] PC=18 ir=f8c00000 dec=f8c00000 WMMA.ST  fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0001 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C079] PC=18 ir=c8000000 dec=f8c00000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0001 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C080] PC=18 ir=c8000000 dec=f8c00000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0001 | SP0.w0: we=1 a=0 d=012c | done=0
+  [C081] PC=18 ir=c8000000 dec=f8c00000 WMMA.ST  fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=012c | done=0
+  [C082] PC=19 ir=c8000000 dec=c8000000 RET      fv=1 lat=0 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=ST_READ  | pend0=0000 | SP0.w0: we=0 a=0 d=012c | done=0
+  [C083] PC=19 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=ST_BEAT  | pend0=0000 | SP0.w0: we=0 a=0 d=012c | done=0
+  [C084] PC=19 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=ST_BEAT  | pend0=0000 | SP0.w0: we=0 a=0 d=012c | done=0
+  [C085] PC=19 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=ST_BEAT  | pend0=0000 | SP0.w0: we=0 a=0 d=012c | done=0
+  [C086] PC=19 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=ST_BEAT  | pend0=0000 | SP0.w0: we=0 a=0 d=012c | done=0
+  [C087] PC=19 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=012c | done=0
+  [C088] PC=19 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=012c | done=0
+  [C089] PC=19 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=012c | done=0
+  [C090] PC=19 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C091] PC=19 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=1
+  Post-exec RF dump:
+  RF dump       R0     R1     R2     R3     R4     R5     R6     R7     R8     R9     R10    R11    R12    R13    R14    R15  
+       SP0:   012c  0000  0000  0000  3f80  0000  0000  0000  4000  4000  4000  4000  4000  4000  4000  4000 
+       SP1:   012c  0000  0000  0000  0000  3f80  0000  0000  4000  4000  4000  4000  4000  4000  4000  4000 
+       SP2:   012c  0000  0000  0000  0000  0000  3f80  0000  4000  4000  4000  4000  4000  4000  4000  4000 
+       SP3:   012c  0000  0000  0000  0000  0000  0000  3f80  4000  4000  4000  4000  4000  4000  4000  4000 
+[PASS] T193: K18 D[i][0]=2.0  SP0.R12 = 0x4000
+[PASS] T194: K18 D[i][0]=2.0  SP1.R12 = 0x4000
+[PASS] T195: K18 D[i][0]=2.0  SP2.R12 = 0x4000
+[PASS] T196: K18 D[i][0]=2.0  SP3.R12 = 0x4000
+[PASS] T197: K18 D[i][1]=2.0  SP0.R13 = 0x4000
+[PASS] T198: K18 D[i][1]=2.0  SP1.R13 = 0x4000
+[PASS] T199: K18 D[i][1]=2.0  SP2.R13 = 0x4000
+[PASS] T200: K18 D[i][1]=2.0  SP3.R13 = 0x4000
+[PASS] T201: K18 D[i][2]=2.0  SP0.R14 = 0x4000
+[PASS] T202: K18 D[i][2]=2.0  SP1.R14 = 0x4000
+[PASS] T203: K18 D[i][2]=2.0  SP2.R14 = 0x4000
+[PASS] T204: K18 D[i][2]=2.0  SP3.R14 = 0x4000
+[PASS] T205: K18 D[i][3]=2.0  SP0.R15 = 0x4000
+[PASS] T206: K18 D[i][3]=2.0  SP1.R15 = 0x4000
+[PASS] T207: K18 D[i][3]=2.0  SP2.R15 = 0x4000
+[PASS] T208: K18 D[i][3]=2.0  SP3.R15 = 0x4000
+[PASS] T209: K18 DMEM[300]=2.0  SP0.DMEM[300] = 0x4000
+[PASS] T210: K18 DMEM[300]=2.0  SP1.DMEM[300] = 0x4000
+[PASS] T211: K18 DMEM[300]=2.0  SP2.DMEM[300] = 0x4000
+[PASS] T212: K18 DMEM[300]=2.0  SP3.DMEM[300] = 0x4000
+[PASS] T213: K18 DMEM[301]=2.0  SP0.DMEM[301] = 0x4000
+[PASS] T214: K18 DMEM[301]=2.0  SP1.DMEM[301] = 0x4000
+[PASS] T215: K18 DMEM[301]=2.0  SP2.DMEM[301] = 0x4000
+[PASS] T216: K18 DMEM[301]=2.0  SP3.DMEM[301] = 0x4000
+[PASS] T217: K18 DMEM[302]=2.0  SP0.DMEM[302] = 0x4000
+[PASS] T218: K18 DMEM[302]=2.0  SP1.DMEM[302] = 0x4000
+[PASS] T219: K18 DMEM[302]=2.0  SP2.DMEM[302] = 0x4000
+[PASS] T220: K18 DMEM[302]=2.0  SP3.DMEM[302] = 0x4000
+[PASS] T221: K18 DMEM[303]=2.0  SP0.DMEM[303] = 0x4000
+[PASS] T222: K18 DMEM[303]=2.0  SP1.DMEM[303] = 0x4000
+[PASS] T223: K18 DMEM[303]=2.0  SP2.DMEM[303] = 0x4000
+[PASS] T224: K18 DMEM[303]=2.0  SP3.DMEM[303] = 0x4000
+
+--- K19: MMA zero passthrough 0*3+5=5.0 ---
+  Computation: D = 0*3 + 5 = 5.0 (accumulate passthrough)
+  Program listing:
+    [ 0] 20404040  MOVI    R4, 16448 (0x4040)
+    [ 1] 20504040  MOVI    R5, 16448 (0x4040)
+    [ 2] 20604040  MOVI    R6, 16448 (0x4040)
+    [ 3] 20704040  MOVI    R7, 16448 (0x4040)
+    [ 4] 208040a0  MOVI    R8, 16544 (0x40a0)
+    [ 5] 209040a0  MOVI    R9, 16544 (0x40a0)
+    [ 6] 20a040a0  MOVI    R10, 16544 (0x40a0)
+    [ 7] 20b040a0  MOVI    R11, 16544 (0x40a0)
+    [ 8] ecc04800  WMMA.MMA  D=R12..15, A=R0..3, B=R4..7, C=R8..11
+    [ 9] c8000000  RET
+  RF dump       R0     R1     R2     R3     R4     R5     R6     R7     R8     R9     R10    R11    R12    R13    R14    R15  
+       SP0:   0000  0000  0000  0000  4040  4040  4040  4040  40a0  40a0  40a0  40a0  40a0  40a0  40a0  40a0 
+       SP1:   0000  0000  0000  0000  4040  4040  4040  4040  40a0  40a0  40a0  40a0  40a0  40a0  40a0  40a0 
+       SP2:   0000  0000  0000  0000  4040  4040  4040  4040  40a0  40a0  40a0  40a0  40a0  40a0  40a0  40a0 
+       SP3:   0000  0000  0000  0000  4040  4040  4040  4040  40a0  40a0  40a0  40a0  40a0  40a0  40a0  40a0 
+[PASS] T225: K19 D[i][0]=5.0  SP0.R12 = 0x40a0
+[PASS] T226: K19 D[i][0]=5.0  SP1.R12 = 0x40a0
+[PASS] T227: K19 D[i][0]=5.0  SP2.R12 = 0x40a0
+[PASS] T228: K19 D[i][0]=5.0  SP3.R12 = 0x40a0
+[PASS] T229: K19 D[i][1]=5.0  SP0.R13 = 0x40a0
+[PASS] T230: K19 D[i][1]=5.0  SP1.R13 = 0x40a0
+[PASS] T231: K19 D[i][1]=5.0  SP2.R13 = 0x40a0
+[PASS] T232: K19 D[i][1]=5.0  SP3.R13 = 0x40a0
+[PASS] T233: K19 D[i][2]=5.0  SP0.R14 = 0x40a0
+[PASS] T234: K19 D[i][2]=5.0  SP1.R14 = 0x40a0
+[PASS] T235: K19 D[i][2]=5.0  SP2.R14 = 0x40a0
+[PASS] T236: K19 D[i][2]=5.0  SP3.R14 = 0x40a0
+[PASS] T237: K19 D[i][3]=5.0  SP0.R15 = 0x40a0
+[PASS] T238: K19 D[i][3]=5.0  SP1.R15 = 0x40a0
+[PASS] T239: K19 D[i][3]=5.0  SP2.R15 = 0x40a0
+[PASS] T240: K19 D[i][3]=5.0  SP3.R15 = 0x40a0
+
+--- K20: MMA negative -1*2+0=-8.0 ---
+  Computation: D = 4*(-1*2) + 0 = -8.0
+  Program listing:
+    [ 0] 2000bf80  MOVI    R0, 49024 (0xbf80)
+    [ 1] 2010bf80  MOVI    R1, 49024 (0xbf80)
+    [ 2] 2020bf80  MOVI    R2, 49024 (0xbf80)
+    [ 3] 2030bf80  MOVI    R3, 49024 (0xbf80)
+    [ 4] 20404000  MOVI    R4, 16384 (0x4000)
+    [ 5] 20504000  MOVI    R5, 16384 (0x4000)
+    [ 6] 20604000  MOVI    R6, 16384 (0x4000)
+    [ 7] 20704000  MOVI    R7, 16384 (0x4000)
+    [ 8] ecc04800  WMMA.MMA  D=R12..15, A=R0..3, B=R4..7, C=R8..11
+    [ 9] c8000000  RET
+  RF dump       R0     R1     R2     R3     R4     R5     R6     R7     R8     R9     R10    R11    R12    R13    R14    R15  
+       SP0:   bf80  bf80  bf80  bf80  4000  4000  4000  4000  0000  0000  0000  0000  c100  c100  c100  c100 
+       SP1:   bf80  bf80  bf80  bf80  4000  4000  4000  4000  0000  0000  0000  0000  c100  c100  c100  c100 
+       SP2:   bf80  bf80  bf80  bf80  4000  4000  4000  4000  0000  0000  0000  0000  c100  c100  c100  c100 
+       SP3:   bf80  bf80  bf80  bf80  4000  4000  4000  4000  0000  0000  0000  0000  c100  c100  c100  c100 
+[PASS] T241: K20 D[i][0]=-8.0  SP0.R12 = 0xc100
+[PASS] T242: K20 D[i][0]=-8.0  SP1.R12 = 0xc100
+[PASS] T243: K20 D[i][0]=-8.0  SP2.R12 = 0xc100
+[PASS] T244: K20 D[i][0]=-8.0  SP3.R12 = 0xc100
+[PASS] T245: K20 D[i][1]=-8.0  SP0.R13 = 0xc100
+[PASS] T246: K20 D[i][1]=-8.0  SP1.R13 = 0xc100
+[PASS] T247: K20 D[i][1]=-8.0  SP2.R13 = 0xc100
+[PASS] T248: K20 D[i][1]=-8.0  SP3.R13 = 0xc100
+[PASS] T249: K20 D[i][2]=-8.0  SP0.R14 = 0xc100
+[PASS] T250: K20 D[i][2]=-8.0  SP1.R14 = 0xc100
+[PASS] T251: K20 D[i][2]=-8.0  SP2.R14 = 0xc100
+[PASS] T252: K20 D[i][2]=-8.0  SP3.R14 = 0xc100
+[PASS] T253: K20 D[i][3]=-8.0  SP0.R15 = 0xc100
+[PASS] T254: K20 D[i][3]=-8.0  SP1.R15 = 0xc100
+[PASS] T255: K20 D[i][3]=-8.0  SP2.R15 = 0xc100
+[PASS] T256: K20 D[i][3]=-8.0  SP3.R15 = 0xc100
+
+--- K21: MMA mixed 1*1+(-2)=2.0 ---
+  Computation: D = 4*(1*1) + (-2) = 4 - 2 = 2.0
+  Program listing:
+    [ 0] 20003f80  MOVI    R0, 16256 (0x3f80)
+    [ 1] 20103f80  MOVI    R1, 16256 (0x3f80)
+    [ 2] 20203f80  MOVI    R2, 16256 (0x3f80)
+    [ 3] 20303f80  MOVI    R3, 16256 (0x3f80)
+    [ 4] 20403f80  MOVI    R4, 16256 (0x3f80)
+    [ 5] 20503f80  MOVI    R5, 16256 (0x3f80)
+    [ 6] 20603f80  MOVI    R6, 16256 (0x3f80)
+    [ 7] 20703f80  MOVI    R7, 16256 (0x3f80)
+    [ 8] 2080c000  MOVI    R8, 49152 (0xc000)
+    [ 9] 2090c000  MOVI    R9, 49152 (0xc000)
+    [10] 20a0c000  MOVI    R10, 49152 (0xc000)
+    [11] 20b0c000  MOVI    R11, 49152 (0xc000)
+    [12] ecc04800  WMMA.MMA  D=R12..15, A=R0..3, B=R4..7, C=R8..11
+    [13] c8000000  RET
+  RF dump       R0     R1     R2     R3     R4     R5     R6     R7     R8     R9     R10    R11    R12    R13    R14    R15  
+       SP0:   3f80  3f80  3f80  3f80  3f80  3f80  3f80  3f80  c000  c000  c000  c000  4000  4000  4000  4000 
+       SP1:   3f80  3f80  3f80  3f80  3f80  3f80  3f80  3f80  c000  c000  c000  c000  4000  4000  4000  4000 
+       SP2:   3f80  3f80  3f80  3f80  3f80  3f80  3f80  3f80  c000  c000  c000  c000  4000  4000  4000  4000 
+       SP3:   3f80  3f80  3f80  3f80  3f80  3f80  3f80  3f80  c000  c000  c000  c000  4000  4000  4000  4000 
+[PASS] T257: K21 D[i][0]=2.0  SP0.R12 = 0x4000
+[PASS] T258: K21 D[i][0]=2.0  SP1.R12 = 0x4000
+[PASS] T259: K21 D[i][0]=2.0  SP2.R12 = 0x4000
+[PASS] T260: K21 D[i][0]=2.0  SP3.R12 = 0x4000
+[PASS] T261: K21 D[i][1]=2.0  SP0.R13 = 0x4000
+[PASS] T262: K21 D[i][1]=2.0  SP1.R13 = 0x4000
+[PASS] T263: K21 D[i][1]=2.0  SP2.R13 = 0x4000
+[PASS] T264: K21 D[i][1]=2.0  SP3.R13 = 0x4000
+[PASS] T265: K21 D[i][2]=2.0  SP0.R14 = 0x4000
+[PASS] T266: K21 D[i][2]=2.0  SP1.R14 = 0x4000
+[PASS] T267: K21 D[i][2]=2.0  SP2.R14 = 0x4000
+[PASS] T268: K21 D[i][2]=2.0  SP3.R14 = 0x4000
+[PASS] T269: K21 D[i][3]=2.0  SP0.R15 = 0x4000
+[PASS] T270: K21 D[i][3]=2.0  SP1.R15 = 0x4000
+[PASS] T271: K21 D[i][3]=2.0  SP2.R15 = 0x4000
+[PASS] T272: K21 D[i][3]=2.0  SP3.R15 = 0x4000
+
+--- K22: MMA fractional 0.5*0.5+0=1.0 ---
+  Computation: D = 4*(0.5*0.5) + 0 = 1.0
+  Program listing:
+    [ 0] 20003f00  MOVI    R0, 16128 (0x3f00)
+    [ 1] 20103f00  MOVI    R1, 16128 (0x3f00)
+    [ 2] 20203f00  MOVI    R2, 16128 (0x3f00)
+    [ 3] 20303f00  MOVI    R3, 16128 (0x3f00)
+    [ 4] 20403f00  MOVI    R4, 16128 (0x3f00)
+    [ 5] 20503f00  MOVI    R5, 16128 (0x3f00)
+    [ 6] 20603f00  MOVI    R6, 16128 (0x3f00)
+    [ 7] 20703f00  MOVI    R7, 16128 (0x3f00)
+    [ 8] ecc04800  WMMA.MMA  D=R12..15, A=R0..3, B=R4..7, C=R8..11
+    [ 9] c8000000  RET
+  RF dump       R0     R1     R2     R3     R4     R5     R6     R7     R8     R9     R10    R11    R12    R13    R14    R15  
+       SP0:   3f00  3f00  3f00  3f00  3f00  3f00  3f00  3f00  0000  0000  0000  0000  3f80  3f80  3f80  3f80 
+       SP1:   3f00  3f00  3f00  3f00  3f00  3f00  3f00  3f00  0000  0000  0000  0000  3f80  3f80  3f80  3f80 
+       SP2:   3f00  3f00  3f00  3f00  3f00  3f00  3f00  3f00  0000  0000  0000  0000  3f80  3f80  3f80  3f80 
+       SP3:   3f00  3f00  3f00  3f00  3f00  3f00  3f00  3f00  0000  0000  0000  0000  3f80  3f80  3f80  3f80 
+[PASS] T273: K22 D[i][0]=1.0  SP0.R12 = 0x3f80
+[PASS] T274: K22 D[i][0]=1.0  SP1.R12 = 0x3f80
+[PASS] T275: K22 D[i][0]=1.0  SP2.R12 = 0x3f80
+[PASS] T276: K22 D[i][0]=1.0  SP3.R12 = 0x3f80
+[PASS] T277: K22 D[i][1]=1.0  SP0.R13 = 0x3f80
+[PASS] T278: K22 D[i][1]=1.0  SP1.R13 = 0x3f80
+[PASS] T279: K22 D[i][1]=1.0  SP2.R13 = 0x3f80
+[PASS] T280: K22 D[i][1]=1.0  SP3.R13 = 0x3f80
+[PASS] T281: K22 D[i][2]=1.0  SP0.R14 = 0x3f80
+[PASS] T282: K22 D[i][2]=1.0  SP1.R14 = 0x3f80
+[PASS] T283: K22 D[i][2]=1.0  SP2.R14 = 0x3f80
+[PASS] T284: K22 D[i][2]=1.0  SP3.R14 = 0x3f80
+[PASS] T285: K22 D[i][3]=1.0  SP0.R15 = 0x3f80
+[PASS] T286: K22 D[i][3]=1.0  SP1.R15 = 0x3f80
+[PASS] T287: K22 D[i][3]=1.0  SP2.R15 = 0x3f80
+[PASS] T288: K22 D[i][3]=1.0  SP3.R15 = 0x3f80
+
+--- K23: Chained MMA D1=4.0, D2=D1*1+0=16.0 ---
+  Step 1: D1 = 4*(1*1)+0 = 4.0
+  Step 2: D2 = 4*(4*1)+0 = 16.0 (chained)
+  Program listing:
+    [ 0] 20003f80  MOVI    R0, 16256 (0x3f80)
+    [ 1] 20103f80  MOVI    R1, 16256 (0x3f80)
+    [ 2] 20203f80  MOVI    R2, 16256 (0x3f80)
+    [ 3] 20303f80  MOVI    R3, 16256 (0x3f80)
+    [ 4] 20403f80  MOVI    R4, 16256 (0x3f80)
+    [ 5] 20503f80  MOVI    R5, 16256 (0x3f80)
+    [ 6] 20603f80  MOVI    R6, 16256 (0x3f80)
+    [ 7] 20703f80  MOVI    R7, 16256 (0x3f80)
+    [ 8] ecc04800  WMMA.MMA  D=R12..15, A=R0..3, B=R4..7, C=R8..11
+    [ 9] ec0c4800  WMMA.MMA  D=R0..3, A=R12..15, B=R4..7, C=R8..11
+    [10] c8000000  RET
+  RF dump       R0     R1     R2     R3     R4     R5     R6     R7     R8     R9     R10    R11    R12    R13    R14    R15  
+       SP0:   4180  4180  4180  4180  3f80  3f80  3f80  3f80  0000  0000  0000  0000  4080  4080  4080  4080 
+       SP1:   4180  4180  4180  4180  3f80  3f80  3f80  3f80  0000  0000  0000  0000  4080  4080  4080  4080 
+       SP2:   4180  4180  4180  4180  3f80  3f80  3f80  3f80  0000  0000  0000  0000  4080  4080  4080  4080 
+       SP3:   4180  4180  4180  4180  3f80  3f80  3f80  3f80  0000  0000  0000  0000  4080  4080  4080  4080 
+[PASS] T289: K23 D1[i][0]=4.0  SP0.R12 = 0x4080
+[PASS] T290: K23 D1[i][0]=4.0  SP1.R12 = 0x4080
+[PASS] T291: K23 D1[i][0]=4.0  SP2.R12 = 0x4080
+[PASS] T292: K23 D1[i][0]=4.0  SP3.R12 = 0x4080
+[PASS] T293: K23 D1[i][1]=4.0  SP0.R13 = 0x4080
+[PASS] T294: K23 D1[i][1]=4.0  SP1.R13 = 0x4080
+[PASS] T295: K23 D1[i][1]=4.0  SP2.R13 = 0x4080
+[PASS] T296: K23 D1[i][1]=4.0  SP3.R13 = 0x4080
+[PASS] T297: K23 D1[i][2]=4.0  SP0.R14 = 0x4080
+[PASS] T298: K23 D1[i][2]=4.0  SP1.R14 = 0x4080
+[PASS] T299: K23 D1[i][2]=4.0  SP2.R14 = 0x4080
+[PASS] T300: K23 D1[i][2]=4.0  SP3.R14 = 0x4080
+[PASS] T301: K23 D1[i][3]=4.0  SP0.R15 = 0x4080
+[PASS] T302: K23 D1[i][3]=4.0  SP1.R15 = 0x4080
+[PASS] T303: K23 D1[i][3]=4.0  SP2.R15 = 0x4080
+[PASS] T304: K23 D1[i][3]=4.0  SP3.R15 = 0x4080
+[PASS] T305: K23 D2[i][0]=16.0  SP0.R0 = 0x4180
+[PASS] T306: K23 D2[i][0]=16.0  SP1.R0 = 0x4180
+[PASS] T307: K23 D2[i][0]=16.0  SP2.R0 = 0x4180
+[PASS] T308: K23 D2[i][0]=16.0  SP3.R0 = 0x4180
+[PASS] T309: K23 D2[i][1]=16.0  SP0.R1 = 0x4180
+[PASS] T310: K23 D2[i][1]=16.0  SP1.R1 = 0x4180
+[PASS] T311: K23 D2[i][1]=16.0  SP2.R1 = 0x4180
+[PASS] T312: K23 D2[i][1]=16.0  SP3.R1 = 0x4180
+[PASS] T313: K23 D2[i][2]=16.0  SP0.R2 = 0x4180
+[PASS] T314: K23 D2[i][2]=16.0  SP1.R2 = 0x4180
+[PASS] T315: K23 D2[i][2]=16.0  SP2.R2 = 0x4180
+[PASS] T316: K23 D2[i][2]=16.0  SP3.R2 = 0x4180
+[PASS] T317: K23 D2[i][3]=16.0  SP0.R3 = 0x4180
+[PASS] T318: K23 D2[i][3]=16.0  SP1.R3 = 0x4180
+[PASS] T319: K23 D2[i][3]=16.0  SP2.R3 = 0x4180
+[PASS] T320: K23 D2[i][3]=16.0  SP3.R3 = 0x4180
+
+--- K24: Per-thread SIMT diag(2)*3+1=7.0 ---
+  DMEM pre-load: A=diag(2.0) @100 (per-SP rows)
+  Computation: D = diag(2)*3*ones + ones = 7*ones
+  Program listing:
+    [ 0] 20000064  MOVI    R0, 100 (0x0064)
+    [ 1] f0000000  WMMA.LOAD R0..3, [R0 + 0]
+    [ 2] 20404040  MOVI    R4, 16448 (0x4040)
+    [ 3] 20504040  MOVI    R5, 16448 (0x4040)
+    [ 4] 20604040  MOVI    R6, 16448 (0x4040)
+    [ 5] 20704040  MOVI    R7, 16448 (0x4040)
+    [ 6] 20803f80  MOVI    R8, 16256 (0x3f80)
+    [ 7] 20903f80  MOVI    R9, 16256 (0x3f80)
+    [ 8] 20a03f80  MOVI    R10, 16256 (0x3f80)
+    [ 9] 20b03f80  MOVI    R11, 16256 (0x3f80)
+    [10] ecc04800  WMMA.MMA  D=R12..15, A=R0..3, B=R4..7, C=R8..11
+    [11] c8000000  RET
+  RF dump       R0     R1     R2     R3     R4     R5     R6     R7     R8     R9     R10    R11    R12    R13    R14    R15  
+       SP0:   4000  0000  0000  0000  4040  4040  4040  4040  3f80  3f80  3f80  3f80  40e0  40e0  40e0  40e0 
+       SP1:   0000  4000  0000  0000  4040  4040  4040  4040  3f80  3f80  3f80  3f80  40e0  40e0  40e0  40e0 
+       SP2:   0000  0000  4000  0000  4040  4040  4040  4040  3f80  3f80  3f80  3f80  40e0  40e0  40e0  40e0 
+       SP3:   0000  0000  0000  4000  4040  4040  4040  4040  3f80  3f80  3f80  3f80  40e0  40e0  40e0  40e0 
+[PASS] T321: K24 D[i][0]=7.0  SP0.R12 = 0x40e0
+[PASS] T322: K24 D[i][0]=7.0  SP1.R12 = 0x40e0
+[PASS] T323: K24 D[i][0]=7.0  SP2.R12 = 0x40e0
+[PASS] T324: K24 D[i][0]=7.0  SP3.R12 = 0x40e0
+[PASS] T325: K24 D[i][1]=7.0  SP0.R13 = 0x40e0
+[PASS] T326: K24 D[i][1]=7.0  SP1.R13 = 0x40e0
+[PASS] T327: K24 D[i][1]=7.0  SP2.R13 = 0x40e0
+[PASS] T328: K24 D[i][1]=7.0  SP3.R13 = 0x40e0
+[PASS] T329: K24 D[i][2]=7.0  SP0.R14 = 0x40e0
+[PASS] T330: K24 D[i][2]=7.0  SP1.R14 = 0x40e0
+[PASS] T331: K24 D[i][2]=7.0  SP2.R14 = 0x40e0
+[PASS] T332: K24 D[i][2]=7.0  SP3.R14 = 0x40e0
+[PASS] T333: K24 D[i][3]=7.0  SP0.R15 = 0x40e0
+[PASS] T334: K24 D[i][3]=7.0  SP1.R15 = 0x40e0
+[PASS] T335: K24 D[i][3]=7.0  SP2.R15 = 0x40e0
+[PASS] T336: K24 D[i][3]=7.0  SP3.R15 = 0x40e0
+
+--- K25: PTX K1 vec_add int16 ---
+  Program listing:
+    [ 0] 1c000000  MOV.TID R0
+    [ 1] 20100000  MOVI    R1, 0 (0x0000)
+    [ 2] 20200010  MOVI    R2, 16 (0x0010)
+    [ 3] 20300020  MOVI    R3, 32 (0x0020)
+    [ 4] 88400001  SHL     R4, R0, 1
+    [ 5] 30514000  ADD     R5, R1, R4
+    [ 6] 10550000  LD      R5, [R5 + 0]
+    [ 7] 30624000  ADD     R6, R2, R4
+    [ 8] 10660000  LD      R6, [R6 + 0]
+    [ 9] 30765000  ADD     R7, R6, R5
+    [10] 30834000  ADD     R8, R3, R4
+    [11] 08780000  ST      R7, [R8 + 0]
+    [12] c8000000  RET
+  [C000] PC=0 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C001] PC=0 ir=1c000000 dec=1c000000 MOV      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C002] PC=1 ir=1c000000 dec=1c000000 MOV      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C003] PC=2 ir=20100000 dec=20100000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0001 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C004] PC=3 ir=20200010 dec=20200010 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0003 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C005] PC=4 ir=20300020 dec=20300020 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0007 | SP0.w0: we=1 a=0 d=0000 | done=0
+  [C006] PC=5 ir=88400001 dec=88400001 SHL      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=000e | SP0.w0: we=1 a=1 d=0000 | done=0
+  [C007] PC=6 ir=30514000 dec=30514000 ADD      fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=001c | SP0.w0: we=1 a=2 d=0010 | done=0
+  [C008] PC=6 ir=10550000 dec=30514000 ADD      fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0018 | SP0.w0: we=1 a=3 d=0020 | done=0
+  [C009] PC=6 ir=10550000 dec=30514000 ADD      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0010 | SP0.w0: we=1 a=4 d=0000 | done=0
+  [C010] PC=7 ir=10550000 dec=10550000 LD       fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0020 | SP0.w0: we=0 a=4 d=0000 | done=0
+  [C011] PC=7 ir=30624000 dec=10550000 LD       fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0020 | SP0.w0: we=0 a=4 d=0000 | done=0
+  [C012] PC=7 ir=30624000 dec=10550000 LD       fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0020 | SP0.w0: we=1 a=5 d=0000 | done=0
+  [C013] PC=8 ir=30624000 dec=30624000 ADD      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0020 | SP0.w0: we=0 a=5 d=0000 | done=0
+  [C014] PC=9 ir=10660000 dec=10660000 LD       fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0060 | SP0.w0: we=0 a=5 d=0000 | done=0
+  [C015] PC=9 ir=30765000 dec=10660000 LD       fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0060 | SP0.w0: we=1 a=5 d=000a | done=0
+  [C016] PC=9 ir=30765000 dec=10660000 LD       fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0040 | SP0.w0: we=1 a=6 d=0010 | done=0
+  [C017] PC=10 ir=30765000 dec=30765000 ADD      fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0040 | SP0.w0: we=0 a=6 d=0010 | done=0
+  [C018] PC=10 ir=30834000 dec=30765000 ADD      fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0040 | SP0.w0: we=0 a=6 d=0010 | done=0
+  [C019] PC=10 ir=30834000 dec=30765000 ADD      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0040 | SP0.w0: we=1 a=6 d=0005 | done=0
+  [C020] PC=11 ir=30834000 dec=30834000 ADD      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=6 d=0005 | done=0
+  [C021] PC=12 ir=08780000 dec=08780000 ST       fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0180 | SP0.w0: we=0 a=6 d=0005 | done=0
+  [C022] PC=12 ir=c8000000 dec=08780000 ST       fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0180 | SP0.w0: we=1 a=7 d=000f | done=0
+  [C023] PC=12 ir=c8000000 dec=08780000 ST       fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0100 | SP0.w0: we=1 a=8 d=0020 | done=0
+  [C024] PC=13 ir=c8000000 dec=c8000000 RET      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=8 d=0020 | done=0
+  [C025] PC=13 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=8 d=0020 | done=0
+  [C026] PC=13 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=0020 | done=0
+  [C027] PC=13 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C028] PC=13 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=1
+[PASS] T337: K25 SP0 C[0]=10+5  SP0.DMEM[32] = 0x000f
+[PASS] T338: K25 SP1 C[1]=20+15  SP1.DMEM[34] = 0x0023
+[PASS] T339: K25 SP2 C[2]=30+25  SP2.DMEM[36] = 0x0037
+[PASS] T340: K25 SP3 C[3]=40+35  SP3.DMEM[38] = 0x004b
+
+--- K26: PTX K2 vec_sub int16 ---
+  Program listing:
+    [ 0] 1c000000  MOV.TID R0
+    [ 1] 20100000  MOVI    R1, 0 (0x0000)
+    [ 2] 20200010  MOVI    R2, 16 (0x0010)
+    [ 3] 20300020  MOVI    R3, 32 (0x0020)
+    [ 4] 88400001  SHL     R4, R0, 1
+    [ 5] 30514000  ADD     R5, R1, R4
+    [ 6] 10550000  LD      R5, [R5 + 0]
+    [ 7] 30624000  ADD     R6, R2, R4
+    [ 8] 10660000  LD      R6, [R6 + 0]
+    [ 9] 38756000  SUB     R7, R5, R6
+    [10] 30834000  ADD     R8, R3, R4
+    [11] 08780000  ST      R7, [R8 + 0]
+    [12] c8000000  RET
+[PASS] T341: K26 SP0 C[0]=100-30  SP0.DMEM[32] = 0x0046
+[PASS] T342: K26 SP1 C[1]=200-50  SP1.DMEM[34] = 0x0096
+[PASS] T343: K26 SP2 C[2]=300-100  SP2.DMEM[36] = 0x00c8
+[PASS] T344: K26 SP3 C[3]=400-150  SP3.DMEM[38] = 0x00fa
+
+--- K27: PTX K3 bf16_vector_mul ---
+  Program listing:
+    [ 0] 1c000000  MOV.TID R0
+    [ 1] 20100000  MOVI    R1, 0 (0x0000)
+    [ 2] 20200010  MOVI    R2, 16 (0x0010)
+    [ 3] 20300020  MOVI    R3, 32 (0x0020)
+    [ 4] 88400001  SHL     R4, R0, 1
+    [ 5] 30514000  ADD     R5, R1, R4
+    [ 6] 14550000  LD      R5, [R5 + 0]
+    [ 7] 30624000  ADD     R6, R2, R4
+    [ 8] 14660000  LD      R6, [R6 + 0]
+    [ 9] 44756000  MUL.f   R7, R5, R6
+    [10] 30834000  ADD     R8, R3, R4
+    [11] 0c780000  ST      R7, [R8 + 0]
+    [12] c8000000  RET
+[FAIL] T345: K27 MUL.f 2*3=6.0  SP0.R7 = 0x4080, expected 0x40c0
+[FAIL] T346: K27 MUL.f 2*3=6.0  SP1.R7 = 0x0000, expected 0x40c0
+[FAIL] T347: K27 MUL.f 2*3=6.0  SP2.R7 = 0x0000, expected 0x40c0
+[FAIL] T348: K27 MUL.f 2*3=6.0  SP3.R7 = 0x0000, expected 0x40c0
+[FAIL] T349: K27 SP0 C=6.0  SP0.DMEM[32] = 0x0000, expected 0x40c0
+[FAIL] T350: K27 SP1 C=6.0  SP1.DMEM[34] = 0x0000, expected 0x40c0
+[FAIL] T351: K27 SP2 C=6.0  SP2.DMEM[36] = 0x0000, expected 0x40c0
+[FAIL] T352: K27 SP3 C=6.0  SP3.DMEM[38] = 0x0000, expected 0x40c0
+
+--- K28: PTX K4 bf16_fma ---
+  D = A*B + C = 2.0*3.0 + 1.0 = 7.0 (0x40E0)
+  Program listing:
+    [ 0] 1c000000  MOV.TID R0
+    [ 1] 20100000  MOVI    R1, 0 (0x0000)
+    [ 2] 20200010  MOVI    R2, 16 (0x0010)
+    [ 3] 20300020  MOVI    R3, 32 (0x0020)
+    [ 4] 20900030  MOVI    R9, 48 (0x0030)
+    [ 5] 88400001  SHL     R4, R0, 1
+    [ 6] 30514000  ADD     R5, R1, R4
+    [ 7] 14550000  LD      R5, [R5 + 0]
+    [ 8] 30624000  ADD     R6, R2, R4
+    [ 9] 14660000  LD      R6, [R6 + 0]
+    [10] 30734000  ADD     R7, R3, R4
+    [11] 14770000  LD      R7, [R7 + 0]
+    [12] 4c756000  FMA.f   R7, R5, R6, R7
+    [13] 30894000  ADD     R8, R9, R4
+    [14] 0c780000  ST      R7, [R8 + 0]
+    [15] c8000000  RET
+  [C000] PC=0 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C001] PC=0 ir=1c000000 dec=1c000000 MOV      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C002] PC=1 ir=1c000000 dec=1c000000 MOV      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C003] PC=2 ir=20100000 dec=20100000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0001 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C004] PC=3 ir=20200010 dec=20200010 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0003 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C005] PC=4 ir=20300020 dec=20300020 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0007 | SP0.w0: we=1 a=0 d=0000 | done=0
+  [C006] PC=5 ir=20900030 dec=20900030 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=000e | SP0.w0: we=1 a=1 d=0000 | done=0
+  [C007] PC=6 ir=88400001 dec=88400001 SHL      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=020c | SP0.w0: we=1 a=2 d=0010 | done=0
+  [C008] PC=7 ir=30514000 dec=30514000 ADD      fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0218 | SP0.w0: we=1 a=3 d=0020 | done=0
+  [C009] PC=7 ir=14550000 dec=30514000 ADD      fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0210 | SP0.w0: we=1 a=9 d=0030 | done=0
+  [C010] PC=7 ir=14550000 dec=30514000 ADD      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0010 | SP0.w0: we=1 a=4 d=0000 | done=0
+  [C011] PC=8 ir=14550000 dec=14550000 LD       fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0020 | SP0.w0: we=0 a=4 d=0000 | done=0
+  [C012] PC=8 ir=30624000 dec=14550000 LD       fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0020 | SP0.w0: we=0 a=4 d=0000 | done=0
+  [C013] PC=8 ir=30624000 dec=14550000 LD       fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0020 | SP0.w0: we=1 a=5 d=0000 | done=0
+  [C014] PC=9 ir=30624000 dec=30624000 ADD      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0020 | SP0.w0: we=0 a=5 d=0000 | done=0
+  [C015] PC=10 ir=14660000 dec=14660000 LD       fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0060 | SP0.w0: we=0 a=5 d=0000 | done=0
+  [C016] PC=10 ir=30734000 dec=14660000 LD       fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0060 | SP0.w0: we=1 a=5 d=4000 | done=0
+  [C017] PC=10 ir=30734000 dec=14660000 LD       fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0040 | SP0.w0: we=1 a=6 d=0010 | done=0
+  [C018] PC=11 ir=30734000 dec=30734000 ADD      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0040 | SP0.w0: we=0 a=6 d=0010 | done=0
+  [C019] PC=12 ir=14770000 dec=14770000 LD       fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=00c0 | SP0.w0: we=0 a=6 d=0010 | done=0
+  [C020] PC=12 ir=4c756000 dec=14770000 LD       fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=00c0 | SP0.w0: we=1 a=6 d=4000 | done=0
+  [C021] PC=12 ir=4c756000 dec=14770000 LD       fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=1 a=7 d=0020 | done=0
+  [C022] PC=13 ir=4c756000 dec=4c756000 FMA      fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=0020 | done=0
+  [C023] PC=13 ir=30894000 dec=4c756000 FMA      fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=0020 | done=0
+  [C024] PC=13 ir=30894000 dec=4c756000 FMA      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=1 a=7 d=4000 | done=0
+  [C025] PC=14 ir=30894000 dec=30894000 ADD      fv=1 lat=0 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
+  [C026] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
+  [C027] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
+  [C028] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
+  [C029] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
+  [C030] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
+  [C031] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
+  [C032] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
+  [C033] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
+  [C034] PC=15 ir=0c780000 dec=0c780000 ST       fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0180 | SP0.w0: we=1 a=7 d=40c0 | done=0
+  [C035] PC=15 ir=c8000000 dec=0c780000 ST       fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0100 | SP0.w0: we=0 a=7 d=40c0 | done=0
+  [C036] PC=15 ir=c8000000 dec=0c780000 ST       fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0100 | SP0.w0: we=1 a=8 d=0030 | done=0
+  [C037] PC=16 ir=c8000000 dec=c8000000 RET      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=8 d=0030 | done=0
+  [C038] PC=16 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=8 d=0030 | done=0
+  [C039] PC=16 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=0000 | done=0
+  [C040] PC=16 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C041] PC=16 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=1
+[FAIL] T353: K28 FMA.f 2*3+1=7.0  SP0.R7 = 0x40c0, expected 0x40e0
+[FAIL] T354: K28 FMA.f 2*3+1=7.0  SP1.R7 = 0x0000, expected 0x40e0
+[FAIL] T355: K28 FMA.f 2*3+1=7.0  SP2.R7 = 0x0000, expected 0x40e0
+[FAIL] T356: K28 FMA.f 2*3+1=7.0  SP3.R7 = 0x0000, expected 0x40e0
+[FAIL] T357: K28 SP0 D=7.0  SP0.DMEM[48] = 0x0000, expected 0x40e0
+[FAIL] T358: K28 SP1 D=7.0  SP1.DMEM[50] = 0x0000, expected 0x40e0
+[FAIL] T359: K28 SP2 D=7.0  SP2.DMEM[52] = 0x0000, expected 0x40e0
+[FAIL] T360: K28 SP3 D=7.0  SP3.DMEM[54] = 0x0000, expected 0x40e0
+
+--- K29: PTX K5 relu bf16 ---
+  ReLU: max(x, 0) — per-thread divergent inputs
+  Program listing:
+    [ 0] 1c000000  MOV.TID R0
+    [ 1] 20100000  MOVI    R1, 0 (0x0000)
+    [ 2] 20200010  MOVI    R2, 16 (0x0010)
+    [ 3] 88400001  SHL     R4, R0, 1
+    [ 4] 30514000  ADD     R5, R1, R4
+    [ 5] 14550000  LD      R5, [R5 + 0]
+    [ 6] 20800000  MOVI    R8, 0 (0x0000)
+    [ 7] 54658000  MAX.f   R6, R5, R8
+    [ 8] 30724000  ADD     R7, R2, R4
+    [ 9] 0c670000  ST      R6, [R7 + 0]
+    [10] c8000000  RET
+  [C000] PC=0 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C001] PC=0 ir=1c000000 dec=1c000000 MOV      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C002] PC=1 ir=1c000000 dec=1c000000 MOV      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C003] PC=2 ir=20100000 dec=20100000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0001 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C004] PC=3 ir=20200010 dec=20200010 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0003 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C005] PC=4 ir=88400001 dec=88400001 SHL      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0007 | SP0.w0: we=1 a=0 d=0000 | done=0
+  [C006] PC=5 ir=30514000 dec=30514000 ADD      fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0016 | SP0.w0: we=1 a=1 d=0000 | done=0
+  [C007] PC=5 ir=14550000 dec=30514000 ADD      fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0014 | SP0.w0: we=1 a=2 d=0010 | done=0
+  [C008] PC=5 ir=14550000 dec=30514000 ADD      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0010 | SP0.w0: we=1 a=4 d=0000 | done=0
+  [C009] PC=6 ir=14550000 dec=14550000 LD       fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0020 | SP0.w0: we=0 a=4 d=0000 | done=0
+  [C010] PC=6 ir=20800000 dec=14550000 LD       fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0020 | SP0.w0: we=0 a=4 d=0000 | done=0
+  [C011] PC=6 ir=20800000 dec=14550000 LD       fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0020 | SP0.w0: we=1 a=5 d=0000 | done=0
+  [C012] PC=7 ir=20800000 dec=20800000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0020 | SP0.w0: we=0 a=5 d=0000 | done=0
+  [C013] PC=8 ir=54658000 dec=54658000 MAX      fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0120 | SP0.w0: we=0 a=5 d=0000 | done=0
+  [C014] PC=8 ir=30724000 dec=54658000 MAX      fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0120 | SP0.w0: we=1 a=5 d=bf80 | done=0
+  [C015] PC=8 ir=30724000 dec=54658000 MAX      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0100 | SP0.w0: we=1 a=8 d=0000 | done=0
+  [C016] PC=9 ir=30724000 dec=30724000 ADD      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0040 | SP0.w0: we=0 a=8 d=0000 | done=0
+  [C017] PC=10 ir=0c670000 dec=0c670000 ST       fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=00c0 | SP0.w0: we=0 a=8 d=0000 | done=0
+  [C018] PC=10 ir=c8000000 dec=0c670000 ST       fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=00c0 | SP0.w0: we=1 a=6 d=0000 | done=0
+  [C019] PC=10 ir=c8000000 dec=0c670000 ST       fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=1 a=7 d=0010 | done=0
+  [C020] PC=11 ir=c8000000 dec=c8000000 RET      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=0010 | done=0
+  [C021] PC=11 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=0010 | done=0
+  [C022] PC=11 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=6 d=0000 | done=0
+  [C023] PC=11 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C024] PC=11 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=1
+[PASS] T361: K29 SP0 relu(-1)=0  SP0.R6 = 0x0000
+[FAIL] T362: K29 SP1 relu(2)=2.0  SP1.R6 = 0x0000, expected 0x4000
+[PASS] T363: K29 SP2 relu(-3)=0  SP2.R6 = 0x0000
+[FAIL] T364: K29 SP3 relu(5)=5.0  SP3.R6 = 0x0000, expected 0x40a0
+[PASS] T365: K29 SP0 out=0.0  SP0.DMEM[16] = 0x0000
+[FAIL] T366: K29 SP1 out=2.0  SP1.DMEM[18] = 0x0000, expected 0x4000
+[PASS] T367: K29 SP2 out=0.0  SP2.DMEM[20] = 0x0000
+[FAIL] T368: K29 SP3 out=5.0  SP3.DMEM[22] = 0x0000, expected 0x40a0
+
+--- K30: PTX K6 wmma_bf16 4x4 matmul ---
+  D = I(4x4) * 2*ones(4x4) + 0 = 2*ones
+  Row stride = tid*8, base_A=0, base_B=32, base_D=64
+  Program listing:
+    [ 0] 1c000000  MOV.TID R0
+    [ 1] 20100000  MOVI    R1, 0 (0x0000)
+    [ 2] 20200020  MOVI    R2, 32 (0x0020)
+    [ 3] 20300040  MOVI    R3, 64 (0x0040)
+    [ 4] 88400003  SHL     R4, R0, 3
+    [ 5] 30114000  ADD     R1, R1, R4
+    [ 6] 30224000  ADD     R2, R2, R4
+    [ 7] 30334000  ADD     R3, R3, R4
+    [ 8] f4410000  WMMA.LOAD R4..7, [R1 + 0]
+    [ 9] f4820000  WMMA.LOAD R8..11, [R2 + 0]
+    [10] 20c00000  MOVI    R12, 0 (0x0000)
+    [11] 20d00000  MOVI    R13, 0 (0x0000)
+    [12] 20e00000  MOVI    R14, 0 (0x0000)
+    [13] 20f00000  MOVI    R15, 0 (0x0000)
+    [14] ecc48c00  WMMA.MMA  D=R12..15, A=R4..7, B=R8..11, C=R12..15
+    [15] fcc30000  WMMA.STORE R12..15, [R3 + 0]
+    [16] c8000000  RET
+  [C000] PC=0 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C001] PC=0 ir=1c000000 dec=1c000000 MOV      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C002] PC=1 ir=1c000000 dec=1c000000 MOV      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C003] PC=2 ir=20100000 dec=20100000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0001 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C004] PC=3 ir=20200020 dec=20200020 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0003 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C005] PC=4 ir=20300040 dec=20300040 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0007 | SP0.w0: we=1 a=0 d=0000 | done=0
+  [C006] PC=5 ir=88400003 dec=88400003 SHL      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=000e | SP0.w0: we=1 a=1 d=0000 | done=0
+  [C007] PC=6 ir=30114000 dec=30114000 ADD      fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=001c | SP0.w0: we=1 a=2 d=0020 | done=0
+  [C008] PC=6 ir=30224000 dec=30114000 ADD      fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0018 | SP0.w0: we=1 a=3 d=0040 | done=0
+  [C009] PC=6 ir=30224000 dec=30114000 ADD      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0010 | SP0.w0: we=1 a=4 d=0000 | done=0
+  [C010] PC=7 ir=30224000 dec=30224000 ADD      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0002 | SP0.w0: we=0 a=4 d=0000 | done=0
+  [C011] PC=8 ir=30334000 dec=30334000 ADD      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0006 | SP0.w0: we=0 a=4 d=0000 | done=0
+  [C012] PC=9 ir=f4410000 dec=f4410000 WMMA.LD  fv=1 lat=0 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=000e | SP0.w0: we=1 a=1 d=0000 | done=0
+  [C013] PC=9 ir=f4820000 dec=f4410000 WMMA.LD  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=000c | SP0.w0: we=1 a=2 d=0020 | done=0
+  [C014] PC=9 ir=f4820000 dec=f4410000 WMMA.LD  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0008 | SP0.w0: we=1 a=3 d=0040 | done=0
+  [C015] PC=9 ir=f4820000 dec=f4410000 WMMA.LD  fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0040 | done=0
+  [C016] PC=10 ir=f4820000 dec=f4820000 WMMA.LD  fv=1 lat=0 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_ADDR  | pend0=0000 | SP0.w0: we=0 a=3 d=0040 | done=0
+  [C017] PC=10 ir=20c00000 dec=f4820000 WMMA.LD  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=3 d=0040 | done=0
+  [C018] PC=10 ir=20c00000 dec=f4820000 WMMA.LD  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=3 d=0040 | done=0
+  [C019] PC=10 ir=20c00000 dec=f4820000 WMMA.LD  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=3 d=0040 | done=0
+  [C020] PC=10 ir=20c00000 dec=f4820000 WMMA.LD  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=3 d=0040 | done=0
+  [C021] PC=10 ir=20c00000 dec=f4820000 WMMA.LD  fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0040 | done=0
+  [C022] PC=11 ir=20c00000 dec=20c00000 MOVI     fv=1 lat=0 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_ADDR  | pend0=0000 | SP0.w0: we=0 a=3 d=0040 | done=0
+  [C023] PC=11 ir=20d00000 dec=20c00000 MOVI     fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=3 d=0040 | done=0
+  [C024] PC=11 ir=20d00000 dec=20c00000 MOVI     fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=3 d=0040 | done=0
+  [C025] PC=11 ir=20d00000 dec=20c00000 MOVI     fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=3 d=0040 | done=0
+  [C026] PC=11 ir=20d00000 dec=20c00000 MOVI     fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=LD_BEAT  | pend0=0000 | SP0.w0: we=0 a=3 d=0040 | done=0
+  [C027] PC=11 ir=20d00000 dec=20c00000 MOVI     fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=3 d=0040 | done=0
+  [C028] PC=12 ir=20d00000 dec=20d00000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=1000 | SP0.w0: we=0 a=3 d=0040 | done=0
+  [C029] PC=13 ir=20e00000 dec=20e00000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=3000 | SP0.w0: we=0 a=3 d=0040 | done=0
+  [C030] PC=14 ir=20f00000 dec=20f00000 MOVI     fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=7000 | SP0.w0: we=1 a=12 d=0000 | done=0
+  [C031] PC=15 ir=ecc48c00 dec=ecc48c00 WMMA.MMA fv=1 lat=0 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=e000 | SP0.w0: we=1 a=13 d=0000 | done=0
+  [C032] PC=15 ir=fcc30000 dec=ecc48c00 WMMA.MMA fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=c000 | SP0.w0: we=1 a=14 d=0000 | done=0
+  [C033] PC=15 ir=fcc30000 dec=ecc48c00 WMMA.MMA fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=8000 | SP0.w0: we=1 a=15 d=0000 | done=0
+  [C034] PC=15 ir=fcc30000 dec=ecc48c00 WMMA.MMA fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C035] PC=16 ir=fcc30000 dec=fcc30000 WMMA.ST  fv=1 lat=0 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=GATH_A   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C036] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=GATH_B   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C037] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=GATH_C   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C038] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C039] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C040] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C041] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C042] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C043] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C044] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C045] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C046] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C047] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C048] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C049] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C050] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C051] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C052] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C053] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C054] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C055] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C056] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C057] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C058] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C059] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C060] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C061] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C062] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C063] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C064] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C065] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C066] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C067] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C068] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C069] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C070] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C071] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C072] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C073] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C074] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C075] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=COMPUTE  bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C076] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=SCAT_0   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C077] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=SCAT_1   bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C078] PC=16 ir=c8000000 dec=fcc30000 WMMA.ST  fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C079] PC=17 ir=c8000000 dec=c8000000 RET      fv=1 lat=0 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=ST_READ  | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C080] PC=17 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=ST_BEAT  | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C081] PC=17 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=ST_BEAT  | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C082] PC=17 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=ST_BEAT  | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C083] PC=17 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=1 sb=0 exb=0 sps=1 fl=0 | tc=IDLE     bu=ST_BEAT  | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C084] PC=17 ir=00000000 dec=c8000000 RET      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C085] PC=17 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C086] PC=17 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=15 d=0000 | done=0
+  [C087] PC=17 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
+  [C088] PC=17 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=1
+  Post-exec RF dump:
+  RF dump       R0     R1     R2     R3     R4     R5     R6     R7     R8     R9     R10    R11    R12    R13    R14    R15  
+       SP0:   0000  0000  0020  0040  3f80  0000  0000  0000  4000  4000  4000  4000  4000  4000  4000  4000 
+       SP1:   0001  0008  0028  0048  0000  3f80  0000  0000  4000  4000  4000  4000  4000  4000  4000  4000 
+       SP2:   0002  0010  0030  0050  0000  0000  3f80  0000  4000  4000  4000  4000  4000  4000  4000  4000 
+       SP3:   0003  0018  0038  0058  0000  0000  0000  3f80  4000  4000  4000  4000  4000  4000  4000  4000 
+[PASS] T369: K30 D[i][0]=2.0  SP0.R12 = 0x4000
+[PASS] T370: K30 D[i][0]=2.0  SP1.R12 = 0x4000
+[PASS] T371: K30 D[i][0]=2.0  SP2.R12 = 0x4000
+[PASS] T372: K30 D[i][0]=2.0  SP3.R12 = 0x4000
+[PASS] T373: K30 D[i][1]=2.0  SP0.R13 = 0x4000
+[PASS] T374: K30 D[i][1]=2.0  SP1.R13 = 0x4000
+[PASS] T375: K30 D[i][1]=2.0  SP2.R13 = 0x4000
+[PASS] T376: K30 D[i][1]=2.0  SP3.R13 = 0x4000
+[PASS] T377: K30 D[i][2]=2.0  SP0.R14 = 0x4000
+[PASS] T378: K30 D[i][2]=2.0  SP1.R14 = 0x4000
+[PASS] T379: K30 D[i][2]=2.0  SP2.R14 = 0x4000
+[PASS] T380: K30 D[i][2]=2.0  SP3.R14 = 0x4000
+[PASS] T381: K30 D[i][3]=2.0  SP0.R15 = 0x4000
+[PASS] T382: K30 D[i][3]=2.0  SP1.R15 = 0x4000
+[PASS] T383: K30 D[i][3]=2.0  SP2.R15 = 0x4000
+[PASS] T384: K30 D[i][3]=2.0  SP3.R15 = 0x4000
+[PASS] T385: K30 SP0 D[0][0]=2.0  SP0.DMEM[64] = 0x4000
+[PASS] T386: K30 SP0 D[0][1]=2.0  SP0.DMEM[65] = 0x4000
+[PASS] T387: K30 SP0 D[0][2]=2.0  SP0.DMEM[66] = 0x4000
+[PASS] T388: K30 SP0 D[0][3]=2.0  SP0.DMEM[67] = 0x4000
+[PASS] T389: K30 SP1 D[1][0]=2.0  SP1.DMEM[72] = 0x4000
+[PASS] T390: K30 SP1 D[1][1]=2.0  SP1.DMEM[73] = 0x4000
+[PASS] T391: K30 SP1 D[1][2]=2.0  SP1.DMEM[74] = 0x4000
+[PASS] T392: K30 SP1 D[1][3]=2.0  SP1.DMEM[75] = 0x4000
+[PASS] T393: K30 SP2 D[2][0]=2.0  SP2.DMEM[80] = 0x4000
+[PASS] T394: K30 SP2 D[2][1]=2.0  SP2.DMEM[81] = 0x4000
+[PASS] T395: K30 SP2 D[2][2]=2.0  SP2.DMEM[82] = 0x4000
+[PASS] T396: K30 SP2 D[2][3]=2.0  SP2.DMEM[83] = 0x4000
+[PASS] T397: K30 SP3 D[3][0]=2.0  SP3.DMEM[88] = 0x4000
+[PASS] T398: K30 SP3 D[3][1]=2.0  SP3.DMEM[89] = 0x4000
+[PASS] T399: K30 SP3 D[3][2]=2.0  SP3.DMEM[90] = 0x4000
+[PASS] T400: K30 SP3 D[3][3]=2.0  SP3.DMEM[91] = 0x4000
+
+============================================
+  SM Core Testbench — Summary
+  PASSED: 380
+  FAILED: 20
+  TOTAL:  400
+============================================
+>>> SOME TESTS FAILED <<<
+../tb/sm_core_tb.v:1558: $finish called at 13216000 (1ps)
