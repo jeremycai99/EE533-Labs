@@ -13,51 +13,32 @@
 
 `include "gpu_define.v"
 
-/* Scoreboard design behavior:
-Per-thread lightweight scoreboard for RAW hazard detection in ID stage.
-4 threads × 16-bit pending vectors = 64 FFs.
-
-SET:   on issue, mark pending[t][rD] for active threads
-CLEAR: on WB commit, clear pending[t][rD_wb] for WB-active threads
-CHECK: combinational — stall if any active thread reads a pending register
-
-SET priority over CLEAR: if WB clears R3 and ID issues a new write to R3
-in the same cycle, R3 stays pending (new instruction in flight).
-
-Scalar only — WMMA 4-reg group support deferred to Phase 3.
- */
-
-
 module scoreboard (
     input  wire clk,
     input  wire rst_n,
-
-    // ── From decode (ID stage) ──────────────────────────────
-    input wire [3:0] rA_addr, // source A
-    input wire [3:0] rB_addr, // source B (R-type)
-    input wire [3:0] rD_addr, // destination (or source for FMA/ST/STS)
-    input wire uses_rA, // instruction reads rA
-    input wire uses_rB, // instruction reads rB
-    input wire is_fma,  // FMA: rD is also a read source
-    input wire is_st, // ST/STS: rD is a read source, not write
-    input wire rf_we, // instruction writes GPR (not NOP/ST/BRA/etc)
-
-    //  From SIMT controller 
-    input wire [3:0]  active_mask,   // current active thread mask
-
-    //  Issue handshake 
-    input wire issue, // instruction issued this cycle
+    // From decode (ID stage)
+    input  wire [3:0] rA_addr, // source A
+    input  wire [3:0] rB_addr, // source B (R-type)
+    input  wire [3:0] rD_addr, // destination (or source for FMA/ST/STS)
+    input  wire uses_rA, // instruction reads rA
+    input  wire uses_rB, // instruction reads rB
+    input  wire is_fma, // FMA: rD is also a read source
+    input  wire is_st, // ST/STS: rD is a read source, not write
+    input  wire rf_we, // instruction writes GPR (not NOP/ST/BRA/etc)
+    // From SIMT controller
+    input  wire [3:0] active_mask,   // current active thread mask. 1111 for now
+    // Issue handshake
+    input  wire        issue,         // instruction issued this cycle
                                       // (decode_valid & ~stall & ~global_stall)
+    // From WB stage (pipeline sideband)
+    input  wire [3:0]  wb_rD_addr,    // register being written back
+    input  wire        wb_rf_we,      // WB has a valid GPR write
+    input  wire [3:0]  wb_active_mask,// active mask snapshot from issue time
 
-    //  From WB stage (pipeline sideband)
-    input wire [3:0] wb_rD_addr,    // register being written back
-    input wire wb_rf_we,      // WB has a valid GPR write
-    input wire [3:0] wb_active_mask,// active mask snapshot from issue time
-
-    //  Output 
-    output wire stall          // RAW hazard freeze IF+ID, bubble EX
+    // Outputs
+    output wire        stall,         // RAW hazard → freeze IF+ID, bubble EX
+    output wire        any_pending    // any register in-flight (for WMMA drain)
 );
-
     // Pending registers: 4 threads × 16 bits = 64 FFs
     reg [15:0] pending [0:3];
 
@@ -78,6 +59,7 @@ module scoreboard (
     assign clr_en = {4{wb_rf_we}} & wb_active_mask;
 
     // Pending register update (SET has priority over CLEAR)
+
     genvar t;
     generate
         for (t = 0; t < 4; t = t + 1) begin : gen_pending
@@ -93,21 +75,6 @@ module scoreboard (
         end
     endgenerate
 
-    // CHECK: combinational hazard detection
-    //
-    // Same-cycle bypass: subtract WB clear so that a just-completing
-    // instruction doesn't cause a false stall on the cycle it retires.
-    //   pending_eff[t] = pending[t] & ~clr_vec[t]
-    //
-    // But if SET and CLEAR hit the same register same cycle, SET wins
-    // (new in-flight instruction), so we add set_vec back:
-    //   pending_eff[t] = (pending[t] & ~clr_vec[t]) | set_vec[t]
-    //
-    // However, the instruction being SET is the one being issued NOW —
-    // it can't be reading its own destination as stale. The stall check
-    // is for the CURRENT instruction's sources, not its destination.
-    // So for CHECK we only need the clear bypass, not the set:
-    //   check_vec[t] = pending[t] & ~clr_vec[t]
     wire [3:0] hazard;
 
     generate
@@ -129,6 +96,9 @@ module scoreboard (
     // Stall if ANY active thread has a hazard
     assign stall = |(active_mask & hazard);
 
+    // Any register pending across all threads (pipeline not drained)
+    assign any_pending = |{pending[3], pending[2], pending[1], pending[0]};
+
 endmodule
 
-`endif // SCOREBOARD_V
+`endif

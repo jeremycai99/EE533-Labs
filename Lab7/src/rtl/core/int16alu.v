@@ -4,9 +4,10 @@
  Please use the output only when valid_out is high, and check busy before sending new instruction.
  Author: Jeremy Cai
  Date: Feb. 26, 2026
- Version: 1.0
+ Version: 1.1
  Revision history:
     - Feb. 26, 2026: Initial implementation of the CUDA-like integer 16-bit ALU core pipeline.
+    - Feb. 28, 2026: fix issue for busy signal during multi-cycle operations
 */
 
 `ifndef INT16ALU_V
@@ -53,18 +54,18 @@ module int16alu (
         if (!rst_n) begin
             mult_valid <= 2'b00;
             is_fma_reg <= 1'b0;
-            op_c_reg   <= 16'd0;
+            op_c_reg <= 16'd0;
         end else begin
             mult_valid[0] <= valid_in & is_mult_op;
             mult_valid[1] <= mult_valid[0];
             if (valid_in & is_mult_op) begin
                 is_fma_reg <= (alu_op == `OP_FMA);
-                op_c_reg   <= op_c;
+                op_c_reg <= op_c;
             end
         end
     end
 
-    assign busy = mult_valid[0];
+    assign busy = mult_valid[0] | (valid_in & is_mult_op);
     wire mult_done = mult_valid[1];
 
     // Multiplier (2-stage pipeline, free-running)
