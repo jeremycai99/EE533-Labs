@@ -920,14 +920,14 @@ VCD info: dumpfile sm_core_tb.vcd opened for output.
     [10] 30834000  ADD     R8, R3, R4
     [11] 0c780000  ST      R7, [R8 + 0]
     [12] c8000000  RET
-[FAIL] T345: K27 MUL.f 2*3=6.0  SP0.R7 = 0x4080, expected 0x40c0
-[FAIL] T346: K27 MUL.f 2*3=6.0  SP1.R7 = 0x0000, expected 0x40c0
-[FAIL] T347: K27 MUL.f 2*3=6.0  SP2.R7 = 0x0000, expected 0x40c0
-[FAIL] T348: K27 MUL.f 2*3=6.0  SP3.R7 = 0x0000, expected 0x40c0
-[FAIL] T349: K27 SP0 C=6.0  SP0.DMEM[32] = 0x0000, expected 0x40c0
-[FAIL] T350: K27 SP1 C=6.0  SP1.DMEM[34] = 0x0000, expected 0x40c0
-[FAIL] T351: K27 SP2 C=6.0  SP2.DMEM[36] = 0x0000, expected 0x40c0
-[FAIL] T352: K27 SP3 C=6.0  SP3.DMEM[38] = 0x0000, expected 0x40c0
+[PASS] T345: K27 MUL.f 2*3=6.0  SP0.R7 = 0x40c0
+[PASS] T346: K27 MUL.f 2*3=6.0  SP1.R7 = 0x40c0
+[PASS] T347: K27 MUL.f 2*3=6.0  SP2.R7 = 0x40c0
+[PASS] T348: K27 MUL.f 2*3=6.0  SP3.R7 = 0x40c0
+[PASS] T349: K27 SP0 C=6.0  SP0.DMEM[32] = 0x40c0
+[PASS] T350: K27 SP1 C=6.0  SP1.DMEM[34] = 0x40c0
+[PASS] T351: K27 SP2 C=6.0  SP2.DMEM[36] = 0x40c0
+[PASS] T352: K27 SP3 C=6.0  SP3.DMEM[38] = 0x40c0
 
 --- K28: PTX K4 bf16_fma ---
   D = A*B + C = 2.0*3.0 + 1.0 = 7.0 (0x40E0)
@@ -968,36 +968,36 @@ VCD info: dumpfile sm_core_tb.vcd opened for output.
   [C017] PC=10 ir=30734000 dec=14660000 LD       fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0040 | SP0.w0: we=1 a=6 d=0010 | done=0
   [C018] PC=11 ir=30734000 dec=30734000 ADD      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0040 | SP0.w0: we=0 a=6 d=0010 | done=0
   [C019] PC=12 ir=14770000 dec=14770000 LD       fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=00c0 | SP0.w0: we=0 a=6 d=0010 | done=0
-  [C020] PC=12 ir=4c756000 dec=14770000 LD       fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=00c0 | SP0.w0: we=1 a=6 d=4000 | done=0
+  [C020] PC=12 ir=4c756000 dec=14770000 LD       fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=00c0 | SP0.w0: we=1 a=6 d=4040 | done=0
   [C021] PC=12 ir=4c756000 dec=14770000 LD       fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=1 a=7 d=0020 | done=0
   [C022] PC=13 ir=4c756000 dec=4c756000 FMA      fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=0020 | done=0
   [C023] PC=13 ir=30894000 dec=4c756000 FMA      fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=0020 | done=0
-  [C024] PC=13 ir=30894000 dec=4c756000 FMA      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=1 a=7 d=4000 | done=0
-  [C025] PC=14 ir=30894000 dec=30894000 ADD      fv=1 lat=0 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
-  [C026] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
-  [C027] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
-  [C028] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
-  [C029] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
-  [C030] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
-  [C031] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
-  [C032] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
-  [C033] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=4000 | done=0
-  [C034] PC=15 ir=0c780000 dec=0c780000 ST       fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0180 | SP0.w0: we=1 a=7 d=40c0 | done=0
-  [C035] PC=15 ir=c8000000 dec=0c780000 ST       fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0100 | SP0.w0: we=0 a=7 d=40c0 | done=0
+  [C024] PC=13 ir=30894000 dec=4c756000 FMA      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=1 a=7 d=3f80 | done=0
+  [C025] PC=14 ir=30894000 dec=30894000 ADD      fv=1 lat=0 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C026] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C027] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C028] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C029] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C030] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C031] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C032] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=1 sb=0 exb=1 sps=1 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C033] PC=14 ir=0c780000 dec=30894000 ADD      fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=0 a=7 d=3f80 | done=0
+  [C034] PC=15 ir=0c780000 dec=0c780000 ST       fv=1 lat=0 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0180 | SP0.w0: we=1 a=7 d=40e0 | done=0
+  [C035] PC=15 ir=c8000000 dec=0c780000 ST       fv=1 lat=1 | fstl=1 sb=1 exb=0 sps=0 fl=1 | tc=IDLE     bu=IDLE     | pend0=0100 | SP0.w0: we=0 a=7 d=40e0 | done=0
   [C036] PC=15 ir=c8000000 dec=0c780000 ST       fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0100 | SP0.w0: we=1 a=8 d=0030 | done=0
   [C037] PC=16 ir=c8000000 dec=c8000000 RET      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=8 d=0030 | done=0
   [C038] PC=16 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=8 d=0030 | done=0
-  [C039] PC=16 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=0000 | done=0
+  [C039] PC=16 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=0030 | done=0
   [C040] PC=16 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
   [C041] PC=16 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=1
-[FAIL] T353: K28 FMA.f 2*3+1=7.0  SP0.R7 = 0x40c0, expected 0x40e0
-[FAIL] T354: K28 FMA.f 2*3+1=7.0  SP1.R7 = 0x0000, expected 0x40e0
-[FAIL] T355: K28 FMA.f 2*3+1=7.0  SP2.R7 = 0x0000, expected 0x40e0
-[FAIL] T356: K28 FMA.f 2*3+1=7.0  SP3.R7 = 0x0000, expected 0x40e0
-[FAIL] T357: K28 SP0 D=7.0  SP0.DMEM[48] = 0x0000, expected 0x40e0
-[FAIL] T358: K28 SP1 D=7.0  SP1.DMEM[50] = 0x0000, expected 0x40e0
-[FAIL] T359: K28 SP2 D=7.0  SP2.DMEM[52] = 0x0000, expected 0x40e0
-[FAIL] T360: K28 SP3 D=7.0  SP3.DMEM[54] = 0x0000, expected 0x40e0
+[PASS] T353: K28 FMA.f 2*3+1=7.0  SP0.R7 = 0x40e0
+[PASS] T354: K28 FMA.f 2*3+1=7.0  SP1.R7 = 0x40e0
+[PASS] T355: K28 FMA.f 2*3+1=7.0  SP2.R7 = 0x40e0
+[PASS] T356: K28 FMA.f 2*3+1=7.0  SP3.R7 = 0x40e0
+[PASS] T357: K28 SP0 D=7.0  SP0.DMEM[48] = 0x40e0
+[PASS] T358: K28 SP1 D=7.0  SP1.DMEM[50] = 0x40e0
+[PASS] T359: K28 SP2 D=7.0  SP2.DMEM[52] = 0x40e0
+[PASS] T360: K28 SP3 D=7.0  SP3.DMEM[54] = 0x40e0
 
 --- K29: PTX K5 relu bf16 ---
   ReLU: max(x, 0) — per-thread divergent inputs
@@ -1035,17 +1035,17 @@ VCD info: dumpfile sm_core_tb.vcd opened for output.
   [C019] PC=10 ir=c8000000 dec=0c670000 ST       fv=1 lat=1 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0080 | SP0.w0: we=1 a=7 d=0010 | done=0
   [C020] PC=11 ir=c8000000 dec=c8000000 RET      fv=1 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=0010 | done=0
   [C021] PC=11 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=7 d=0010 | done=0
-  [C022] PC=11 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=6 d=0000 | done=0
+  [C022] PC=11 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=6 d=0010 | done=0
   [C023] PC=11 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=0
   [C024] PC=11 ir=00000000 dec=00000000 NOP      fv=0 lat=0 | fstl=0 sb=0 exb=0 sps=0 fl=0 | tc=IDLE     bu=IDLE     | pend0=0000 | SP0.w0: we=0 a=0 d=0000 | done=1
 [PASS] T361: K29 SP0 relu(-1)=0  SP0.R6 = 0x0000
-[FAIL] T362: K29 SP1 relu(2)=2.0  SP1.R6 = 0x0000, expected 0x4000
+[PASS] T362: K29 SP1 relu(2)=2.0  SP1.R6 = 0x4000
 [PASS] T363: K29 SP2 relu(-3)=0  SP2.R6 = 0x0000
-[FAIL] T364: K29 SP3 relu(5)=5.0  SP3.R6 = 0x0000, expected 0x40a0
+[PASS] T364: K29 SP3 relu(5)=5.0  SP3.R6 = 0x40a0
 [PASS] T365: K29 SP0 out=0.0  SP0.DMEM[16] = 0x0000
-[FAIL] T366: K29 SP1 out=2.0  SP1.DMEM[18] = 0x0000, expected 0x4000
+[PASS] T366: K29 SP1 out=2.0  SP1.DMEM[18] = 0x4000
 [PASS] T367: K29 SP2 out=0.0  SP2.DMEM[20] = 0x0000
-[FAIL] T368: K29 SP3 out=5.0  SP3.DMEM[22] = 0x0000, expected 0x40a0
+[PASS] T368: K29 SP3 out=5.0  SP3.DMEM[22] = 0x40a0
 
 --- K30: PTX K6 wmma_bf16 4x4 matmul ---
   D = I(4x4) * 2*ones(4x4) + 0 = 2*ones
@@ -1198,9 +1198,9 @@ VCD info: dumpfile sm_core_tb.vcd opened for output.
 
 ============================================
   SM Core Testbench — Summary
-  PASSED: 380
-  FAILED: 20
+  PASSED: 400
+  FAILED: 0
   TOTAL:  400
 ============================================
->>> SOME TESTS FAILED <<<
+>>> ALL TESTS PASSED <<<
 ../tb/sm_core_tb.v:1558: $finish called at 13216000 (1ps)

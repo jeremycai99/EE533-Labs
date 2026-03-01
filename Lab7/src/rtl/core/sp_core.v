@@ -99,6 +99,7 @@ module sp_core #(
     wire pred_wr_we;
     wire [1:0] pred_wr_sel;
     wire pred_wr_data;
+    wire is_ldst = (id_opcode == `OP_LD) || (id_opcode == `OP_ST);
 
     // ====================================================================
     // GPR Register File — 16x16b, 4R4W
@@ -172,7 +173,7 @@ module sp_core #(
                 id_ex_opC <= rf_r2_data;
                 id_ex_pred_val <= pred_rd_val;
                 id_ex_opcode <= id_opcode;
-                id_ex_dt <= sel_tid ? 1'b0 : id_dt;
+                id_ex_dt <= (sel_tid | is_ldst) ? 1'b0 : id_dt;
                 id_ex_cmp_mode <= id_cmp_mode;
                 id_ex_rf_we <= id_rf_we;
                 id_ex_pred_we <= id_pred_we;

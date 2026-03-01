@@ -1,30 +1,30 @@
-/* file: gpu_test_imem.v
- Description: This file implements the wrapper for GPU instruction memory module.
+/* file: test_gpu_dmem.v
+ Description: This file implements the wrapper for GPU data memory module.
  Author: Jeremy Cai
  Date: Feb. 27, 2026
  Version: 1.0
  Revision history:
-    - Feb. 27, 2026: Initial implementation of the wrapper for GPU instruction memory module.
+    - Feb. 27, 2026: Initial implementation of the wrapper for GPU data memory module.
 */
 
-`ifndef GPU_TEST_IMEM_V
-`define GPU_TEST_IMEM_V
+`ifndef TEST_GPU_DMEM_V
+`define TEST_GPU_DMEM_V
 
-module gpu_test_imem (
+module test_gpu_dmem (
     input wire clka,
-    input wire [`GPU_IMEM_ADDR_WIDTH-1:0] addra,
-    input wire [`GPU_IMEM_DATA_WIDTH-1:0] dina,
+    input wire [`GPU_DMEM_ADDR_WIDTH-1:0] addra,
+    input wire [`GPU_DMEM_DATA_WIDTH-1:0] dina,
     input wire wea,
-    output reg [`GPU_IMEM_DATA_WIDTH-1:0] douta,
+    output reg [`GPU_DMEM_DATA_WIDTH-1:0] douta,
 
     input wire clkb,
-    input wire [`GPU_IMEM_ADDR_WIDTH-1:0] addrb,
-    input wire [`GPU_IMEM_DATA_WIDTH-1:0] dinb,
+    input wire [`GPU_DMEM_ADDR_WIDTH-1:0] addrb,
+    input wire [`GPU_DMEM_DATA_WIDTH-1:0] dinb,
     input wire web,
-    output reg [`GPU_IMEM_DATA_WIDTH-1:0] doutb
+    output reg [`GPU_DMEM_DATA_WIDTH-1:0] doutb
 );
 
-reg [`GPU_IMEM_DATA_WIDTH-1:0] mem [0:(1<<`GPU_IMEM_ADDR_WIDTH)-1];
+reg [`GPU_DMEM_DATA_WIDTH-1:0] mem [0:(1<<`GPU_DMEM_ADDR_WIDTH)-1];
 // Synchronous read and write logic for Port A
 always @(posedge clka) begin
     if (wea) begin
@@ -43,4 +43,4 @@ end
 
 endmodule
 
-`endif // GPU_TEST_IMEM_V
+`endif // TEST_GPU_DMEM_V

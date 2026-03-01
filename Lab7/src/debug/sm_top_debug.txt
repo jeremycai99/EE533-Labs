@@ -1,0 +1,275 @@
+VCD info: dumpfile sm_top_tb.vcd opened for output.
+============================================
+  SM Top Testbench — 6 PTX Kernel Tests
+============================================
+
+--- K1: vec_add int16 ---
+  [C000] PC=0 MOV      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C001] PC=0 MOV      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C002] PC=1 MOV      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C003] PC=2 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C004] PC=3 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C005] PC=4 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C006] PC=5 SHL      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C007] PC=6 ADD      fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C008] PC=6 ADD      fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C009] PC=6 ADD      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C010] PC=7 LD       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C011] PC=7 LD       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C012] PC=7 LD       fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C013] PC=8 ADD      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C014] PC=9 LD       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C015] PC=9 LD       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C016] PC=9 LD       fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C017] PC=10 ADD      fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C018] PC=10 ADD      fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C019] PC=10 ADD      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C020] PC=11 ADD      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C021] PC=12 ST       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C022] PC=12 ST       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C023] PC=12 ST       fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C024] PC=13 RET      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C025] PC=13 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C026] PC=13 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C027] PC=13 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C028] PC=13 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=1
+[PASS] T1: K1 SP0 C[0]=10+5  SP0.DMEM[32] = 0x000f
+[PASS] T2: K1 SP1 C[1]=20+15  SP1.DMEM[34] = 0x0023
+[PASS] T3: K1 SP2 C[2]=30+25  SP2.DMEM[36] = 0x0037
+[PASS] T4: K1 SP3 C[3]=40+35  SP3.DMEM[38] = 0x004b
+
+--- K2: vec_sub int16 ---
+[PASS] T5: K2 SP0 C[0]=100-30  SP0.DMEM[32] = 0x0046
+[PASS] T6: K2 SP1 C[1]=200-50  SP1.DMEM[34] = 0x0096
+[PASS] T7: K2 SP2 C[2]=300-100  SP2.DMEM[36] = 0x00c8
+[PASS] T8: K2 SP3 C[3]=400-150  SP3.DMEM[38] = 0x00fa
+
+--- K3: bf16_vector_mul ---
+[PASS] T9: K3 MUL.f 2*3=6.0  SP0.R7 = 0x40c0
+[PASS] T10: K3 MUL.f 2*3=6.0  SP1.R7 = 0x40c0
+[PASS] T11: K3 MUL.f 2*3=6.0  SP2.R7 = 0x40c0
+[PASS] T12: K3 MUL.f 2*3=6.0  SP3.R7 = 0x40c0
+[PASS] T13: K3 SP0 C=6.0  SP0.DMEM[32] = 0x40c0
+[PASS] T14: K3 SP1 C=6.0  SP1.DMEM[34] = 0x40c0
+[PASS] T15: K3 SP2 C=6.0  SP2.DMEM[36] = 0x40c0
+[PASS] T16: K3 SP3 C=6.0  SP3.DMEM[38] = 0x40c0
+
+--- K4: bf16_fma ---
+  [C000] PC=0 MOV      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C001] PC=0 MOV      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C002] PC=1 MOV      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C003] PC=2 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C004] PC=3 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C005] PC=4 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C006] PC=5 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C007] PC=6 SHL      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C008] PC=7 ADD      fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C009] PC=7 ADD      fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C010] PC=7 ADD      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C011] PC=8 LD       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C012] PC=8 LD       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C013] PC=8 LD       fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C014] PC=9 ADD      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C015] PC=10 LD       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C016] PC=10 LD       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C017] PC=10 LD       fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C018] PC=11 ADD      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C019] PC=12 LD       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C020] PC=12 LD       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C021] PC=12 LD       fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C022] PC=13 FMA      fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C023] PC=13 FMA      fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C024] PC=13 FMA      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C025] PC=14 ADD      fv=1 | fstl=1 sb=0 exb=1 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C026] PC=14 ADD      fv=1 | fstl=1 sb=0 exb=1 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C027] PC=14 ADD      fv=1 | fstl=1 sb=0 exb=1 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C028] PC=14 ADD      fv=1 | fstl=1 sb=0 exb=1 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C029] PC=14 ADD      fv=1 | fstl=1 sb=0 exb=1 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C030] PC=14 ADD      fv=1 | fstl=1 sb=0 exb=1 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C031] PC=14 ADD      fv=1 | fstl=1 sb=0 exb=1 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C032] PC=14 ADD      fv=1 | fstl=1 sb=0 exb=1 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C033] PC=14 ADD      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C034] PC=15 ST       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C035] PC=15 ST       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C036] PC=15 ST       fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C037] PC=16 RET      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C038] PC=16 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C039] PC=16 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C040] PC=16 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C041] PC=16 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=1
+[PASS] T17: K4 FMA.f 2*3+1=7.0  SP0.R7 = 0x40e0
+[PASS] T18: K4 FMA.f 2*3+1=7.0  SP1.R7 = 0x40e0
+[PASS] T19: K4 FMA.f 2*3+1=7.0  SP2.R7 = 0x40e0
+[PASS] T20: K4 FMA.f 2*3+1=7.0  SP3.R7 = 0x40e0
+[PASS] T21: K4 SP0 D=7.0  SP0.DMEM[48] = 0x40e0
+[PASS] T22: K4 SP1 D=7.0  SP1.DMEM[50] = 0x40e0
+[PASS] T23: K4 SP2 D=7.0  SP2.DMEM[52] = 0x40e0
+[PASS] T24: K4 SP3 D=7.0  SP3.DMEM[54] = 0x40e0
+
+--- K5: relu bf16 ---
+  [C000] PC=0 MOV      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C001] PC=0 MOV      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C002] PC=1 MOV      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C003] PC=2 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C004] PC=3 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C005] PC=4 SHL      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C006] PC=5 ADD      fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C007] PC=5 ADD      fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C008] PC=5 ADD      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C009] PC=6 LD       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C010] PC=6 LD       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C011] PC=6 LD       fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C012] PC=7 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C013] PC=8 MAX      fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C014] PC=8 MAX      fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C015] PC=8 MAX      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C016] PC=9 ADD      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C017] PC=10 ST       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C018] PC=10 ST       fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C019] PC=10 ST       fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C020] PC=11 RET      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C021] PC=11 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C022] PC=11 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C023] PC=11 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C024] PC=11 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=1
+[PASS] T25: K5 SP0 relu(-1)=0  SP0.R6 = 0x0000
+[PASS] T26: K5 SP1 relu(2)=2.0  SP1.R6 = 0x4000
+[PASS] T27: K5 SP2 relu(-3)=0  SP2.R6 = 0x0000
+[PASS] T28: K5 SP3 relu(5)=5.0  SP3.R6 = 0x40a0
+[PASS] T29: K5 SP0 out=0.0  SP0.DMEM[16] = 0x0000
+[PASS] T30: K5 SP1 out=2.0  SP1.DMEM[18] = 0x4000
+[PASS] T31: K5 SP2 out=0.0  SP2.DMEM[20] = 0x0000
+[PASS] T32: K5 SP3 out=5.0  SP3.DMEM[22] = 0x40a0
+
+--- K6: wmma_bf16 4x4 matmul ---
+  D = I(4x4) * 2*ones(4x4) + 0 = 2*ones
+  [C000] PC=0 MOV      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C001] PC=0 MOV      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C002] PC=1 MOV      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C003] PC=2 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C004] PC=3 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C005] PC=4 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C006] PC=5 SHL      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C007] PC=6 ADD      fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C008] PC=6 ADD      fv=1 | fstl=1 sb=1 exb=0 fl=1 | tc=IDLE     bu=IDLE     | done=0
+  [C009] PC=6 ADD      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C010] PC=7 ADD      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C011] PC=8 ADD      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C012] PC=9 WMMA.LD  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C013] PC=9 WMMA.LD  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C014] PC=9 WMMA.LD  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C015] PC=9 WMMA.LD  fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C016] PC=10 WMMA.LD  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=LD_ADDR  | done=0
+  [C017] PC=10 WMMA.LD  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=LD_BEAT  | done=0
+  [C018] PC=10 WMMA.LD  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=LD_BEAT  | done=0
+  [C019] PC=10 WMMA.LD  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=LD_BEAT  | done=0
+  [C020] PC=10 WMMA.LD  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=LD_BEAT  | done=0
+  [C021] PC=10 WMMA.LD  fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C022] PC=11 MOVI     fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=LD_ADDR  | done=0
+  [C023] PC=11 MOVI     fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=LD_BEAT  | done=0
+  [C024] PC=11 MOVI     fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=LD_BEAT  | done=0
+  [C025] PC=11 MOVI     fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=LD_BEAT  | done=0
+  [C026] PC=11 MOVI     fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=LD_BEAT  | done=0
+  [C027] PC=11 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C028] PC=12 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C029] PC=13 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C030] PC=14 MOVI     fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C031] PC=15 WMMA.MMA fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C032] PC=15 WMMA.MMA fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C033] PC=15 WMMA.MMA fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C034] PC=15 WMMA.MMA fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C035] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=GATH_A   bu=IDLE     | done=0
+  [C036] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=GATH_B   bu=IDLE     | done=0
+  [C037] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=GATH_C   bu=IDLE     | done=0
+  [C038] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C039] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C040] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C041] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C042] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C043] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C044] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C045] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C046] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C047] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C048] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C049] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C050] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C051] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C052] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C053] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C054] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C055] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C056] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C057] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C058] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C059] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C060] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C061] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C062] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C063] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C064] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C065] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C066] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C067] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C068] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C069] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C070] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C071] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C072] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C073] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C074] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C075] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=COMPUTE  bu=IDLE     | done=0
+  [C076] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=SCAT_0   bu=IDLE     | done=0
+  [C077] PC=16 WMMA.ST  fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=SCAT_1   bu=IDLE     | done=0
+  [C078] PC=16 WMMA.ST  fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C079] PC=17 RET      fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=ST_READ  | done=0
+  [C080] PC=17 RET      fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=ST_BEAT  | done=0
+  [C081] PC=17 RET      fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=ST_BEAT  | done=0
+  [C082] PC=17 RET      fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=ST_BEAT  | done=0
+  [C083] PC=17 RET      fv=1 | fstl=1 sb=0 exb=0 fl=0 | tc=IDLE     bu=ST_BEAT  | done=0
+  [C084] PC=17 RET      fv=1 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C085] PC=17 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C086] PC=17 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C087] PC=17 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=0
+  [C088] PC=17 NOP      fv=0 | fstl=0 sb=0 exb=0 fl=0 | tc=IDLE     bu=IDLE     | done=1
+[PASS] T33: K6 D[i][0]=2.0  SP0.R12 = 0x4000
+[PASS] T34: K6 D[i][0]=2.0  SP1.R12 = 0x4000
+[PASS] T35: K6 D[i][0]=2.0  SP2.R12 = 0x4000
+[PASS] T36: K6 D[i][0]=2.0  SP3.R12 = 0x4000
+[PASS] T37: K6 D[i][1]=2.0  SP0.R13 = 0x4000
+[PASS] T38: K6 D[i][1]=2.0  SP1.R13 = 0x4000
+[PASS] T39: K6 D[i][1]=2.0  SP2.R13 = 0x4000
+[PASS] T40: K6 D[i][1]=2.0  SP3.R13 = 0x4000
+[PASS] T41: K6 D[i][2]=2.0  SP0.R14 = 0x4000
+[PASS] T42: K6 D[i][2]=2.0  SP1.R14 = 0x4000
+[PASS] T43: K6 D[i][2]=2.0  SP2.R14 = 0x4000
+[PASS] T44: K6 D[i][2]=2.0  SP3.R14 = 0x4000
+[PASS] T45: K6 D[i][3]=2.0  SP0.R15 = 0x4000
+[PASS] T46: K6 D[i][3]=2.0  SP1.R15 = 0x4000
+[PASS] T47: K6 D[i][3]=2.0  SP2.R15 = 0x4000
+[PASS] T48: K6 D[i][3]=2.0  SP3.R15 = 0x4000
+[PASS] T49: K6 SP0 D[0][0]=2.0  SP0.DMEM[64] = 0x4000
+[PASS] T50: K6 SP0 D[0][1]=2.0  SP0.DMEM[65] = 0x4000
+[PASS] T51: K6 SP0 D[0][2]=2.0  SP0.DMEM[66] = 0x4000
+[PASS] T52: K6 SP0 D[0][3]=2.0  SP0.DMEM[67] = 0x4000
+[PASS] T53: K6 SP1 D[1][0]=2.0  SP1.DMEM[72] = 0x4000
+[PASS] T54: K6 SP1 D[1][1]=2.0  SP1.DMEM[73] = 0x4000
+[PASS] T55: K6 SP1 D[1][2]=2.0  SP1.DMEM[74] = 0x4000
+[PASS] T56: K6 SP1 D[1][3]=2.0  SP1.DMEM[75] = 0x4000
+[PASS] T57: K6 SP2 D[2][0]=2.0  SP2.DMEM[80] = 0x4000
+[PASS] T58: K6 SP2 D[2][1]=2.0  SP2.DMEM[81] = 0x4000
+[PASS] T59: K6 SP2 D[2][2]=2.0  SP2.DMEM[82] = 0x4000
+[PASS] T60: K6 SP2 D[2][3]=2.0  SP2.DMEM[83] = 0x4000
+[PASS] T61: K6 SP3 D[3][0]=2.0  SP3.DMEM[88] = 0x4000
+[PASS] T62: K6 SP3 D[3][1]=2.0  SP3.DMEM[89] = 0x4000
+[PASS] T63: K6 SP3 D[3][2]=2.0  SP3.DMEM[90] = 0x4000
+[PASS] T64: K6 SP3 D[3][3]=2.0  SP3.DMEM[91] = 0x4000
+
+============================================
+  SM Top Testbench — Summary
+  PASSED: 64
+  FAILED: 0
+  TOTAL:  64
+============================================
+>>> ALL TESTS PASSED <<<
+../tb/sm_top_tb.v:800: $finish called at 19156000 (1ps)
