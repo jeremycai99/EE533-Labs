@@ -2,9 +2,17 @@
  Description: This file implements the top-level Tensor Core module.
  Author: Jeremy Cai
  Date: Feb. 28, 2026
- Version: 1.0
+ Version: 1.1
  Revision history:
-    - Feb. 28, 2026: Initial implementation of the CUDA-like SM core pipeline.
+    - Feb. 28, 2026: v1.0 — Initial implementation.
+    - Mar. 02, 2026: v1.1 — Register rf_addr_override and rf_r*_addr
+      to break tc_state(FF) → rf_addr_override(comb) → bypass mux
+      critical path (-7.5ns slack).  Address setup occurs one cycle
+      before gather capture — same total cycle count.
+      TC_IDLE(trigger): register override=1, addr=rA_base+offsets
+      TC_GATHER_A:      RF stable, capture a_hold, set addr=rB
+      TC_GATHER_B:      RF stable, capture b_hold, set addr=rC
+      TC_GATHER_C:      RF stable, capture c_hold, clear override
 */
 
 `ifndef TC_TOP_V
@@ -35,7 +43,7 @@ module tc_top (
     // Status
     output wire busy,
 
-    // RF read address override
+    // RF read address override (REGISTERED — v1.1)
     output reg rf_addr_override,
     output reg [3:0] rf_r0_addr,
     output reg [3:0] rf_r1_addr,
@@ -95,8 +103,17 @@ module tc_top (
     );
 
     // ================================================================
-    // FSM
+    // FSM + Registered RF Override (v1.1)
     // ================================================================
+    // rf_addr_override and rf_r*_addr are now registered outputs.
+    // Address setup happens in the cycle BEFORE the gather capture,
+    // giving the RF read a full cycle to settle:
+    //   TC_IDLE(trigger): register addr = rA+offsets → RF reads rA
+    //   TC_GATHER_A:      capture a_hold, register addr = rB+offsets
+    //   TC_GATHER_B:      capture b_hold, register addr = rC+offsets
+    //   TC_GATHER_C:      capture c_hold, clear override
+    // Same total cycle count as v1.0 (no extra setup states needed).
+
     integer gi;
 
     always @(posedge clk or negedge rst_n) begin
@@ -110,6 +127,11 @@ module tc_top (
             b_hold <= 256'd0;
             c_hold <= 256'd0;
             compute_start <= 1'b0;
+            rf_addr_override <= 1'b0;
+            rf_r0_addr <= 4'd0;
+            rf_r1_addr <= 4'd0;
+            rf_r2_addr <= 4'd0;
+            rf_r3_addr <= 4'd0;
         end else begin
             compute_start <= 1'b0;
             case (state)
@@ -119,34 +141,55 @@ module tc_top (
                         rB_base <= dec_rB_addr;
                         rC_base <= dec_rC_addr;
                         rD_base <= dec_rD_addr;
+                        // Register override: RF will read rA registers next cycle
+                        rf_addr_override <= 1'b1;
+                        rf_r0_addr <= dec_rA_addr;
+                        rf_r1_addr <= dec_rA_addr + 4'd1;
+                        rf_r2_addr <= dec_rA_addr + 4'd2;
+                        rf_r3_addr <= dec_rA_addr + 4'd3;
                         state <= TC_GATHER_A;
                     end
                 end
                 TC_GATHER_A: begin
+                    // RF reads from rA+offsets are stable — capture matrix A
                     for (gi = 0; gi < 4; gi = gi + 1) begin
                         a_hold[gi*64 + 0*16 +: 16] <= sp_rf_r0_data[gi*16 +: 16];
                         a_hold[gi*64 + 1*16 +: 16] <= sp_rf_r1_data[gi*16 +: 16];
                         a_hold[gi*64 + 2*16 +: 16] <= sp_rf_r2_data[gi*16 +: 16];
                         a_hold[gi*64 + 3*16 +: 16] <= sp_rf_r3_data[gi*16 +: 16];
                     end
+                    // Setup addresses for GATHER_B
+                    rf_r0_addr <= rB_base;
+                    rf_r1_addr <= rB_base + 4'd1;
+                    rf_r2_addr <= rB_base + 4'd2;
+                    rf_r3_addr <= rB_base + 4'd3;
                     state <= TC_GATHER_B;
                 end
                 TC_GATHER_B: begin
+                    // RF reads from rB+offsets are stable — capture matrix B
                     for (gi = 0; gi < 4; gi = gi + 1) begin
                         b_hold[gi*64 + 0*16 +: 16] <= sp_rf_r0_data[gi*16 +: 16];
                         b_hold[gi*64 + 1*16 +: 16] <= sp_rf_r1_data[gi*16 +: 16];
                         b_hold[gi*64 + 2*16 +: 16] <= sp_rf_r2_data[gi*16 +: 16];
                         b_hold[gi*64 + 3*16 +: 16] <= sp_rf_r3_data[gi*16 +: 16];
                     end
+                    // Setup addresses for GATHER_C
+                    rf_r0_addr <= rC_base;
+                    rf_r1_addr <= rC_base + 4'd1;
+                    rf_r2_addr <= rC_base + 4'd2;
+                    rf_r3_addr <= rC_base + 4'd3;
                     state <= TC_GATHER_C;
                 end
                 TC_GATHER_C: begin
+                    // RF reads from rC+offsets are stable — capture matrix C
                     for (gi = 0; gi < 4; gi = gi + 1) begin
                         c_hold[gi*64 + 0*16 +: 16] <= sp_rf_r0_data[gi*16 +: 16];
                         c_hold[gi*64 + 1*16 +: 16] <= sp_rf_r1_data[gi*16 +: 16];
                         c_hold[gi*64 + 2*16 +: 16] <= sp_rf_r2_data[gi*16 +: 16];
                         c_hold[gi*64 + 3*16 +: 16] <= sp_rf_r3_data[gi*16 +: 16];
                     end
+                    // Clear override — no more gather reads
+                    rf_addr_override <= 1'b0;
                     compute_start <= 1'b1;
                     state <= TC_COMPUTE;
                 end
@@ -162,42 +205,7 @@ module tc_top (
     end
 
     // ================================================================
-    // RF address override (combinational)
-    // ================================================================
-    always @(*) begin
-        rf_addr_override = 1'b0;
-        rf_r0_addr = 4'd0;
-        rf_r1_addr = 4'd0;
-        rf_r2_addr = 4'd0;
-        rf_r3_addr = 4'd0;
-        case (state)
-            TC_GATHER_A: begin
-                rf_addr_override = 1'b1;
-                rf_r0_addr = rA_base;
-                rf_r1_addr = rA_base + 4'd1;
-                rf_r2_addr = rA_base + 4'd2;
-                rf_r3_addr = rA_base + 4'd3;
-            end
-            TC_GATHER_B: begin
-                rf_addr_override = 1'b1;
-                rf_r0_addr = rB_base;
-                rf_r1_addr = rB_base + 4'd1;
-                rf_r2_addr = rB_base + 4'd2;
-                rf_r3_addr = rB_base + 4'd3;
-            end
-            TC_GATHER_C: begin
-                rf_addr_override = 1'b1;
-                rf_r0_addr = rC_base;
-                rf_r1_addr = rC_base + 4'd1;
-                rf_r2_addr = rC_base + 4'd2;
-                rf_r3_addr = rC_base + 4'd3;
-            end
-            default: ;
-        endcase
-    end
-
-    // ================================================================
-    // Scatter output (combinational)
+    // Scatter output (combinational — unchanged from v1.0)
     // ================================================================
     integer si;
 

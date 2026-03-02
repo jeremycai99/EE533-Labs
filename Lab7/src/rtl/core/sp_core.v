@@ -5,10 +5,16 @@
     operation.
  Author: Jeremy Cai
  Date: Feb. 28, 2026
- Version: 1.1
+ Version: 1.2
  Revision history:
     - Feb. 28, 2026: Initial implementation of the CUDA-like SP core pipeline.
-    - Mar. 01, 2026: Remove ~stall from WB write enables to fix timing.
+    - Mar. 01, 2026: v1.1 — Remove ~stall from WB write enables to fix timing.
+    - Mar. 02, 2026: v1.2 — Dual RF read ports for timing isolation.
+      Pipeline reads (ppl_rf_r*) driven by registered rr_rf_r*_addr
+      go directly to id_ex_opA/B/C — no bypass mux in path.
+      Override reads (ovr_rf_r*) for TC gather / BU data / debug.
+      Critical path: rr_rf_r*_addr(FF) → RF 16:1 mux → id_ex_opB(FF) ≈ 5-6ns.
+      Forwarding removed — scoreboard guarantees RAW safety.
 */
 
 `ifndef SP_CORE_V
@@ -31,15 +37,21 @@ module sp_core #(
     input wire stall,
     input wire flush_id,
 
-    // ID Stage: RF Read
-    input wire [3:0] rf_r0_addr,
-    input wire [3:0] rf_r1_addr,
-    input wire [3:0] rf_r2_addr,
-    input wire [3:0] rf_r3_addr,
-    output wire [15:0] rf_r0_data,
-    output wire [15:0] rf_r1_data,
-    output wire [15:0] rf_r2_data,
-    output wire [15:0] rf_r3_data,
+    // Pipeline RF Read addresses (from registered rr_rf_r*_addr)
+    input wire [3:0] ppl_rf_r0_addr,
+    input wire [3:0] ppl_rf_r1_addr,
+    input wire [3:0] ppl_rf_r2_addr,
+    input wire [3:0] ppl_rf_r3_addr,
+
+    // Override RF Read (for TC gather / BU data / debug)
+    input wire [3:0] ovr_rf_r0_addr,
+    input wire [3:0] ovr_rf_r1_addr,
+    input wire [3:0] ovr_rf_r2_addr,
+    input wire [3:0] ovr_rf_r3_addr,
+    output wire [15:0] ovr_rf_r0_data,
+    output wire [15:0] ovr_rf_r1_data,
+    output wire [15:0] ovr_rf_r2_data,
+    output wire [15:0] ovr_rf_r3_data,
 
     // ID Stage: Predicate Read
     input wire [1:0] pred_rd_sel,
@@ -93,7 +105,7 @@ module sp_core #(
     // TID constant
     wire [15:0] tid_val = {14'b0, TID};
 
-    // Forward declarations — WB write signals (needed for RF forwarding)
+    // Forward declarations — WB write signals
     wire w0_we;
     wire [3:0] w0_addr;
     wire [15:0] w0_data;
@@ -102,15 +114,30 @@ module sp_core #(
     wire pred_wr_data;
     wire is_ldst = (id_opcode == `OP_LD) || (id_opcode == `OP_ST);
 
+    // Internal pipeline read data (from pipeline read ports)
+    wire [15:0] ppl_rf_r0_data;
+    wire [15:0] ppl_rf_r1_data;
+    wire [15:0] ppl_rf_r2_data;
+    wire [15:0] ppl_rf_r3_data;
+
     // ====================================================================
-    // GPR Register File — 16x16b, 4R4W
+    // GPR Register File — 16x16b, 8R4W (dual read ports, v1.1)
     // ====================================================================
+    // Pipeline reads: ppl_rf_r*_addr → ppl_rf_r*_data (feeds id_ex)
+    // Override reads: ovr_rf_r*_addr → ovr_rf_r*_data (feeds TC/BU/debug)
     gpr_regfile u_gpr_rf (
         .clk(clk), .rst_n(rst_n),
-        .read_addr1(rf_r0_addr), .read_addr2(rf_r1_addr),
-        .read_addr3(rf_r2_addr), .read_addr4(rf_r3_addr),
-        .read_data1(rf_r0_data), .read_data2(rf_r1_data),
-        .read_data3(rf_r2_data), .read_data4(rf_r3_data),
+        // Pipeline read ports
+        .read_addr1(ppl_rf_r0_addr), .read_data1(ppl_rf_r0_data),
+        .read_addr2(ppl_rf_r1_addr), .read_data2(ppl_rf_r1_data),
+        .read_addr3(ppl_rf_r2_addr), .read_data3(ppl_rf_r2_data),
+        .read_addr4(ppl_rf_r3_addr), .read_data4(ppl_rf_r3_data),
+        // Override read ports
+        .ovr_read_addr1(ovr_rf_r0_addr), .ovr_read_data1(ovr_rf_r0_data),
+        .ovr_read_addr2(ovr_rf_r1_addr), .ovr_read_data2(ovr_rf_r1_data),
+        .ovr_read_addr3(ovr_rf_r2_addr), .ovr_read_data3(ovr_rf_r2_data),
+        .ovr_read_addr4(ovr_rf_r3_addr), .ovr_read_data4(ovr_rf_r3_data),
+        // Write ports (unchanged)
         .write_addr1(w0_addr), .write_data1(w0_data), .write_en1(w0_we),
         .write_addr2(wb_ext_w1_addr), .write_data2(wb_ext_w1_data), .write_en2(wb_ext_w1_we),
         .write_addr3(wb_ext_w2_addr), .write_data3(wb_ext_w2_data), .write_en3(wb_ext_w2_we),
@@ -169,9 +196,9 @@ module sp_core #(
                 id_ex_rf_we <= 1'b0;
                 id_ex_pred_we <= 1'b0;
             end else begin
-                id_ex_opA <= sel_tid ? tid_val : rf_r0_data;
-                id_ex_opB <= id_use_imm ? id_imm16 : rf_r1_data;
-                id_ex_opC <= rf_r2_data;
+                id_ex_opA <= sel_tid ? tid_val : ppl_rf_r0_data;
+                id_ex_opB <= id_use_imm ? id_imm16 : ppl_rf_r1_data;
+                id_ex_opC <= ppl_rf_r2_data;
                 id_ex_pred_val <= pred_rd_val;
                 id_ex_opcode <= id_opcode;
                 id_ex_dt <= (sel_tid | is_ldst) ? 1'b0 : id_dt;
@@ -333,10 +360,6 @@ module sp_core #(
     // ====================================================================
     // MEM/WB Pipeline Register
     // ====================================================================
-    // NOTE: mem_rdata (BRAM load data) is NOT captured here.
-    // It bypasses mem_wb and feeds directly into the WB-stage mux,
-    // because sync-read BRAM output arrives 1 cycle after address
-    // presentation — the same posedge that mem_wb captures control.
     reg [15:0] mem_wb_data;
     reg mem_wb_cmp_out;
     reg mem_wb_rf_we;
@@ -379,8 +402,6 @@ module sp_core #(
     wire [15:0] wb_data_final = (mem_wb_wb_src == 3'd1) ? mem_rdata : mem_wb_data;
 
     // Scalar GPR writeback (W0)
-    // No ~stall gate: during stall mem_wb is frozen, so w0_we just
-    // idempotently rewrites the same reg — safe and cuts timing.
     assign w0_we = mem_wb_valid & mem_wb_rf_we & mem_wb_active;
     assign w0_addr = mem_wb_rD_addr;
     assign w0_data = wb_data_final;

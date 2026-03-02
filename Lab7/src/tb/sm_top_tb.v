@@ -3,7 +3,7 @@
  * Loads programs via ext_imem port B, preloads data via ext_dmem
  * port B, launches kernels, and verifies results via DMEM readback.
  *
- * 6 PTX-mapped kernel tests (K1–K6):
+ * 6 PTX-mapped kernel tests (K1-K6):
  *   K1: vec_add  int16   C[tid] = A[tid] + B[tid]
  *   K2: vec_sub  int16   C[tid] = A[tid] - B[tid]
  *   K3: bf16_mul bf16    C[tid] = A[tid] * B[tid]
@@ -16,7 +16,9 @@
  *
  * Author: Jeremy Cai
  * Date: Mar. 1, 2026
- * Version: 1.1 — DMEM-only verification (debug RF removed)
+ * Version: 1.3 -- Updated for sm_core v1.7 (dual RF read ports;
+ *   rf_use_bypass/final_rf_r0 removed; sp_rf_r*_data renamed
+ *   to sp_ovr_rf_r*_data; override mux is ovr_rf_r*_addr_mux).
  */
 
 `timescale 1ns / 1ps
@@ -43,13 +45,11 @@ module sm_top_tb;
     reg [`GPU_PC_WIDTH-1:0] kernel_entry_pc;
     wire kernel_done;
 
-    // External IMEM port B
     reg [`GPU_IMEM_ADDR_WIDTH-1:0] ext_imem_addr;
     reg [`GPU_IMEM_DATA_WIDTH-1:0] ext_imem_din;
     reg ext_imem_we;
     wire [`GPU_IMEM_DATA_WIDTH-1:0] ext_imem_dout;
 
-    // External DMEM port B
     reg [1:0] ext_dmem_sel;
     reg [`GPU_DMEM_ADDR_WIDTH-1:0] ext_dmem_addr;
     reg [`GPU_DMEM_DATA_WIDTH-1:0] ext_dmem_din;
@@ -271,10 +271,12 @@ module sm_top_tb;
     // ================================================================
     integer cycle_count;
     reg trace_en;
+    reg k6_debug_en;
 
     initial begin
         cycle_count = 0;
         trace_en = 0;
+        k6_debug_en = 0;
     end
 
     reg [8*8-1:0] opname;
@@ -334,18 +336,20 @@ module sm_top_tb;
     always @(*) begin
         case (u_dut.u_sm_core.bu_state)
             3'd0: bu_state_name = "IDLE    ";
-            3'd1: bu_state_name = "LD_ADDR ";
-            3'd2: bu_state_name = "LD_BEAT ";
-            3'd3: bu_state_name = "ST_READ ";
-            3'd4: bu_state_name = "ST_BEAT ";
-            default: bu_state_name = "???     ";
+            3'd1: bu_state_name = "SETUP   ";
+            3'd2: bu_state_name = "RREAD   ";
+            3'd3: bu_state_name = "ADDR    ";
+            3'd4: bu_state_name = "LD_ADDR ";
+            3'd5: bu_state_name = "LD_BEAT ";
+            3'd6: bu_state_name = "ST_READ ";
+            3'd7: bu_state_name = "ST_BEAT ";
         endcase
     end
 
     always @(posedge clk) begin
         cycle_count <= cycle_count + 1;
         if (trace_en) begin
-            $display("  [C%03d] PC=%0d %0s fv=%b | fstl=%b sb=%b exb=%b fl=%b | tc=%0s bu=%0s | done=%b",
+            $display("  [C%03d] PC=%0d %0s fv=%b | fstl=%b sb=%b exb=%b rr=%b | tc=%0s bu=%0s | done=%b",
                 cycle_count,
                 u_dut.u_sm_core.u_fetch.pc_reg,
                 opname,
@@ -353,10 +357,179 @@ module sm_top_tb;
                 u_dut.u_sm_core.front_stall,
                 u_dut.u_sm_core.sb_stall,
                 u_dut.u_sm_core.any_ex_busy,
-                u_dut.u_sm_core.sp_flush_id,
+                u_dut.u_sm_core.rr_valid,
                 tc_state_name,
                 bu_state_name,
                 kernel_done);
+        end
+        if (k6_debug_en) begin
+            $display("  [C%03d] PC=%0d %0s fv=%b | fstl=%b sb=%b exb=%b rr=%b | tc=%0s bu=%0s | done=%b",
+                cycle_count,
+                u_dut.u_sm_core.u_fetch.pc_reg,
+                opname,
+                u_dut.u_sm_core.fetch_valid,
+                u_dut.u_sm_core.front_stall,
+                u_dut.u_sm_core.sb_stall,
+                u_dut.u_sm_core.any_ex_busy,
+                u_dut.u_sm_core.rr_valid,
+                tc_state_name,
+                bu_state_name,
+                kernel_done);
+            // Override mux debug (v1.7: no bypass in pipeline path)
+            $display("    tc_ovr=%b bu_ovr=%b running=%b de_v=%b wmma_any=%b | ovr_r0=%0d rr_r0=%0d de_r0=%0d",
+                u_dut.u_sm_core.tc_rf_override,
+                u_dut.u_sm_core.bu_rf_override_r,
+                u_dut.u_sm_core.fu_running,
+                u_dut.u_sm_core.de_valid,
+                u_dut.u_sm_core.de_wmma_any,
+                u_dut.u_sm_core.ovr_rf_r0_addr_mux,
+                u_dut.u_sm_core.rr_rf_r0_addr,
+                u_dut.u_sm_core.de_rf_r0_addr);
+            // DE stage info
+            $display("    DE: op=%0d rD=%0d rA=%0d imm=%0d wmma_ld=%b wmma_st=%b wmma_mma=%b",
+                u_dut.u_sm_core.de_opcode,
+                u_dut.u_sm_core.de_rD_addr,
+                u_dut.u_sm_core.de_rA_addr,
+                u_dut.u_sm_core.de_imm16,
+                u_dut.u_sm_core.de_is_wmma_load,
+                u_dut.u_sm_core.de_is_wmma_store,
+                u_dut.u_sm_core.de_is_wmma_mma);
+            // Override RF read data (SP0)
+            $display("    SP0 OVR RF: r0=%04h r1=%04h r2=%04h r3=%04h",
+                u_dut.u_sm_core.sp_ovr_rf_r0_data[0],
+                u_dut.u_sm_core.sp_ovr_rf_r1_data[0],
+                u_dut.u_sm_core.sp_ovr_rf_r2_data[0],
+                u_dut.u_sm_core.sp_ovr_rf_r3_data[0]);
+            // BU state detail
+            if (u_dut.u_sm_core.bu_state != 3'd0) begin
+                $display("    BU: rD_base=%0d beat=%0d base_addr[0]=%0d is_store=%b",
+                    u_dut.u_sm_core.bu_rD_base,
+                    u_dut.u_sm_core.bu_beat,
+                    u_dut.u_sm_core.bu_base_addr[0],
+                    u_dut.u_sm_core.bu_is_store);
+            end
+            // BU pipeline: RREAD captures RF data
+            if (u_dut.u_sm_core.bu_state == 3'd2) // BU_RREAD
+                $display("    >>> BU_RREAD: override=%b rf_r0_r=%0d sp_ovr_r0[0]=%04h [1]=%04h [2]=%04h [3]=%04h",
+                    u_dut.u_sm_core.bu_rf_override_r,
+                    u_dut.u_sm_core.bu_rf_r0_r,
+                    u_dut.u_sm_core.sp_ovr_rf_r0_data[0],
+                    u_dut.u_sm_core.sp_ovr_rf_r0_data[1],
+                    u_dut.u_sm_core.sp_ovr_rf_r0_data[2],
+                    u_dut.u_sm_core.sp_ovr_rf_r0_data[3]);
+            // BU pipeline: ADDR computes base
+            if (u_dut.u_sm_core.bu_state == 3'd3) // BU_ADDR
+                $display("    >>> BU_ADDR: rf_data[0]=%0d rf_data[1]=%0d imm=%0d => base[0]=%0d base[1]=%0d",
+                    u_dut.u_sm_core.bu_rf_data[0],
+                    u_dut.u_sm_core.bu_rf_data[1],
+                    u_dut.u_sm_core.bu_imm16_r,
+                    u_dut.u_sm_core.bu_rf_data[0] + u_dut.u_sm_core.bu_imm16_r,
+                    u_dut.u_sm_core.bu_rf_data[1] + u_dut.u_sm_core.bu_imm16_r);
+            if (u_dut.u_sm_core.bu_load_trigger)
+                $display("    >>> BU_LOAD_TRIGGER: rD=%0d rA_addr=%0d imm=%0d -> BU_SETUP",
+                    u_dut.u_sm_core.de_rD_addr,
+                    u_dut.u_sm_core.de_rf_r0_addr,
+                    u_dut.u_sm_core.de_imm16);
+            if (u_dut.u_sm_core.bu_store_trigger)
+                $display("    >>> BU_STORE_TRIGGER: rD=%0d rA_addr=%0d imm=%0d -> BU_SETUP",
+                    u_dut.u_sm_core.de_rD_addr,
+                    u_dut.u_sm_core.de_rf_r0_addr,
+                    u_dut.u_sm_core.de_imm16);
+            // BU ext write (load beats -> RF)
+            if (u_dut.u_sm_core.bu_w1_we)
+                $display("    >>> BU_W1: addr=%0d data[0]=%04h data[1]=%04h data[2]=%04h data[3]=%04h",
+                    u_dut.u_sm_core.bu_w1_addr,
+                    u_dut.u_sm_core.ext_w1_data[0],
+                    u_dut.u_sm_core.ext_w1_data[1],
+                    u_dut.u_sm_core.ext_w1_data[2],
+                    u_dut.u_sm_core.ext_w1_data[3]);
+            // BU load: DMEM address being read
+            if (u_dut.u_sm_core.bu_state == 3'd4 || u_dut.u_sm_core.bu_state == 3'd5)
+                $display("    >>> BU_LOAD: dmem_addr[0]=%0d dmem_addr[1]=%0d dmem_dout[0]=%04h dmem_dout[1]=%04h",
+                    u_dut.u_sm_core.dmem_addr_a[0],
+                    u_dut.u_sm_core.dmem_addr_a[1],
+                    u_dut.u_sm_core.dmem_dout_a[0],
+                    u_dut.u_sm_core.dmem_dout_a[1]);
+            // BU store beat (write DMEM)
+            if (u_dut.u_sm_core.bu_state == 3'd7) begin
+                $display("    >>> BU_STORE: beat=%0d addr[0]=%0d din[0]=%04h addr[1]=%0d din[1]=%04h",
+                    u_dut.u_sm_core.bu_beat,
+                    u_dut.u_sm_core.dmem_addr_a[0],
+                    u_dut.u_sm_core.dmem_din_a[0],
+                    u_dut.u_sm_core.dmem_addr_a[1],
+                    u_dut.u_sm_core.dmem_din_a[1]);
+                $display("    >>> BU_STORE: addr[2]=%0d din[2]=%04h addr[3]=%0d din[3]=%04h",
+                    u_dut.u_sm_core.dmem_addr_a[2],
+                    u_dut.u_sm_core.dmem_din_a[2],
+                    u_dut.u_sm_core.dmem_addr_a[3],
+                    u_dut.u_sm_core.dmem_din_a[3]);
+            end
+            // BU store read capture
+            if (u_dut.u_sm_core.bu_state == 3'd6) begin
+                $display("    >>> BU_STORE_READ SP0: r0=%04h r1=%04h r2=%04h r3=%04h",
+                    u_dut.u_sm_core.sp_ovr_rf_r0_data[0],
+                    u_dut.u_sm_core.sp_ovr_rf_r1_data[0],
+                    u_dut.u_sm_core.sp_ovr_rf_r2_data[0],
+                    u_dut.u_sm_core.sp_ovr_rf_r3_data[0]);
+                $display("    >>> BU_STORE_READ SP1: r0=%04h r1=%04h r2=%04h r3=%04h",
+                    u_dut.u_sm_core.sp_ovr_rf_r0_data[1],
+                    u_dut.u_sm_core.sp_ovr_rf_r1_data[1],
+                    u_dut.u_sm_core.sp_ovr_rf_r2_data[1],
+                    u_dut.u_sm_core.sp_ovr_rf_r3_data[1]);
+            end
+            // TC scatter writes
+            if (|u_dut.u_sm_core.tc_w1_we)
+                $display("    >>> TC_SCAT w1: addr=%0d data[0]=%04h we=%b",
+                    u_dut.u_sm_core.tc_w1_addr,
+                    u_dut.u_sm_core.tc_w1_data[15:0],
+                    u_dut.u_sm_core.tc_w1_we);
+            if (|u_dut.u_sm_core.tc_w2_we)
+                $display("    >>> TC_SCAT w2: addr=%0d data[0]=%04h we=%b",
+                    u_dut.u_sm_core.tc_w2_addr,
+                    u_dut.u_sm_core.tc_w2_data[15:0],
+                    u_dut.u_sm_core.tc_w2_we);
+            if (|u_dut.u_sm_core.tc_w3_we)
+                $display("    >>> TC_SCAT w3: addr=%0d data[0]=%04h we=%b",
+                    u_dut.u_sm_core.tc_w3_addr,
+                    u_dut.u_sm_core.tc_w3_data[15:0],
+                    u_dut.u_sm_core.tc_w3_we);
+            // Pipeline drain status
+            $display("    pipe_drained=%b sb_pend=%b | tc_trig=%b bu_ld_trig=%b bu_st_trig=%b",
+                u_dut.u_sm_core.pipeline_drained,
+                u_dut.u_sm_core.sb_any_pending,
+                u_dut.u_sm_core.tc_trigger,
+                u_dut.u_sm_core.bu_load_trigger,
+                u_dut.u_sm_core.bu_store_trigger);
+            // TC gather: show override RF data during GATH_A/B/C
+            if (u_dut.u_sm_core.tc_rf_override)
+                $display("    TC_RF_OVR: r0=%0d r1=%0d r2=%0d r3=%0d => data[0]: %04h %04h %04h %04h",
+                    u_dut.u_sm_core.tc_rf_r0,
+                    u_dut.u_sm_core.tc_rf_r1,
+                    u_dut.u_sm_core.tc_rf_r2,
+                    u_dut.u_sm_core.tc_rf_r3,
+                    u_dut.u_sm_core.sp_ovr_rf_r0_data[0],
+                    u_dut.u_sm_core.sp_ovr_rf_r1_data[0],
+                    u_dut.u_sm_core.sp_ovr_rf_r2_data[0],
+                    u_dut.u_sm_core.sp_ovr_rf_r3_data[0]);
+            if (u_dut.u_sm_core.tc_rf_override)
+                $display("    TC_RF_OVR data[1]: %04h %04h %04h %04h  data[2]: %04h %04h %04h %04h",
+                    u_dut.u_sm_core.sp_ovr_rf_r0_data[1],
+                    u_dut.u_sm_core.sp_ovr_rf_r1_data[1],
+                    u_dut.u_sm_core.sp_ovr_rf_r2_data[1],
+                    u_dut.u_sm_core.sp_ovr_rf_r3_data[1],
+                    u_dut.u_sm_core.sp_ovr_rf_r0_data[2],
+                    u_dut.u_sm_core.sp_ovr_rf_r1_data[2],
+                    u_dut.u_sm_core.sp_ovr_rf_r2_data[2],
+                    u_dut.u_sm_core.sp_ovr_rf_r3_data[2]);
+            // DMEM write activity
+            if (u_dut.u_sm_core.dmem_wea[0])
+                $display("    >>> DMEM_WR SP0: addr=%0d data=%04h",
+                    u_dut.u_sm_core.dmem_addr_a[0],
+                    u_dut.u_sm_core.dmem_din_a[0]);
+            if (u_dut.u_sm_core.dmem_wea[1])
+                $display("    >>> DMEM_WR SP1: addr=%0d data=%04h",
+                    u_dut.u_sm_core.dmem_addr_a[1],
+                    u_dut.u_sm_core.dmem_din_a[1]);
         end
     end
 
@@ -378,11 +551,11 @@ module sm_top_tb;
     // ================================================================
     initial begin
         $display("============================================");
-        $display("  SM Top Testbench — 6 PTX Kernel Tests");
+        $display("  SM Top Testbench -- 6 PTX Kernel Tests");
         $display("  (DMEM-only verification)");
         $display("============================================");
 
-        // ── K1: vec_add C[tid]=A[tid]+B[tid] (int16) ───────────────
+        // -- K1: vec_add C[tid]=A[tid]+B[tid] (int16)
         begin
             $display("\n--- K1: vec_add int16 ---");
             reset_dut;
@@ -422,7 +595,7 @@ module sm_top_tb;
             check_dmem(2'd3, 38, 16'd75, "K1 SP3 C[3]=40+35");
         end
 
-        // ── K2: vec_sub C[tid]=A[tid]-B[tid] (int16) ───────────────
+        // -- K2: vec_sub C[tid]=A[tid]-B[tid] (int16)
         begin
             $display("\n--- K2: vec_sub int16 ---");
             reset_dut;
@@ -460,7 +633,7 @@ module sm_top_tb;
             check_dmem(2'd3, 38, 16'd250, "K2 SP3 C[3]=400-150");
         end
 
-        // ── K3: bf16_vector_mul C[tid]=A[tid]*B[tid] ───────────────
+        // -- K3: bf16_vector_mul C[tid]=A[tid]*B[tid]
         begin
             $display("\n--- K3: bf16_vector_mul ---");
             reset_dut;
@@ -498,7 +671,7 @@ module sm_top_tb;
             check_dmem(2'd3, 38, 16'h40C0, "K3 SP3 C=2*3=6.0");
         end
 
-        // ── K4: bf16_fma D[tid]=A[tid]*B[tid]+C[tid] ───────────────
+        // -- K4: bf16_fma D[tid]=A[tid]*B[tid]+C[tid]
         begin
             $display("\n--- K4: bf16_fma ---");
             reset_dut;
@@ -545,7 +718,7 @@ module sm_top_tb;
             check_dmem(2'd3, 54, 16'h40E0, "K4 SP3 D=2*3+1=7.0");
         end
 
-        // ── K5: relu out[tid]=max(in[tid],0.0) (bf16) ──────────────
+        // -- K5: relu out[tid]=max(in[tid],0.0) (bf16)
         begin
             $display("\n--- K5: relu bf16 ---");
             reset_dut;
@@ -579,7 +752,7 @@ module sm_top_tb;
             check_dmem(2'd3, 22, 16'h40A0, "K5 SP3 relu(5)=5.0");
         end
 
-        // ── K6: wmma_bf16 4x4 matmul D=A*B+C ───────────────────────
+        // -- K6: wmma_bf16 4x4 matmul D=A*B+C
         begin
             $display("\n--- K6: wmma_bf16 4x4 matmul ---");
             reset_dut;
@@ -640,12 +813,12 @@ module sm_top_tb;
             load_program(17);
 
             $display("  D = I(4x4) * 2*ones(4x4) + 0 = 2*ones");
-            enable_trace;
+            k6_debug_en = 1;
+            cycle_count = 0;
             launch_kernel(32'd0);
             wait_kernel_done(400);
-            disable_trace;
+            k6_debug_en = 0;
 
-            // D = 2.0 everywhere (0x4000)
             check_dmem(2'd0, 64, 16'h4000, "K6 SP0 D[0][0]=2.0");
             check_dmem(2'd0, 65, 16'h4000, "K6 SP0 D[0][1]=2.0");
             check_dmem(2'd0, 66, 16'h4000, "K6 SP0 D[0][2]=2.0");
@@ -664,9 +837,9 @@ module sm_top_tb;
             check_dmem(2'd3, 91, 16'h4000, "K6 SP3 D[3][3]=2.0");
         end
 
-        // ── Summary ─────────────────────────────────────────────────
+        // -- Summary
         $display("\n============================================");
-        $display("  SM Top Testbench — Summary");
+        $display("  SM Top Testbench -- Summary");
         $display("  PASSED: %0d", pass_count);
         $display("  FAILED: %0d", fail_count);
         $display("  TOTAL:  %0d", pass_count + fail_count);
