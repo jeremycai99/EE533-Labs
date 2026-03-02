@@ -222,6 +222,8 @@ module sm_core (
     // ================================================================
     // WMMA ops must wait for pipeline to drain before triggering.
     // Stall the front-end while waiting to prevent PC from advancing.
+    wire pipeline_drained;
+
     wire wmma_drain_wait = fetch_valid & wmma_any & ~pipeline_drained
                          & ~tc_busy & ~burst_busy;
     assign front_stall = sb_stall | any_ex_busy | tc_busy | burst_busy
@@ -245,6 +247,9 @@ module sm_core (
     wire [3:0] wb_active_mask_sb = {sp_wb_active[3], sp_wb_active[2],
                                     sp_wb_active[1], sp_wb_active[0]};
 
+
+    wire sb_any_pending;
+
     scoreboard u_sb (
         .clk (clk), .rst_n (rst_n),
         .rA_addr (dec_rA_addr),
@@ -264,14 +269,12 @@ module sm_core (
         .any_pending (sb_any_pending)
     );
 
-    wire sb_any_pending;
-
     // ================================================================
     // Tensor Core Top
     // ================================================================
     // WMMA ops must wait for pipeline to drain — the TC gather reads RF
     // directly, bypassing the scoreboard hazard check.
-    wire pipeline_drained = ~sb_any_pending & ~any_ex_busy;
+    assign pipeline_drained = ~sb_any_pending & ~any_ex_busy;
 
     wire tc_trigger = fetch_valid & dec_is_wmma_mma & ~tc_busy & ~burst_busy
                     & pipeline_drained;
@@ -484,7 +487,7 @@ module sm_core (
             // Burst load overrides W1 (mutually exclusive with TC scatter)
             if (bu_w1_we) begin
                 ext_w1_addr[wi] = bu_w1_addr;
-                ext_w1_data[wi] = dmem_dout_a[wi];
+                ext_w1_data[wi] = dmem_douta[wi*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH];
                 ext_w1_we[wi] = 1'b1;
             end
         end

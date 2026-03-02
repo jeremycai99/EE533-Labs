@@ -53,6 +53,9 @@ module bf16fpu (
     reg [2:0] state;
     reg [15:0] op_c_reg;
 
+    wire mult_valid_out;
+    wire add_valid_out;
+
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state    <= S_IDLE;
@@ -84,7 +87,6 @@ module bf16fpu (
 
     wire mult_feed = valid_in & (state == S_IDLE) & (is_mult_op | is_fma_op);
     wire [15:0] mult_result;
-    wire mult_valid_out;
 
     pplbf16mult u_mult (
         .clk(clk), .rst_n(rst_n),
@@ -101,7 +103,6 @@ module bf16fpu (
     wire addsub_sub = ~fma_inject & (alu_op == `OP_SUB);
 
     wire [15:0] add_result;
-    wire add_valid_out;
 
     pplbf16addsub u_addsub (
         .clk(clk), .rst_n(rst_n),

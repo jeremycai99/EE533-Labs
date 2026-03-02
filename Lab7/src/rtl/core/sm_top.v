@@ -24,10 +24,6 @@ module sm_top (
     input wire [`GPU_PC_WIDTH-1:0] kernel_entry_pc,
     output wire kernel_done,
 
-    // Debug register file read
-    input wire [3:0] debug_rf_addr,
-    output wire [4*`GPU_DMEM_DATA_WIDTH-1:0] debug_rf_data,
-
     // External IMEM port B (program load)
     input wire [`GPU_IMEM_ADDR_WIDTH-1:0] ext_imem_addr,
     input wire [`GPU_IMEM_DATA_WIDTH-1:0] ext_imem_din,
@@ -58,7 +54,8 @@ module sm_top (
     wire [4*`GPU_DMEM_DATA_WIDTH-1:0] core_dmem_dout;
 
     // Per-thread DMEM port B read data
-    wire [`GPU_DMEM_DATA_WIDTH-1:0] dmem_doutb [0:3];
+    // Flaten due to XST synthesis issue with 2D arrays of outputs from generate
+    wire [4*`GPU_DMEM_DATA_WIDTH-1:0] dmem_doutb_flat;
 
     // Per-thread DMEM port B write enable (decoded from ext_dmem_sel)
     wire [3:0] dmem_web;
@@ -69,14 +66,16 @@ module sm_top (
 
     // Mux port B read data based on ext_dmem_sel
     reg [`GPU_DMEM_DATA_WIDTH-1:0] ext_dmem_dout_r;
+
     always @(*) begin
         case (ext_dmem_sel)
-            2'd0: ext_dmem_dout_r = dmem_doutb[0];
-            2'd1: ext_dmem_dout_r = dmem_doutb[1];
-            2'd2: ext_dmem_dout_r = dmem_doutb[2];
-            2'd3: ext_dmem_dout_r = dmem_doutb[3];
+            2'd0: ext_dmem_dout_r = dmem_doutb_flat[0*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH];
+            2'd1: ext_dmem_dout_r = dmem_doutb_flat[1*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH];
+            2'd2: ext_dmem_dout_r = dmem_doutb_flat[2*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH];
+            2'd3: ext_dmem_dout_r = dmem_doutb_flat[3*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH];
         endcase
     end
+
     assign ext_dmem_dout = ext_dmem_dout_r;
 
     // ================================================================
@@ -93,9 +92,7 @@ module sm_top (
         .dmem_douta (core_dmem_dout),
         .kernel_start (kernel_start),
         .kernel_entry_pc (kernel_entry_pc),
-        .kernel_done (kernel_done),
-        .debug_rf_addr (debug_rf_addr),
-        .debug_rf_data (debug_rf_data)
+        .kernel_done (kernel_done)
     );
 
     // ================================================================
@@ -138,7 +135,7 @@ module sm_top (
                 .addrb (ext_dmem_addr),
                 .dinb (ext_dmem_din),
                 .web (dmem_web[gi]),
-                .doutb (dmem_doutb[gi])
+                .doutb (dmem_doutb_flat[gi*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH])
             );
         end
     endgenerate

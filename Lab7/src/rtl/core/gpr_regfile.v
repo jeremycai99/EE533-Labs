@@ -38,47 +38,48 @@ module gpr_regfile (
     input wire write_en3,
     input wire write_en4
 );
-    reg [15:0] gpr_regs [15:0]; // 16 registers of 16 bits each
     
+    reg [16*16-1:0] gpr_regs; // 16 registers × 16 bits, packed flat
+
     // Register file read logic: combinational read with register forwarding
     always @(*) begin
         read_data1 = (read_addr1 == write_addr1 && write_en1) ? write_data1 :
                      (read_addr1 == write_addr2 && write_en2) ? write_data2 :
                      (read_addr1 == write_addr3 && write_en3) ? write_data3 :
                      (read_addr1 == write_addr4 && write_en4) ? write_data4 :
-                     gpr_regs[read_addr1];
+                     gpr_regs[read_addr1*16 +: 16];
 
         read_data2 = (read_addr2 == write_addr1 && write_en1) ? write_data1 :
                      (read_addr2 == write_addr2 && write_en2) ? write_data2 :
                      (read_addr2 == write_addr3 && write_en3) ? write_data3 :
                      (read_addr2 == write_addr4 && write_en4) ? write_data4 :
-                     gpr_regs[read_addr2];
+                     gpr_regs[read_addr2*16 +: 16];
 
         read_data3 = (read_addr3 == write_addr1 && write_en1) ? write_data1 :
                      (read_addr3 == write_addr2 && write_en2) ? write_data2 :
                      (read_addr3 == write_addr3 && write_en3) ? write_data3 :
                      (read_addr3 == write_addr4 && write_en4) ? write_data4 :
-                     gpr_regs[read_addr3];
+                     gpr_regs[read_addr3*16 +: 16];
 
         read_data4 = (read_addr4 == write_addr1 && write_en1) ? write_data1 :
                      (read_addr4 == write_addr2 && write_en2) ? write_data2 :
                      (read_addr4 == write_addr3 && write_en3) ? write_data3 :
                      (read_addr4 == write_addr4 && write_en4) ? write_data4 :
-                     gpr_regs[read_addr4];
+                     gpr_regs[read_addr4*16 +: 16];
     end
 
     integer i;
     // Register file write logic: synchronous write
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            for (i = 0; i < 16; i = i + 1) begin
-                gpr_regs[i] <= 16'b0;
-            end
+            gpr_regs <= {16*16{1'b0}};
         end else begin
-            if (write_en1) gpr_regs[write_addr1] <= write_data1;
-            if (write_en2) gpr_regs[write_addr2] <= write_data2;
-            if (write_en3) gpr_regs[write_addr3] <= write_data3;
-            if (write_en4) gpr_regs[write_addr4] <= write_data4;
+            for (i = 0; i < 16; i = i + 1) begin
+                if (write_en4 && write_addr4 == i[3:0]) gpr_regs[i*16 +: 16] <= write_data4;
+                if (write_en3 && write_addr3 == i[3:0]) gpr_regs[i*16 +: 16] <= write_data3;
+                if (write_en2 && write_addr2 == i[3:0]) gpr_regs[i*16 +: 16] <= write_data2;
+                if (write_en1 && write_addr1 == i[3:0]) gpr_regs[i*16 +: 16] <= write_data1;
+            end
         end
     end
 

@@ -61,15 +61,15 @@ module int16hca (
 
     assign g_ks[0] = g1;
     assign p_ks[0] = p1;
-    
+
     genvar k;
     generate
         for (k = 1; k <= 3; k = k + 1) begin : KS_LEVEL
-            localparam integer DIST = (1 << k);
+            // DELETE: DIST = (1 << k);
             for (i = 0; i < 16; i = i + 1) begin : BIT
-                if ((i % 2 == 1) && (i >= DIST + 1)) begin : active
-                    assign g_ks[k][i] = g_ks[k-1][i] | (p_ks[k-1][i] & g_ks[k-1][i - DIST]);
-                    assign p_ks[k][i] = p_ks[k-1][i] & p_ks[k-1][i - DIST];
+                if ((i % 2 == 1) && (i >= (1 << k) + 1)) begin : active
+                    assign g_ks[k][i] = g_ks[k-1][i] | (p_ks[k-1][i] & g_ks[k-1][i - (1 << k)]);
+                    assign p_ks[k][i] = p_ks[k-1][i] & p_ks[k-1][i - (1 << k)];
                 end else begin : pass
                     assign g_ks[k][i] = g_ks[k-1][i];
                     assign p_ks[k][i] = p_ks[k-1][i];

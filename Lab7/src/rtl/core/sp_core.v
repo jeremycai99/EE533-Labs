@@ -5,9 +5,10 @@
     operation.
  Author: Jeremy Cai
  Date: Feb. 28, 2026
- Version: 1.0
+ Version: 1.1
  Revision history:
     - Feb. 28, 2026: Initial implementation of the CUDA-like SP core pipeline.
+    - Mar. 01, 2026: Remove ~stall from WB write enables to fix timing.
 */
 
 `ifndef SP_CORE_V
@@ -303,7 +304,6 @@ module sp_core #(
             ex_mem_pred_wr_sel <= 2'd0;
             ex_mem_wb_src <= 3'd0;
         end else if (ex_valid_out) begin
-            // Result ready — capture immediately (valid_out is 1-cycle pulse)
             ex_mem_valid <= 1'b1;
             ex_mem_result <= ex_result_muxed;
             ex_mem_store_data <= id_ex_opC;
@@ -379,12 +379,14 @@ module sp_core #(
     wire [15:0] wb_data_final = (mem_wb_wb_src == 3'd1) ? mem_rdata : mem_wb_data;
 
     // Scalar GPR writeback (W0)
-    assign w0_we = mem_wb_valid & mem_wb_rf_we & mem_wb_active & ~stall;
+    // No ~stall gate: during stall mem_wb is frozen, so w0_we just
+    // idempotently rewrites the same reg — safe and cuts timing.
+    assign w0_we = mem_wb_valid & mem_wb_rf_we & mem_wb_active;
     assign w0_addr = mem_wb_rD_addr;
     assign w0_data = wb_data_final;
 
     // Predicate RF writeback (SETP)
-    assign pred_wr_we = mem_wb_valid & mem_wb_pred_we & mem_wb_active & ~stall;
+    assign pred_wr_we = mem_wb_valid & mem_wb_pred_we & mem_wb_active;
     assign pred_wr_sel = mem_wb_pred_wr_sel;
     assign pred_wr_data = mem_wb_cmp_out;
 

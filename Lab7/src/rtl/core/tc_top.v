@@ -213,16 +213,18 @@ module tc_top (
             scat_w1_we = 4'b1111;
             scat_w2_we = 4'b1111;
             scat_w3_we = 4'b1111;
-            for (si = 0; si < 4; si = si + 1) begin
-                scat_w1_data[si*16 +: 16] = matrix_d[si*64 + 0*16 +: 16];
-                scat_w2_data[si*16 +: 16] = matrix_d[si*64 + 1*16 +: 16];
-                scat_w3_data[si*16 +: 16] = matrix_d[si*64 + 2*16 +: 16];
-            end
+            // col 0 → W1, col 1 → W2, col 2 → W3
+            scat_w1_data = {matrix_d[3*64+0*16 +: 16], matrix_d[2*64+0*16 +: 16],
+                            matrix_d[1*64+0*16 +: 16], matrix_d[0*64+0*16 +: 16]};
+            scat_w2_data = {matrix_d[3*64+1*16 +: 16], matrix_d[2*64+1*16 +: 16],
+                            matrix_d[1*64+1*16 +: 16], matrix_d[0*64+1*16 +: 16]};
+            scat_w3_data = {matrix_d[3*64+2*16 +: 16], matrix_d[2*64+2*16 +: 16],
+                            matrix_d[1*64+2*16 +: 16], matrix_d[0*64+2*16 +: 16]};
         end else if (state == TC_SCATTER1) begin
             scat_w1_addr = rD_base + 4'd3;
             scat_w1_we = 4'b1111;
-            for (si = 0; si < 4; si = si + 1)
-                scat_w1_data[si*16 +: 16] = matrix_d[si*64 + 3*16 +: 16];
+            scat_w1_data = {matrix_d[3*64+3*16 +: 16], matrix_d[2*64+3*16 +: 16],
+                            matrix_d[1*64+3*16 +: 16], matrix_d[0*64+3*16 +: 16]};
         end
     end
 
