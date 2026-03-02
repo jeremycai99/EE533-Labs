@@ -2,9 +2,20 @@
  Description: This file implements the Streaming Multiprocessor (SM) core, which includes the fetch unit,
     decoder, scoreboard, multiple SP cores, and a tensor core. 
  Date: Feb. 28, 2026
- Version: 1.0
+ Version: 1.4
  Revision history:
     - Feb. 28, 2026: Initial implementation of the SM core.
+    - Mar. 01, 2026: v1.1 — Register BU RF override signals to fix 
+      bu_state → rf_r1_addr_mux → RF read → id_ex_opB timing path.
+    - Mar. 01, 2026: v1.2 — Insert DE pipeline register stage between
+      decoder and RF read to fix IMEM → decode → RF addr → RF read
+      critical path (-10ns slack, 4719 failing endpoints).
+    - Mar. 01, 2026: v1.3 — Restore ir_latch to fix instruction-skip
+      bug on scoreboard stall.
+    - Mar. 01, 2026: v1.4 — Gate sb_stall with de_valid to break
+      X-propagation from scoreboard issue→stall combinational loop
+      when DE stage is empty (de_valid=0).  When no valid instruction
+      is in DE, the scoreboard has nothing to stall for.
 */
 
 `ifndef SM_CORE_V
@@ -26,7 +37,6 @@ module sm_core (
     input wire [`GPU_IMEM_DATA_WIDTH-1:0] imem_rdata,
 
     // Per-SP DMEM BRAM port-A (GPU read/write)
-    // Flat buses: bits [W*t +: W] = SP t
     output wire [4*`GPU_DMEM_ADDR_WIDTH-1:0] dmem_addra,
     output wire [4*`GPU_DMEM_DATA_WIDTH-1:0] dmem_dina,
     output wire [3:0] dmem_wea,
@@ -49,7 +59,7 @@ module sm_core (
     wire fetch_valid;
     wire fu_running;
 
-    // Decoder outputs
+    // Decoder outputs (combinational from dec_ir)
     wire [4:0] dec_opcode;
     wire dec_dt;
     wire [1:0] dec_cmp_mode;
@@ -89,7 +99,6 @@ module sm_core (
     wire dmem_we_a [0:3];
     wire [`GPU_DMEM_DATA_WIDTH-1:0] dmem_dout_a [0:3];
 
-    // Flat bus unpack/pack
     genvar u;
     generate
         for (u = 0; u < 4; u = u + 1) begin : DMEM_IO
@@ -100,7 +109,7 @@ module sm_core (
         end
     endgenerate
 
-    // RF read address bus (muxed: normal / TC gather / burst)
+    // RF read address bus (muxed: DE default / TC gather / BU store / debug)
     reg [3:0] rf_r0_addr_mux, rf_r1_addr_mux, rf_r2_addr_mux, rf_r3_addr_mux;
 
     // Stall / flush
@@ -112,14 +121,12 @@ module sm_core (
     wire sp_stall;
     wire sp_flush_id;
 
-    // Active mask (Phase 1–3: all active)
+    // Active mask
     reg [3:0] active_mask;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) active_mask <= 4'b1111;
         else if (kernel_start) active_mask <= 4'b1111;
     end
-
-    wire wmma_any = dec_is_wmma_mma | dec_is_wmma_load | dec_is_wmma_store;
 
     // TC top interface wires
     wire tc_rf_override;
@@ -161,8 +168,16 @@ module sm_core (
     );
 
     // ================================================================
-    // IR Latch — hold instruction during scoreboard stall
+    // IR Latch — hold IMEM output during stalls
     // ================================================================
+    // With the DE pipeline register, PC is two stages ahead of DE.
+    // When front_stall fires (based on DE contents), the BRAM address
+    // has already advanced past the next instruction.  On the first
+    // stall cycle the BRAM output still contains the correct next
+    // instruction (from the address presented in the previous cycle).
+    // ir_latch captures this value before the BRAM overwrites it on
+    // subsequent stall cycles.  The decoder always reads dec_ir, which
+    // selects ir_latch when latched, or imem_rdata when free-running.
     reg [31:0] ir_latch;
     reg ir_latched;
 
@@ -181,7 +196,7 @@ module sm_core (
     wire [31:0] dec_ir = ir_latched ? ir_latch : imem_rdata;
 
     // ================================================================
-    // SM Decoder
+    // SM Decoder (combinational from dec_ir)
     // ================================================================
     sm_decoder u_dec (
         .ir (dec_ir),
@@ -218,48 +233,174 @@ module sm_core (
     );
 
     // ================================================================
-    // Stall / Flush / Issue Control
+    // DE Pipeline Register (Decode → RF stage boundary)
     // ================================================================
-    // WMMA ops must wait for pipeline to drain before triggering.
-    // Stall the front-end while waiting to prevent PC from advancing.
-    wire pipeline_drained;
+    // Breaks the critical path:
+    //   IMEM BRAM (1.4ns) → decode (3ns) → RF addr mux → RF read
+    // Into two halves meeting the 8ns budget:
+    //   DE capture: IMEM → ir_mux → decode → de_* FFs (~5-6ns)
+    //   RF read:    de_rf_r*_addr FFs → mux → RF read → id_ex (~6-7ns)
+    //
+    // During stalls, DE holds its contents.  ir_latch ensures the
+    // decoder still sees the correct instruction when BRAM overwrites.
 
-    wire wmma_drain_wait = fetch_valid & wmma_any & ~pipeline_drained
+    reg [4:0] de_opcode;
+    reg de_dt;
+    reg [1:0] de_cmp_mode;
+    reg [3:0] de_rD_addr, de_rA_addr, de_rB_addr, de_rC_addr;
+    reg [15:0] de_imm16;
+    reg de_rf_we, de_pred_we;
+    reg [1:0] de_pred_wr_sel, de_pred_rd_sel;
+    reg [2:0] de_wb_src;
+    reg de_use_imm;
+    reg de_uses_rA, de_uses_rB, de_is_fma, de_is_st;
+    reg de_is_branch, de_is_pbra, de_is_ret;
+    reg de_is_ld, de_is_store, de_is_lds, de_is_sts;
+    reg de_is_wmma_mma, de_is_wmma_load, de_is_wmma_store;
+    reg [1:0] de_wmma_sel;
+    reg [`GPU_PC_WIDTH-1:0] de_branch_target;
+    reg de_valid;
+
+    // Pre-computed RF read addresses for the RF stage
+    reg [3:0] de_rf_r0_addr;
+    reg [3:0] de_rf_r1_addr;
+    reg [3:0] de_rf_r2_addr;
+    reg [3:0] de_rf_r3_addr;
+
+    // DE flush: invalidate DE on branch redirect or RET
+    wire de_flush = branch_taken | ret_detected;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            de_valid <= 1'b0;
+            de_rf_we <= 1'b0;
+            de_pred_we <= 1'b0;
+            de_opcode <= 5'd0;
+            de_dt <= 1'b0;
+            de_cmp_mode <= 2'd0;
+            de_rD_addr <= 4'd0;
+            de_rA_addr <= 4'd0;
+            de_rB_addr <= 4'd0;
+            de_rC_addr <= 4'd0;
+            de_imm16 <= 16'd0;
+            de_pred_wr_sel <= 2'd0;
+            de_pred_rd_sel <= 2'd0;
+            de_wb_src <= 3'd0;
+            de_use_imm <= 1'b0;
+            de_uses_rA <= 1'b0;
+            de_uses_rB <= 1'b0;
+            de_is_fma <= 1'b0;
+            de_is_st <= 1'b0;
+            de_is_branch <= 1'b0;
+            de_is_pbra <= 1'b0;
+            de_is_ret <= 1'b0;
+            de_is_ld <= 1'b0;
+            de_is_store <= 1'b0;
+            de_is_lds <= 1'b0;
+            de_is_sts <= 1'b0;
+            de_is_wmma_mma <= 1'b0;
+            de_is_wmma_load <= 1'b0;
+            de_is_wmma_store <= 1'b0;
+            de_wmma_sel <= 2'd0;
+            de_branch_target <= {`GPU_PC_WIDTH{1'b0}};
+            de_rf_r0_addr <= 4'd0;
+            de_rf_r1_addr <= 4'd0;
+            de_rf_r2_addr <= 4'd0;
+            de_rf_r3_addr <= 4'd0;
+        end else if (de_flush) begin
+            de_valid <= 1'b0;
+            de_rf_we <= 1'b0;
+            de_pred_we <= 1'b0;
+        end else if (!front_stall) begin
+            de_opcode <= dec_opcode;
+            de_dt <= dec_dt;
+            de_cmp_mode <= dec_cmp_mode;
+            de_rD_addr <= dec_rD_addr;
+            de_rA_addr <= dec_rA_addr;
+            de_rB_addr <= dec_rB_addr;
+            de_rC_addr <= dec_rC_addr;
+            de_imm16 <= dec_imm16;
+            de_rf_we <= dec_rf_we;
+            de_pred_we <= dec_pred_we;
+            de_pred_wr_sel <= dec_pred_wr_sel;
+            de_pred_rd_sel <= dec_pred_rd_sel;
+            de_wb_src <= dec_wb_src;
+            de_use_imm <= dec_use_imm;
+            de_uses_rA <= dec_uses_rA;
+            de_uses_rB <= dec_uses_rB;
+            de_is_fma <= dec_is_fma;
+            de_is_st <= dec_is_st;
+            de_is_branch <= dec_is_branch;
+            de_is_pbra <= dec_is_pbra;
+            de_is_ret <= dec_is_ret;
+            de_is_ld <= dec_is_ld;
+            de_is_store <= dec_is_store;
+            de_is_lds <= dec_is_lds;
+            de_is_sts <= dec_is_sts;
+            de_is_wmma_mma <= dec_is_wmma_mma;
+            de_is_wmma_load <= dec_is_wmma_load;
+            de_is_wmma_store <= dec_is_wmma_store;
+            de_wmma_sel <= dec_wmma_sel;
+            de_branch_target <= dec_branch_target;
+            de_valid <= fetch_valid;
+
+            // Pre-compute RF addresses
+            de_rf_r0_addr <= dec_rA_addr;
+            de_rf_r1_addr <= dec_rB_addr;
+            de_rf_r2_addr <= (dec_is_fma | dec_is_st) ? dec_rD_addr : dec_rC_addr;
+            de_rf_r3_addr <= 4'd0;
+        end
+        // else: front_stall — DE holds
+    end
+
+    // ================================================================
+    // Stall / Flush / Issue Control (uses DE-stage signals)
+    // ================================================================
+    wire de_wmma_any = de_is_wmma_mma | de_is_wmma_load | de_is_wmma_store;
+
+    wire pipeline_drained;
+    wire wmma_drain_wait = de_valid & de_wmma_any & ~pipeline_drained
                          & ~tc_busy & ~burst_busy;
-    assign front_stall = sb_stall | any_ex_busy | tc_busy | burst_busy
+
+    // Gate sb_stall with de_valid: when DE is empty (no valid instr),
+    // the scoreboard cannot stall the pipeline.  This also breaks
+    // X-propagation from a combinational issue→stall loop inside
+    // the scoreboard when de_valid=0 (0 & X = 0).
+    wire sb_stall_gated = sb_stall & de_valid;
+
+    assign front_stall = sb_stall_gated | any_ex_busy | tc_busy | burst_busy
                        | wmma_drain_wait;
     assign sp_stall = any_ex_busy | tc_busy | burst_busy;
-    assign sp_flush_id = sb_stall & ~sp_stall;
+    assign sp_flush_id = sb_stall_gated & ~sp_stall;
 
-    wire id_can_issue = fetch_valid & ~front_stall & ~wmma_any;
-    wire sp_id_valid = fetch_valid & ~wmma_any;
+    wire id_can_issue = de_valid & ~front_stall & ~de_wmma_any;
+    wire sp_id_valid = de_valid & ~de_wmma_any;
 
-    wire id_issue_ctrl = fetch_valid & ~front_stall;
-    assign branch_taken = id_issue_ctrl & dec_is_branch;
-    assign branch_target = dec_branch_target;
-    assign ret_detected = id_issue_ctrl & dec_is_ret;
+    wire id_issue_ctrl = de_valid & ~front_stall;
+    assign branch_taken = id_issue_ctrl & de_is_branch;
+    assign branch_target = de_branch_target;
+    assign ret_detected = id_issue_ctrl & de_is_ret;
 
-    wire sb_issue = id_can_issue & dec_rf_we;
+    wire sb_issue = id_can_issue & de_rf_we;
 
     // ================================================================
-    // Scoreboard
+    // Scoreboard (uses DE-stage addresses)
     // ================================================================
     wire [3:0] wb_active_mask_sb = {sp_wb_active[3], sp_wb_active[2],
                                     sp_wb_active[1], sp_wb_active[0]};
-
 
     wire sb_any_pending;
 
     scoreboard u_sb (
         .clk (clk), .rst_n (rst_n),
-        .rA_addr (dec_rA_addr),
-        .rB_addr (dec_rB_addr),
-        .rD_addr (dec_rD_addr),
-        .uses_rA (dec_uses_rA),
-        .uses_rB (dec_uses_rB),
-        .is_fma (dec_is_fma),
-        .is_st (dec_is_st),
-        .rf_we (dec_rf_we),
+        .rA_addr (de_rA_addr),
+        .rB_addr (de_rB_addr),
+        .rD_addr (de_rD_addr),
+        .uses_rA (de_uses_rA),
+        .uses_rB (de_uses_rB),
+        .is_fma (de_is_fma),
+        .is_st (de_is_st),
+        .rf_we (de_rf_we),
         .active_mask (active_mask),
         .issue (sb_issue),
         .wb_rD_addr (sp_wb_rD_addr[0]),
@@ -270,22 +411,20 @@ module sm_core (
     );
 
     // ================================================================
-    // Tensor Core Top
+    // Tensor Core Top (uses DE-stage addresses)
     // ================================================================
-    // WMMA ops must wait for pipeline to drain — the TC gather reads RF
-    // directly, bypassing the scoreboard hazard check.
     assign pipeline_drained = ~sb_any_pending & ~any_ex_busy;
 
-    wire tc_trigger = fetch_valid & dec_is_wmma_mma & ~tc_busy & ~burst_busy
+    wire tc_trigger = de_valid & de_is_wmma_mma & ~tc_busy & ~burst_busy
                     & pipeline_drained;
 
     tc_top u_tc_top (
         .clk (clk), .rst_n (rst_n),
         .trigger (tc_trigger),
-        .dec_rA_addr (dec_rA_addr),
-        .dec_rB_addr (dec_rB_addr),
-        .dec_rC_addr (dec_rC_addr),
-        .dec_rD_addr (dec_rD_addr),
+        .dec_rA_addr (de_rA_addr),
+        .dec_rB_addr (de_rB_addr),
+        .dec_rC_addr (de_rC_addr),
+        .dec_rD_addr (de_rD_addr),
         .sp_rf_r0_data (flat_rf_r0),
         .sp_rf_r1_data (flat_rf_r1),
         .sp_rf_r2_data (flat_rf_r2),
@@ -308,7 +447,7 @@ module sm_core (
     );
 
     // ================================================================
-    // Burst Controller — WMMA.LOAD / WMMA.STORE (inline)
+    // Burst Controller — WMMA.LOAD / WMMA.STORE (uses DE-stage signals)
     // ================================================================
     localparam [2:0] BU_IDLE       = 3'd0,
                      BU_LOAD_ADDR  = 3'd1,
@@ -324,14 +463,14 @@ module sm_core (
     reg [`GPU_DMEM_ADDR_WIDTH-1:0] bu_base_addr [0:3];
     reg [15:0] bu_store_data [0:3][0:3];
 
-    wire bu_load_trigger = fetch_valid & dec_is_wmma_load & ~tc_busy
+    wire bu_load_trigger = de_valid & de_is_wmma_load & ~tc_busy
                          & ~burst_busy & pipeline_drained;
-    wire bu_store_trigger = fetch_valid & dec_is_wmma_store & ~tc_busy
+    wire bu_store_trigger = de_valid & de_is_wmma_store & ~tc_busy
                           & ~burst_busy & pipeline_drained;
 
-    // Burst RF addr override
-    reg bu_rf_override;
-    reg [3:0] bu_rf_r0, bu_rf_r1, bu_rf_r2, bu_rf_r3;
+    // Burst RF addr override — REGISTERED (from v1.1 BU timing fix)
+    reg bu_rf_override_r;
+    reg [3:0] bu_rf_r0_r, bu_rf_r1_r, bu_rf_r2_r, bu_rf_r3_r;
 
     // Burst ext write (load beats → W1)
     reg [3:0] bu_w1_addr;
@@ -346,6 +485,11 @@ module sm_core (
             bu_state <= BU_IDLE;
             bu_beat <= 2'd0;
             bu_rD_base <= 4'd0;
+            bu_rf_override_r <= 1'b0;
+            bu_rf_r0_r <= 4'd0;
+            bu_rf_r1_r <= 4'd0;
+            bu_rf_r2_r <= 4'd0;
+            bu_rf_r3_r <= 4'd0;
             for (bi = 0; bi < 4; bi = bi + 1) begin
                 bu_base_addr[bi] <= {`GPU_DMEM_ADDR_WIDTH{1'b0}};
                 bu_store_data[bi][0] <= 16'd0;
@@ -357,19 +501,24 @@ module sm_core (
             case (bu_state)
                 BU_IDLE: begin
                     if (bu_load_trigger) begin
-                        bu_rD_base <= dec_rD_addr;
+                        bu_rD_base <= de_rD_addr;
                         for (bi = 0; bi < 4; bi = bi + 1)
                             bu_base_addr[bi] <= sp_rf_r0_data[bi][`GPU_DMEM_ADDR_WIDTH-1:0]
-                                              + dec_imm16[`GPU_DMEM_ADDR_WIDTH-1:0];
+                                              + de_imm16[`GPU_DMEM_ADDR_WIDTH-1:0];
                         bu_beat <= 2'd0;
                         bu_state <= BU_LOAD_ADDR;
                     end else if (bu_store_trigger) begin
-                        bu_rD_base <= dec_rD_addr;
+                        bu_rD_base <= de_rD_addr;
                         for (bi = 0; bi < 4; bi = bi + 1)
                             bu_base_addr[bi] <= sp_rf_r0_data[bi][`GPU_DMEM_ADDR_WIDTH-1:0]
-                                              + dec_imm16[`GPU_DMEM_ADDR_WIDTH-1:0];
+                                              + de_imm16[`GPU_DMEM_ADDR_WIDTH-1:0];
                         bu_beat <= 2'd0;
                         bu_state <= BU_STORE_READ;
+                        bu_rf_override_r <= 1'b1;
+                        bu_rf_r0_r <= de_rD_addr;
+                        bu_rf_r1_r <= de_rD_addr + 4'd1;
+                        bu_rf_r2_r <= de_rD_addr + 4'd2;
+                        bu_rf_r3_r <= de_rD_addr + 4'd3;
                     end
                 end
                 BU_LOAD_ADDR: bu_state <= BU_LOAD_BEAT;
@@ -388,6 +537,7 @@ module sm_core (
                     end
                     bu_beat <= 2'd0;
                     bu_state <= BU_STORE_BEAT;
+                    bu_rf_override_r <= 1'b0;
                 end
                 BU_STORE_BEAT: begin
                     if (bu_beat == 2'd3)
@@ -402,21 +552,11 @@ module sm_core (
 
     // Burst combinational outputs
     always @(*) begin
-        bu_rf_override = 1'b0;
-        bu_rf_r0 = 4'd0; bu_rf_r1 = 4'd0;
-        bu_rf_r2 = 4'd0; bu_rf_r3 = 4'd0;
         bu_w1_addr = 4'd0;
         bu_w1_we = 1'b0;
         bu_dmem_override = 1'b0;
 
         case (bu_state)
-            BU_STORE_READ: begin
-                bu_rf_override = 1'b1;
-                bu_rf_r0 = bu_rD_base;
-                bu_rf_r1 = bu_rD_base + 4'd1;
-                bu_rf_r2 = bu_rD_base + 4'd2;
-                bu_rf_r3 = bu_rD_base + 4'd3;
-            end
             BU_LOAD_ADDR, BU_LOAD_BEAT: begin
                 bu_dmem_override = 1'b1;
                 bu_w1_we = (bu_state == BU_LOAD_BEAT);
@@ -428,32 +568,33 @@ module sm_core (
     end
 
     // ================================================================
-    // RF Read Address Mux
+    // RF Read Address Mux (RF stage)
     // ================================================================
+    // Default path uses DE-registered addresses (de_rf_r*_addr).
+    // TC/BU overrides are from their own registered FSM signals.
+    // All mux inputs are FF outputs → 1 LUT → RF read ≈ 6-7ns ✓
     always @(*) begin
-        // Default: decoder-driven
-        rf_r0_addr_mux = dec_rA_addr;
-        rf_r1_addr_mux = dec_rB_addr;
-        rf_r2_addr_mux = (dec_is_fma | dec_is_st) ? dec_rD_addr : dec_rC_addr;
-        rf_r3_addr_mux = 4'd0;
+        rf_r0_addr_mux = de_rf_r0_addr;
+        rf_r1_addr_mux = de_rf_r1_addr;
+        rf_r2_addr_mux = de_rf_r2_addr;
+        rf_r3_addr_mux = de_rf_r3_addr;
 
         if (tc_rf_override) begin
             rf_r0_addr_mux = tc_rf_r0;
             rf_r1_addr_mux = tc_rf_r1;
             rf_r2_addr_mux = tc_rf_r2;
             rf_r3_addr_mux = tc_rf_r3;
-        end else if (bu_rf_override) begin
-            rf_r0_addr_mux = bu_rf_r0;
-            rf_r1_addr_mux = bu_rf_r1;
-            rf_r2_addr_mux = bu_rf_r2;
-            rf_r3_addr_mux = bu_rf_r3;
+        end else if (bu_rf_override_r) begin
+            rf_r0_addr_mux = bu_rf_r0_r;
+            rf_r1_addr_mux = bu_rf_r1_r;
+            rf_r2_addr_mux = bu_rf_r2_r;
+            rf_r3_addr_mux = bu_rf_r3_r;
         end else if (!fu_running) begin
-            // Debug: when idle, TB drives rf_r0 via debug_rf_addr
             rf_r0_addr_mux = debug_rf_addr;
         end
     end
 
-    // Debug RF data: combinational read from all 4 SPs' port 0
+    // Debug RF data
     assign debug_rf_data = {sp_rf_r0_data[3], sp_rf_r0_data[2],
                             sp_rf_r0_data[1], sp_rf_r0_data[0]};
 
@@ -473,7 +614,6 @@ module sm_core (
     integer wi;
     always @(*) begin
         for (wi = 0; wi < 4; wi = wi + 1) begin
-            // TC scatter
             ext_w1_addr[wi] = tc_w1_addr;
             ext_w1_data[wi] = tc_w1_data[wi*16 +: 16];
             ext_w1_we[wi] = tc_w1_we[wi];
@@ -484,7 +624,6 @@ module sm_core (
             ext_w3_data[wi] = tc_w3_data[wi*16 +: 16];
             ext_w3_we[wi] = tc_w3_we[wi];
 
-            // Burst load overrides W1 (mutually exclusive with TC scatter)
             if (bu_w1_we) begin
                 ext_w1_addr[wi] = bu_w1_addr;
                 ext_w1_data[wi] = dmem_douta[wi*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH];
@@ -494,7 +633,7 @@ module sm_core (
     end
 
     // ================================================================
-    // Generate: 4× SP Core
+    // Generate: 4× SP Core (wired from DE-stage signals)
     // ================================================================
     genvar t;
     generate
@@ -511,20 +650,20 @@ module sm_core (
                 .rf_r1_data (sp_rf_r1_data[t]),
                 .rf_r2_data (sp_rf_r2_data[t]),
                 .rf_r3_data (sp_rf_r3_data[t]),
-                .pred_rd_sel (dec_pred_rd_sel),
+                .pred_rd_sel (de_pred_rd_sel),
                 .pred_rd_val (sp_pred_rd_val[t]),
-                .id_opcode (dec_opcode),
-                .id_dt (dec_dt),
-                .id_cmp_mode (dec_cmp_mode),
-                .id_rf_we (dec_rf_we),
-                .id_pred_we (dec_pred_we),
-                .id_rD_addr (dec_rD_addr),
-                .id_pred_wr_sel (dec_pred_wr_sel),
+                .id_opcode (de_opcode),
+                .id_dt (de_dt),
+                .id_cmp_mode (de_cmp_mode),
+                .id_rf_we (de_rf_we),
+                .id_pred_we (de_pred_we),
+                .id_rD_addr (de_rD_addr),
+                .id_pred_wr_sel (de_pred_wr_sel),
                 .id_valid (sp_id_valid),
                 .id_active (active_mask[t]),
-                .id_wb_src (dec_wb_src),
-                .id_use_imm (dec_use_imm),
-                .id_imm16 (dec_imm16),
+                .id_wb_src (de_wb_src),
+                .id_use_imm (de_use_imm),
+                .id_imm16 (de_imm16),
                 .ex_mem_result_out (sp_ex_mem_result[t]),
                 .ex_mem_store_out (sp_ex_mem_store[t]),
                 .ex_mem_valid_out (sp_ex_mem_valid[t]),
@@ -558,7 +697,6 @@ module sm_core (
             wire bu_load_phase = (bu_state == BU_LOAD_ADDR) | (bu_state == BU_LOAD_BEAT);
             wire bu_store_phase = (bu_state == BU_STORE_BEAT);
 
-            // Burst load: prefetch next addr (base+beat+1), first addr=base+0
             wire [`GPU_DMEM_ADDR_WIDTH-1:0] bu_ld_addr =
                 (bu_state == BU_LOAD_ADDR)
                     ? bu_base_addr[d]

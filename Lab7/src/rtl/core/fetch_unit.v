@@ -126,7 +126,7 @@ module fetch_unit (
         end else if (kernel_start) begin
             drain_counter <= 3'd0;
         end else if (ret_detected) begin
-            drain_counter <= 3'd4; // 4 cycles to drain
+            drain_counter <= 3'd5; // 5 cycles to drain
         end else if (drain_counter != 3'd0) begin
             drain_counter <= drain_counter - 3'd1;
         end
