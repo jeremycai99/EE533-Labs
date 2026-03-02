@@ -29,6 +29,9 @@
 `define OP_MIN  5'b01011
 `define OP_ABS  5'b01100
 `define OP_NEG  5'b01101
+// Immediate Operations
+`define OP_ADDI 5'b10011
+`define OP_MULI 5'b10100
 // Logical and Shift Operations. DT irrelevant
 `define OP_AND  5'b01110
 `define OP_OR   5'b01111
@@ -37,9 +40,6 @@
 `define OP_SHR  5'b10010 // In our design, shift right is a arithmetic shift for INT16
                          //mathcing INT16 encoding behavior. We can use instruction pairs 
                          //to perform logical shift if needed.
-// Immediate Operations
-`define OP_ADDI 5'b10011
-`define OP_MULI 5'b10100
 // Predicate and Selection Operations
 `define OP_SETP 5'b10101
 `define OP_SELP 5'b10110
