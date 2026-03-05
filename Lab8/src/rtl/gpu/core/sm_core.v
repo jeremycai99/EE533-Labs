@@ -3,12 +3,14 @@ Description: This file contains the implementation of the CUDA-like SM core, int
 decoder, scoreboard, SP cores, tensor core, and SIMT stack.
 Author: Jeremy Cai
 Date: Mar. 4, 2026
-Version: 1.1
+Version: 1.2
 Revision history:
 - Feb. 27, 2026: Initial implementation of the CUDA-like SM core.
 - Mar. 4, 2026: v1.0 — Add SIMT stack and PBRA handling logic. Add convergence redirect support
     in fetch unit and SIMT stack.
 - Mar. 4, 2026: v1.1 — Bug fixes
+- Mar. 4, 2026: v1.2 — SoC integration: add thread_mask[3:0] input port (from CP10 CR7).
+    Kernel launch uses thread_mask instead of hardcoded 4'b1111 for active_mask init.
  */
 
 `ifndef SM_CORE_V
@@ -39,6 +41,7 @@ module sm_core (
     // Kernel control
     input wire kernel_start,
     input wire [`GPU_PC_WIDTH-1:0] kernel_entry_pc,
+    input wire [3:0] thread_mask,        // from CP10 CR7
     output wire kernel_done,
 
     // Debug RF read
@@ -153,7 +156,7 @@ module sm_core (
     wire simt_modify;
 
     // ================================================================
-    // Fetch Unit — v1.2 with post-redirect bubble (Bug A)
+    // Fetch Unit with post-redirect bubble
     // ================================================================
     wire branch_taken;
     wire [`GPU_PC_WIDTH-1:0] branch_target;
@@ -703,7 +706,7 @@ module sm_core (
         if (!rst_n)
             active_mask <= 4'b1111;
         else if (kernel_start)
-            active_mask <= 4'b1111;
+            active_mask <= thread_mask;   // from CP10 CR7
         else if (conv_phase1_fire)
             active_mask <= tos_saved_mask;
         else if (conv_phase0_fire)

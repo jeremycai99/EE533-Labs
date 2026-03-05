@@ -47,6 +47,7 @@ module sm_core_tb;
 
     reg kernel_start;
     reg [`GPU_PC_WIDTH-1:0] kernel_entry_pc;
+    reg [3:0] thread_mask;               // v1.3: from CP10 CR7
     wire kernel_done;
 
     reg [3:0] debug_rf_addr;
@@ -65,6 +66,7 @@ module sm_core_tb;
         .dmem_douta(dmem_douta),
         .kernel_start(kernel_start),
         .kernel_entry_pc(kernel_entry_pc),
+        .thread_mask(thread_mask),
         .kernel_done(kernel_done),
         .debug_rf_addr(debug_rf_addr),
         .debug_rf_data(debug_rf_data)
@@ -228,6 +230,7 @@ module sm_core_tb;
         rst_n = 0;
         kernel_start = 0;
         kernel_entry_pc = 32'd0;
+        thread_mask = 4'b1111;           // v1.3: default all threads active
         debug_rf_addr = 4'd0;
         for (i = 0; i < 256; i = i + 1) imem[i] = INST_NOP;
         repeat (3) tick;
