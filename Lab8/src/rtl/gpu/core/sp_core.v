@@ -5,16 +5,12 @@
     operation.
  Author: Jeremy Cai
  Date: Feb. 28, 2026
- Version: 1.2
+ Version: 1.3
  Revision history:
     - Feb. 28, 2026: Initial implementation of the CUDA-like SP core pipeline.
     - Mar. 01, 2026: v1.1 — Remove ~stall from WB write enables to fix timing.
     - Mar. 02, 2026: v1.2 — Dual RF read ports for timing isolation.
-      Pipeline reads (ppl_rf_r*) driven by registered rr_rf_r*_addr
-      go directly to id_ex_opA/B/C — no bypass mux in path.
-      Override reads (ovr_rf_r*) for TC gather / BU data / debug.
-      Critical path: rr_rf_r*_addr(FF) → RF 16:1 mux → id_ex_opB(FF) ≈ 5-6ns.
-      Forwarding removed — scoreboard guarantees RAW safety.
+    - Mar. 04, 2026: v1.3 — Fix OP_SET predicate write path.
 */
 
 `ifndef SP_CORE_V
@@ -123,8 +119,6 @@ module sp_core #(
     // ====================================================================
     // GPR Register File — 16x16b, 8R4W (dual read ports, v1.1)
     // ====================================================================
-    // Pipeline reads: ppl_rf_r*_addr → ppl_rf_r*_data (feeds id_ex)
-    // Override reads: ovr_rf_r*_addr → ovr_rf_r*_data (feeds TC/BU/debug)
     gpr_regfile u_gpr_rf (
         .clk(clk), .rst_n(rst_n),
         // Pipeline read ports
@@ -137,7 +131,7 @@ module sp_core #(
         .ovr_read_addr2(ovr_rf_r1_addr), .ovr_read_data2(ovr_rf_r1_data),
         .ovr_read_addr3(ovr_rf_r2_addr), .ovr_read_data3(ovr_rf_r2_data),
         .ovr_read_addr4(ovr_rf_r3_addr), .ovr_read_data4(ovr_rf_r3_data),
-        // Write ports (unchanged)
+        // Write ports
         .write_addr1(w0_addr), .write_data1(w0_data), .write_en1(w0_we),
         .write_addr2(wb_ext_w1_addr), .write_data2(wb_ext_w1_data), .write_en2(wb_ext_w1_we),
         .write_addr3(wb_ext_w2_addr), .write_data3(wb_ext_w2_data), .write_en3(wb_ext_w2_we),
@@ -171,6 +165,9 @@ module sp_core #(
     reg id_ex_active;
     reg [2:0] id_ex_wb_src;
 
+    // SET val bit — captured from imm16[0] for OP_SET
+    reg id_ex_set_val;
+
     // MOV.TID detection: MOV opcode with DT=1
     wire sel_tid = (id_opcode == `OP_MOV) && id_dt;
 
@@ -190,6 +187,7 @@ module sp_core #(
             id_ex_opA <= 16'd0;
             id_ex_opB <= 16'd0;
             id_ex_opC <= 16'd0;
+            id_ex_set_val <= 1'b0;
         end else if (!stall) begin
             if (flush_id) begin
                 id_ex_valid <= 1'b0;
@@ -210,6 +208,7 @@ module sp_core #(
                 id_ex_valid <= id_valid;
                 id_ex_active <= id_active;
                 id_ex_wb_src <= id_wb_src;
+                id_ex_set_val <= id_imm16[0];
             end
         end
     end
@@ -232,10 +231,23 @@ module sp_core #(
     // CVT instruction bypasses ALU/FPU
     wire is_cvt = (id_ex_opcode == `OP_CVT);
 
-    // Gate valid_in: one-shot pulse on first EX cycle only
-    wire alu_valid_in = id_ex_valid & ~id_ex_dt & ~id_ex_launched & ~is_cvt;
-    wire fpu_valid_in = id_ex_valid & id_ex_dt & ~id_ex_launched & ~is_cvt;
+    // SET instruction detection — bypass ALU entirely
+    wire is_set = (id_ex_opcode == `OP_SET);
+
+    // Gate valid_in: one-shot pulse on first EX cycle only.
+    // SET is gated out of ALU (~is_set) — it uses a direct
+    // combinational valid path below instead.  This prevents the ALU
+    // from seeing an unrecognized opcode and failing to produce valid_out.
+    wire alu_valid_in = id_ex_valid & ~id_ex_dt & ~id_ex_launched & ~is_cvt & ~is_set;
+    wire fpu_valid_in = id_ex_valid & id_ex_dt & ~id_ex_launched & ~is_cvt & ~is_set;
     wire cvt_valid_in = id_ex_valid & is_cvt & ~id_ex_launched;
+
+    // SET combinational valid — fires same cycle as id_ex holds SET.
+    // NOT registered: EX/MEM captures at posedge while id_ex still holds
+    // SET's control signals (pred_we, pred_wr_sel, active, etc).
+    // A registered version would fire 1 cycle late when id_ex has already
+    // advanced to the next instruction (no stall since ex_busy=0 for SET).
+    wire set_valid = id_ex_valid & is_set & ~id_ex_launched;
 
     // --- INT16 ALU ---
     wire [15:0] alu_result;
@@ -291,7 +303,7 @@ module sp_core #(
     wire [15:0] alu_fpu_result = id_ex_dt ? fpu_result : alu_result;
     wire [15:0] ex_result_muxed = cvt_done ? cvt_result : alu_fpu_result;
     wire alu_fpu_valid = id_ex_dt ? fpu_valid_out : alu_valid_out;
-    wire ex_valid_out = cvt_done | alu_fpu_valid;
+    wire ex_valid_out = cvt_done | alu_fpu_valid | set_valid; // SET combinational
     wire alu_fpu_busy = id_ex_dt ? fpu_busy : alu_busy;
     assign ex_busy = cvt_busy | alu_fpu_busy;
 
@@ -303,6 +315,11 @@ module sp_core #(
                             (id_ex_cmp_mode == 2'd1) ? fpu_cmp_ne :
                             (id_ex_cmp_mode == 2'd2) ? fpu_cmp_lt : fpu_cmp_le;
     wire cmp_out_muxed = id_ex_dt ? fpu_cmp_selected : alu_cmp_selected;
+
+    // Final cmp output — combinational SET override.
+    // set_valid fires same cycle as id_ex holds SET, so id_ex_set_val
+    // is still valid.  No registration needed.
+    wire cmp_out_final = set_valid ? id_ex_set_val : cmp_out_muxed;
 
     // ====================================================================
     // EX/MEM Pipeline Register
@@ -334,7 +351,7 @@ module sp_core #(
             ex_mem_valid <= 1'b1;
             ex_mem_result <= ex_result_muxed;
             ex_mem_store_data <= id_ex_opC;
-            ex_mem_cmp_out <= cmp_out_muxed;
+            ex_mem_cmp_out <= cmp_out_final; //was cmp_out_muxed
             ex_mem_rf_we <= id_ex_rf_we;
             ex_mem_pred_we <= id_ex_pred_we;
             ex_mem_rD_addr <= id_ex_rD_addr;
@@ -406,10 +423,10 @@ module sp_core #(
     assign w0_addr = mem_wb_rD_addr;
     assign w0_data = wb_data_final;
 
-    // Predicate RF writeback (SETP)
+    // Predicate RF writeback (SETP + SET)
     assign pred_wr_we = mem_wb_valid & mem_wb_pred_we & mem_wb_active;
     assign pred_wr_sel = mem_wb_pred_wr_sel;
-    assign pred_wr_data = mem_wb_cmp_out;
+    assign pred_wr_data = mem_wb_cmp_out; // now carries set_val for OP_SET
 
     // Scoreboard feedback to SM
     assign wb_rD_addr = mem_wb_rD_addr;

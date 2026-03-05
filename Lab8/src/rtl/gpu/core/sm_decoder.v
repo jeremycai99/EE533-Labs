@@ -3,9 +3,10 @@
  The decoder takes a 32-bit instruction from the instruction memory and decodes it into control signals for the rest of the pipeline.
  Author: Jeremy Cai
  Date: Feb. 28, 2026
- Version: 1.0
+ Version: 1.1
  Revision history:
-    - Feb. 28, 2026: Initial implementation of the CUDA-like SM core instruction decoder.
+    - Feb. 28, 2026: v1.0 — Initial implementation.
+    - Mar. 04, 2026: v1.1 — Fix OP_SET decoder signals
 */
 
 `ifndef SM_DECODER_V
@@ -17,48 +18,48 @@ module sm_decoder (
     // Input: 32-bit instruction word (from IMEM BRAM)
     input wire [31:0] ir,
 
-    // ── Field extraction ────────────────────────────────
+    // Field extraction
     output wire [4:0] dec_opcode,
     output wire dec_dt,
-    output wire [1:0] dec_cmp_mode,    // ir[25:24], CMP for SETP
+    output wire [1:0] dec_cmp_mode,
     output wire [3:0] dec_rD_addr,
     output wire [3:0] dec_rA_addr,
     output wire [3:0] dec_rB_addr,
-    output wire [3:0] dec_rC_addr,     // WMMA.MMA only: ir[11:8]
+    output wire [3:0] dec_rC_addr,
     output wire [15:0] dec_imm16,
 
-    // ── SP core control (broadcast to all 4 SPs) ───────
-    output wire dec_rf_we,       // writes GPR
-    output wire dec_pred_we,     // writes predicate RF (SETP)
-    output wire [1:0] dec_pred_wr_sel, // which P register for SETP
-    output wire [1:0] dec_pred_rd_sel, // which P register to read (SELP/PBRA)
-    output wire [2:0] dec_wb_src,      // WB mux: 0=ALU, 1=MEM, 2=STORE(no WB)
-    output wire dec_use_imm,     // opB source = immediate
+    // SP core control (broadcast to all 4 SPs)
+    output wire dec_rf_we,
+    output wire dec_pred_we,
+    output wire [1:0] dec_pred_wr_sel,
+    output wire [1:0] dec_pred_rd_sel,
+    output wire [2:0] dec_wb_src,
+    output wire dec_use_imm,
 
-    // ── Scoreboard interface ────────────────────────────
-    output wire dec_uses_rA,     // instruction reads rA
-    output wire dec_uses_rB,     // instruction reads rB
-    output wire dec_is_fma,      // FMA: rD is also a read source (accum)
-    output wire dec_is_st,       // ST/STS: rD is store data (read, not write)
+    // Scoreboard interface
+    output wire dec_uses_rA,
+    output wire dec_uses_rB,
+    output wire dec_is_fma,
+    output wire dec_is_st,
 
-    // ── Branch / control flow ───────────────────────────
-    output wire dec_is_branch,   // BRA (unconditional)
-    output wire dec_is_pbra,     // PBRA (predicated, Phase 4)
-    output wire dec_is_ret,      // RET → kernel_done
+    // Branch / control flow
+    output wire dec_is_branch,
+    output wire dec_is_pbra,
+    output wire dec_is_ret,
 
-    // ── Memory classification ───────────────────────────
-    output wire dec_is_ld,       // LD
-    output wire dec_is_store,    // ST
-    output wire dec_is_lds,      // LDS (shared memory load)
-    output wire dec_is_sts,      // STS (shared memory store)
+    // Memory classification
+    output wire dec_is_ld,
+    output wire dec_is_store,
+    output wire dec_is_lds,
+    output wire dec_is_sts,
 
-    // ── WMMA classification (Phase 3) ───────────────────
+    // WMMA classification (Phase 3)
     output wire dec_is_wmma_mma,
     output wire dec_is_wmma_load,
     output wire dec_is_wmma_store,
-    output wire [1:0] dec_wmma_sel,    // ir[25:24]: 00=A, 01=B for WMMA.LOAD
+    output wire [1:0] dec_wmma_sel,
 
-    // ── Branch target ───────────────────────────────────
+    // Branch target
     output wire [`GPU_PC_WIDTH-1:0] dec_branch_target
 );
 
@@ -75,15 +76,13 @@ module sm_decoder (
 
     assign dec_opcode = opcode;
     assign dec_dt = dt;
-    assign dec_cmp_mode = res;       // reused as CMP mode for SETP
+    assign dec_cmp_mode = res;
     assign dec_rD_addr = rD;
     assign dec_rA_addr = rA;
     assign dec_rB_addr = rB;
     assign dec_rC_addr = rC;
-    assign dec_wmma_sel = res;       // reused as WMMA.LOAD selector
+    assign dec_wmma_sel = res;
 
-    // Immediate: low 16 bits for I/M-type
-    // For P-type (MOVI): ir[15:0] carries the 16-bit value
     assign dec_imm16 = ir[15:0];
 
     // ================================================================
@@ -116,7 +115,7 @@ module sm_decoder (
     // Register file write enable
     // ================================================================
     // Most ALU/FPU ops write rD. Exceptions: NOP, ST, STS, BRA, PBRA,
-    // RET, SETP (writes pred RF not GPR), WMMA (handled separately).
+    // RET, SETP/SET (write pred RF not GPR), WMMA (handled separately).
     reg rf_we_r;
     always @(*) begin
         case (opcode)
@@ -124,28 +123,28 @@ module sm_decoder (
             `OP_ST:   rf_we_r = 1'b0;
             `OP_STS:  rf_we_r = 1'b0;
             `OP_SETP: rf_we_r = 1'b0;
+            `OP_SET:  rf_we_r = 1'b0;  // v1.1: SET writes pred, not GPR
             `OP_BRA:  rf_we_r = 1'b0;
             `OP_PBRA: rf_we_r = 1'b0;
             `OP_RET:  rf_we_r = 1'b0;
-            `WMMA_MMA:   rf_we_r = 1'b0;  // tensor core writes via scatter
-            `WMMA_LOAD:  rf_we_r = 1'b0;  // burst controller writes
-            `WMMA_STORE: rf_we_r = 1'b0;  // no RF write
-            default:  rf_we_r = 1'b1;     // LD, MOV, MOVI, CVT, ADD..., SET, SELP, etc.
+            `WMMA_MMA:   rf_we_r = 1'b0;
+            `WMMA_LOAD:  rf_we_r = 1'b0;
+            `WMMA_STORE: rf_we_r = 1'b0;
+            default:  rf_we_r = 1'b1;
         endcase
     end
     assign dec_rf_we = rf_we_r;
 
     // ================================================================
-    // Predicate RF write (SETP only)
+    // Predicate RF write (SETP + SET)
     // ================================================================
-    assign dec_pred_we = (opcode == `OP_SETP);
-    assign dec_pred_wr_sel = rD[1:0]; // P0–P3 from low 2 bits of rD field
+    // v1.1: include OP_SET — writes immediate val to pred register
+    assign dec_pred_we = (opcode == `OP_SETP) | (opcode == `OP_SET);
+    assign dec_pred_wr_sel = rD[1:0];
 
     // ================================================================
     // Predicate RF read select
     // ================================================================
-    // SELP: reads predicate to choose between rA and rB → ir[25:24]
-    // PBRA: reads predicate for branch condition → ir[26:25]
     assign dec_pred_rd_sel = dec_is_pbra ? ir[26:25] : res;
 
     // ================================================================
@@ -157,9 +156,9 @@ module sm_decoder (
             `OP_NOP, `OP_MOVI, `OP_SET, `OP_BRA, `OP_PBRA, `OP_RET:
                 uses_rA_r = 1'b0;
             `WMMA_MMA:
-                uses_rA_r = 1'b0;  // WMMA.MMA gather bypasses normal path
+                uses_rA_r = 1'b0;
             default:
-                uses_rA_r = 1'b1;  // most ops read rA
+                uses_rA_r = 1'b1;
         endcase
     end
     assign dec_uses_rA = uses_rA_r;
@@ -167,7 +166,6 @@ module sm_decoder (
     reg uses_rB_r;
     always @(*) begin
         case (opcode)
-            // R-type binary ops that use rB
             `OP_ADD, `OP_SUB, `OP_MUL, `OP_FMA,
             `OP_MAX, `OP_MIN,
             `OP_AND, `OP_OR, `OP_XOR,
@@ -185,14 +183,14 @@ module sm_decoder (
     reg use_imm_r;
     always @(*) begin
         case (opcode)
-            `OP_MOVI: use_imm_r = 1'b1;  // P-type: imm16 to opB
-            `OP_SHL, `OP_SHR: use_imm_r = 1'b1;  // I-type: shift amount
-            `OP_ADDI, `OP_MULI: use_imm_r = 1'b1;  // I-type: immediate operand
-            `OP_LD, `OP_LDS: use_imm_r = 1'b1;  // M-type: offset for addr calc
-            `OP_ST, `OP_STS: use_imm_r = 1'b1;  // M-type: offset for addr calc
-            `OP_SET: use_imm_r = 1'b1;  // immediate 0/1
-            `WMMA_LOAD: use_imm_r = 1'b1;  // M-type: offset
-            `WMMA_STORE: use_imm_r = 1'b1;  // M-type: offset
+            `OP_MOVI: use_imm_r = 1'b1;
+            `OP_SHL, `OP_SHR: use_imm_r = 1'b1;
+            `OP_ADDI, `OP_MULI: use_imm_r = 1'b1;
+            `OP_LD, `OP_LDS: use_imm_r = 1'b1;
+            `OP_ST, `OP_STS: use_imm_r = 1'b1;
+            `OP_SET: use_imm_r = 1'b1;
+            `WMMA_LOAD: use_imm_r = 1'b1;
+            `WMMA_STORE: use_imm_r = 1'b1;
             default: use_imm_r = 1'b0;
         endcase
     end
@@ -201,18 +199,14 @@ module sm_decoder (
     // ================================================================
     // Writeback source mux selector
     // ================================================================
-    // 3'd0 = ALU/FPU/CVT result
-    // 3'd1 = MEM load data (LD/LDS)
-    // 3'd2 = Store marker (ST/STS: rf_we=0, but drives mem_is_store)
-    // 3'd3 = reserved (WMMA)
     reg [2:0] wb_src_r;
     always @(*) begin
         case (opcode)
-            `OP_LD, `OP_LDS: wb_src_r = 3'd1;  // load from memory
-            `OP_ST, `OP_STS: wb_src_r = 3'd2;  // store marker
-            `WMMA_LOAD: wb_src_r = 3'd1;  // burst load
-            `WMMA_STORE: wb_src_r = 3'd2;  // burst store
-            default: wb_src_r = 3'd0;  // ALU/FPU result
+            `OP_LD, `OP_LDS: wb_src_r = 3'd1;
+            `OP_ST, `OP_STS: wb_src_r = 3'd2;
+            `WMMA_LOAD: wb_src_r = 3'd1;
+            `WMMA_STORE: wb_src_r = 3'd2;
+            default: wb_src_r = 3'd0;
         endcase
     end
     assign dec_wb_src = wb_src_r;
@@ -220,8 +214,6 @@ module sm_decoder (
     // ================================================================
     // Branch target extraction
     // ================================================================
-    // BRA: absolute 27-bit target from ir[26:0], zero-extended to PC width
-    // PBRA: target from ir[24:12] (Phase 4, may be relative or absolute)
     wire [`GPU_PC_WIDTH-1:0] bra_target  = {{(`GPU_PC_WIDTH-27){1'b0}}, ir[26:0]};
     wire [`GPU_PC_WIDTH-1:0] pbra_target = {{(`GPU_PC_WIDTH-13){ir[24]}}, ir[24:12]};
 

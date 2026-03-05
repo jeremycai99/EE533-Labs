@@ -1,34 +1,15 @@
 /* file: sm_core.v
- Description: This file implements the Streaming Multiprocessor (SM) core, which includes the fetch unit,
-    decoder, scoreboard, multiple SP cores, and a tensor core. 
- Date: Feb. 28, 2026
- Version: 1.7
- Revision history:
-    - Feb. 28, 2026: Initial implementation of the SM core.
-    - Mar. 01, 2026: v1.1 — Register BU RF override signals.
-    - Mar. 01, 2026: v1.2 — Insert DE pipeline register stage.
-    - Mar. 01, 2026: v1.3 — Restore ir_latch.
-    - Mar. 01, 2026: v1.4 — Gate sb_stall with de_valid.
-    - Mar. 01, 2026: v1.5 — Insert RR pipeline register stage.
-    - Mar. 01, 2026: v1.5a/b — WMMA RF bypass fixes.
-    - Mar. 02, 2026: v1.6 — Super-pipelined BU FSM (BU_SETUP/RREAD/ADDR).
-    - Mar. 02, 2026: v1.7 — Dual RF read ports + registered TC override.
-      Problem: v1.6 critical path -7.5ns slack:
-        tc_state(FF) → rf_addr_override(comb) → bypass mux → RF read
-        → id_ex_opB(FF) = 15.5ns.
-      Three fixes applied:
-        1. gpr_regfile v1.1: 8R4W dual read ports (pipeline + override),
-           forwarding removed (scoreboard guarantees RAW safety).
-        2. tc_top v1.1: registered rf_addr_override and rf_r*_addr.
-        3. sm_core v1.7: pipeline reads from rr_rf_r*_addr go directly
-           to sp_core pipeline ports — no bypass mux in path.
-           Override reads for TC/BU/debug use separate override ports.
-      Pipeline critical path:
-        rr_rf_r*_addr(FF) → RF 16:1 mux (3 LUTs) → id_ex_opB(FF) ≈ 5-6ns ✓
-      Override critical path:
-        tc_rf_r*(FF) → addr mux(1 LUT) → RF 16:1 mux → a_hold(FF) ≈ 7ns ✓
-      No changes to fetch_unit.v (drain_counter stays 3'd6).
-*/
+Description: This file contains the implementation of the CUDA-like SM core, integrating the fetch unit,
+decoder, scoreboard, SP cores, tensor core, and SIMT stack.
+Author: Jeremy Cai
+Date: Mar. 4, 2026
+Version: 1.1
+Revision history:
+- Feb. 27, 2026: Initial implementation of the CUDA-like SM core.
+- Mar. 4, 2026: v1.0 — Add SIMT stack and PBRA handling logic. Add convergence redirect support
+    in fetch unit and SIMT stack.
+- Mar. 4, 2026: v1.1 — Bug fixes
+ */
 
 `ifndef SM_CORE_V
 `define SM_CORE_V
@@ -39,6 +20,7 @@
 `include "scoreboard.v"
 `include "sp_core.v"
 `include "tc_top.v"
+`include "simt_stack.v"
 
 module sm_core (
     input wire clk,
@@ -59,7 +41,7 @@ module sm_core (
     input wire [`GPU_PC_WIDTH-1:0] kernel_entry_pc,
     output wire kernel_done,
 
-    // Debug RF read (testbench observation)
+    // Debug RF read
     input wire [3:0] debug_rf_addr,
     output wire [4*`GPU_DMEM_DATA_WIDTH-1:0] debug_rf_data
 );
@@ -70,8 +52,9 @@ module sm_core (
     wire [`GPU_PC_WIDTH-1:0] if_id_pc;
     wire fetch_valid;
     wire fu_running;
+    wire [`GPU_PC_WIDTH-1:0] fu_pc_out;
 
-    // Decoder outputs (combinational from dec_ir)
+    // Decoder outputs
     wire [4:0] dec_opcode;
     wire dec_dt;
     wire [1:0] dec_cmp_mode;
@@ -88,13 +71,13 @@ module sm_core (
     wire [1:0] dec_wmma_sel;
     wire [`GPU_PC_WIDTH-1:0] dec_branch_target;
 
-    // Per-SP override RF read data (TC gather / BU data / debug)
+    // Per-SP override RF read data
     wire [15:0] sp_ovr_rf_r0_data [0:3];
     wire [15:0] sp_ovr_rf_r1_data [0:3];
     wire [15:0] sp_ovr_rf_r2_data [0:3];
     wire [15:0] sp_ovr_rf_r3_data [0:3];
 
-    // Per-SP pipeline signals (arrays)
+    // Per-SP pipeline signals
     wire sp_pred_rd_val [0:3];
     wire [15:0] sp_ex_mem_result [0:3];
     wire [15:0] sp_ex_mem_store [0:3];
@@ -107,7 +90,7 @@ module sm_core (
     wire sp_wb_active [0:3];
     wire sp_wb_valid [0:3];
 
-    // Per-SP DMEM internal nets
+    // Per-SP DMEM nets
     wire [`GPU_DMEM_ADDR_WIDTH-1:0] dmem_addr_a [0:3];
     wire [`GPU_DMEM_DATA_WIDTH-1:0] dmem_din_a [0:3];
     wire dmem_we_a [0:3];
@@ -123,7 +106,7 @@ module sm_core (
         end
     endgenerate
 
-    // Override RF read address bus (TC gather / BU store / debug)
+    // Override RF read address bus
     reg [3:0] ovr_rf_r0_addr_mux, ovr_rf_r1_addr_mux;
     reg [3:0] ovr_rf_r2_addr_mux, ovr_rf_r3_addr_mux;
 
@@ -135,15 +118,13 @@ module sm_core (
     wire front_stall;
     wire sp_stall;
 
-    // Active mask
+    // ================================================================
+    // Active Mask
+    // ================================================================
     reg [3:0] active_mask;
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) active_mask <= 4'b1111;
-        else if (kernel_start) active_mask <= 4'b1111;
-    end
 
     // TC top interface wires
-    wire tc_rf_override;   // registered inside tc_top v1.1
+    wire tc_rf_override;
     wire [3:0] tc_rf_r0, tc_rf_r1, tc_rf_r2, tc_rf_r3;
     wire [3:0] tc_w1_addr, tc_w2_addr, tc_w3_addr;
     wire [4*16-1:0] tc_w1_data, tc_w2_data, tc_w3_data;
@@ -160,11 +141,26 @@ module sm_core (
                                        sp_ovr_rf_r3_data[1], sp_ovr_rf_r3_data[0]};
 
     // ================================================================
-    // Fetch Unit
+    // SIMT Stack signals
+    // ================================================================
+    wire [`GPU_PC_WIDTH-1:0] tos_reconv_pc, tos_pend_pc;
+    wire [3:0] tos_saved_mask, tos_pend_mask;
+    wire tos_phase;
+    wire stack_empty, stack_full;
+
+    wire simt_push;
+    wire simt_pop;
+    wire simt_modify;
+
+    // ================================================================
+    // Fetch Unit — v1.2 with post-redirect bubble (Bug A)
     // ================================================================
     wire branch_taken;
     wire [`GPU_PC_WIDTH-1:0] branch_target;
     wire ret_detected;
+
+    wire conv_redirect;
+    wire [`GPU_PC_WIDTH-1:0] conv_target_pc;
 
     fetch_unit u_fetch (
         .clk (clk), .rst_n (rst_n),
@@ -175,14 +171,17 @@ module sm_core (
         .running (fu_running),
         .branch_taken (branch_taken),
         .branch_target (branch_target),
+        .conv_redirect (conv_redirect),
+        .conv_target_pc (conv_target_pc),
         .front_stall (front_stall),
         .ret_detected (ret_detected),
         .if_id_pc (if_id_pc),
-        .fetch_valid (fetch_valid)
+        .fetch_valid (fetch_valid),
+        .pc_out (fu_pc_out)
     );
 
     // ================================================================
-    // IR Latch — hold IMEM output during stalls
+    // IR Latch
     // ================================================================
     reg [31:0] ir_latch;
     reg ir_latched;
@@ -202,7 +201,7 @@ module sm_core (
     wire [31:0] dec_ir = ir_latched ? ir_latch : imem_rdata;
 
     // ================================================================
-    // SM Decoder (combinational from dec_ir)
+    // SM Decoder
     // ================================================================
     sm_decoder u_dec (
         .ir (dec_ir),
@@ -239,7 +238,7 @@ module sm_core (
     );
 
     // ================================================================
-    // DE Pipeline Register (Decode → RF stage boundary)
+    // DE Pipeline Register (Decode → RF stage)
     // ================================================================
     reg [4:0] de_opcode;
     reg de_dt;
@@ -258,14 +257,18 @@ module sm_core (
     reg [`GPU_PC_WIDTH-1:0] de_branch_target;
     reg de_valid;
 
-    // Pre-computed RF read addresses for the pipeline path
+    // Pre-computed RF read addresses
     reg [3:0] de_rf_r0_addr;
     reg [3:0] de_rf_r1_addr;
     reg [3:0] de_rf_r2_addr;
     reg [3:0] de_rf_r3_addr;
 
-    // DE flush: invalidate DE on branch redirect or RET
-    wire de_flush = branch_taken | ret_detected;
+    // DE-stage PC (for PBRA pend_pc = PC+1)
+    reg [`GPU_PC_WIDTH-1:0] de_pc;
+
+    // ── DE flush ────────────────────────────────────────
+    wire pbra_fire;
+    wire de_flush = branch_taken | ret_detected | pbra_fire;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -304,6 +307,7 @@ module sm_core (
             de_rf_r1_addr <= 4'd0;
             de_rf_r2_addr <= 4'd0;
             de_rf_r3_addr <= 4'd0;
+            de_pc <= {`GPU_PC_WIDTH{1'b0}};
         end else if (de_flush) begin
             de_valid <= 1'b0;
             de_rf_we <= 1'b0;
@@ -340,18 +344,33 @@ module sm_core (
             de_wmma_sel <= dec_wmma_sel;
             de_branch_target <= dec_branch_target;
             de_valid <= fetch_valid;
-
-            // Pre-compute RF addresses
             de_rf_r0_addr <= dec_rA_addr;
             de_rf_r1_addr <= dec_rB_addr;
             de_rf_r2_addr <= (dec_is_fma | dec_is_st) ? dec_rD_addr : dec_rC_addr;
             de_rf_r3_addr <= 4'd0;
+            de_pc <= if_id_pc;
         end
-        // else: front_stall — DE holds
     end
 
     // ================================================================
-    // Stall / Flush / Issue Control (uses DE-stage signals)
+    // PBRA reconvergence PC extraction
+    // ================================================================
+    wire [`GPU_PC_WIDTH-1:0] de_reconv_pc = {{(`GPU_PC_WIDTH-12){1'b0}}, de_imm16[11:0]};
+    wire [`GPU_PC_WIDTH-1:0] de_pend_pc   = de_pc + 1;
+
+    // ================================================================
+    // Bug D fix: PBRA branch target reconstruction
+    // ================================================================
+    // PBRA format packs branch_target[12:0] across ir[24:12], which
+    // the decoder's I-type extraction splits into rD[3:0]=ir[23:20],
+    // rA[3:0]=ir[19:16], imm16[15:12]=ir[15:12].  dec_branch_target
+    // uses BRA format (ir[26:0]) — wrong for PBRA.  Reconstruct from
+    // DE-stage registers.
+    wire [`GPU_PC_WIDTH-1:0] de_pbra_target = {{(`GPU_PC_WIDTH-12){1'b0}},
+                                                de_rD_addr, de_rA_addr, de_imm16[15:12]};
+
+    // ================================================================
+    // Stall / Flush / Issue Control
     // ================================================================
     wire de_wmma_any = de_is_wmma_mma | de_is_wmma_load | de_is_wmma_store;
 
@@ -359,26 +378,64 @@ module sm_core (
     wire wmma_drain_wait = de_valid & de_wmma_any & ~pipeline_drained
                          & ~tc_busy & ~burst_busy;
 
+    wire pbra_drain_wait = de_valid & de_is_pbra & ~pipeline_drained;
+
     wire sb_stall_gated = sb_stall & de_valid;
 
     assign front_stall = sb_stall_gated | any_ex_busy | tc_busy | burst_busy
-                       | wmma_drain_wait;
+                       | wmma_drain_wait | pbra_drain_wait;
     assign sp_stall = any_ex_busy | tc_busy | burst_busy;
 
-    wire id_can_issue = de_valid & ~front_stall & ~de_wmma_any;
+    wire de_is_ctrl_special = de_wmma_any | de_is_pbra;
+    wire id_can_issue = de_valid & ~front_stall & ~de_is_ctrl_special;
 
     wire id_issue_ctrl = de_valid & ~front_stall;
-    assign branch_taken = id_issue_ctrl & de_is_branch;
-    assign branch_target = de_branch_target;
+
+    // ================================================================
+    // PBRA Handler — v1.1: all PBRAs redirect (Bug B + Bug D)
+    // ================================================================
+    wire pbra_pred_override = de_valid & de_is_pbra & pipeline_drained;
+    reg [1:0] rr_pred_rd_sel;
+    wire [1:0] sp_pred_rd_sel_mux = pbra_pred_override ? de_pred_rd_sel
+                                                       : rr_pred_rd_sel;
+
+    wire [3:0] pred_vec = {sp_pred_rd_val[3], sp_pred_rd_val[2],
+                           sp_pred_rd_val[1], sp_pred_rd_val[0]};
+    wire [3:0] taken_mask = active_mask & pred_vec;
+    wire [3:0] fall_mask  = active_mask & ~pred_vec;
+
+    wire pbra_divergent = (taken_mask != 4'd0) & (fall_mask != 4'd0);
+
+    assign pbra_fire = de_valid & de_is_pbra & pipeline_drained
+                     & ~tc_busy & ~burst_busy;
+    wire pbra_divergent_fire = pbra_fire & pbra_divergent;
+
+    // ── Bug B fix: all PBRAs redirect ──────────────────
+    // uniform-taken (taken!=0, fall==0) → de_pbra_target
+    // uniform-fall  (taken==0)          → de_pend_pc
+    // divergent     (taken!=0, fall!=0) → de_pbra_target (taken path first)
+    wire pbra_redirect = pbra_fire;
+    wire [`GPU_PC_WIDTH-1:0] pbra_target = (taken_mask != 4'd0)
+                                         ? de_pbra_target   // Bug D: reconstructed target
+                                         : de_pend_pc;
+
+    // ================================================================
+    // Branch / redirect control — v1.1: muxed branch_target
+    // ================================================================
+    assign branch_taken = (id_issue_ctrl & de_is_branch) | pbra_redirect;
+    assign branch_target = pbra_redirect ? pbra_target : de_branch_target;
     assign ret_detected = id_issue_ctrl & de_is_ret;
 
     wire sb_issue = id_can_issue & de_rf_we;
 
     // ================================================================
-    // Scoreboard (uses DE-stage addresses — unchanged)
+    // Scoreboard
     // ================================================================
     wire [3:0] wb_active_mask_sb = {sp_wb_active[3], sp_wb_active[2],
                                     sp_wb_active[1], sp_wb_active[0]};
+
+    wire sb_wb_rf_we_any = sp_wb_rf_we[0] | sp_wb_rf_we[1]
+                         | sp_wb_rf_we[2] | sp_wb_rf_we[3];
 
     wire sb_any_pending;
 
@@ -395,17 +452,20 @@ module sm_core (
         .active_mask (active_mask),
         .issue (sb_issue),
         .wb_rD_addr (sp_wb_rD_addr[0]),
-        .wb_rf_we (sp_wb_rf_we[0]),
+        .wb_rf_we (sb_wb_rf_we_any),
         .wb_active_mask (wb_active_mask_sb),
         .stall (sb_stall),
         .any_pending (sb_any_pending)
     );
 
     // ================================================================
-    // Tensor Core Top (uses DE-stage addresses — registered override)
+    // Pipeline drained check
     // ================================================================
     assign pipeline_drained = ~sb_any_pending & ~any_ex_busy;
 
+    // ================================================================
+    // Tensor Core Top
+    // ================================================================
     wire tc_trigger = de_valid & de_is_wmma_mma & ~tc_busy & ~burst_busy
                     & pipeline_drained;
 
@@ -457,7 +517,6 @@ module sm_core (
     reg [`GPU_DMEM_ADDR_WIDTH-1:0] bu_base_addr [0:3];
     reg [15:0] bu_store_data [0:3][0:3];
 
-    // Pipelined BU registers (v1.6)
     reg [`GPU_DMEM_ADDR_WIDTH-1:0] bu_rf_data [0:3];
     reg [`GPU_DMEM_ADDR_WIDTH-1:0] bu_imm16_r;
     reg bu_is_store;
@@ -467,15 +526,12 @@ module sm_core (
     wire bu_store_trigger = de_valid & de_is_wmma_store & ~tc_busy
                           & ~burst_busy & pipeline_drained;
 
-    // Burst RF addr override — REGISTERED
     reg bu_rf_override_r;
     reg [3:0] bu_rf_r0_r, bu_rf_r1_r, bu_rf_r2_r, bu_rf_r3_r;
 
-    // Burst ext write (load beats → W1)
     reg [3:0] bu_w1_addr;
     reg bu_w1_we;
 
-    // Burst DMEM override
     reg bu_dmem_override;
 
     integer bi;
@@ -506,9 +562,8 @@ module sm_core (
                         bu_rD_base <= de_rD_addr;
                         bu_imm16_r <= de_imm16[`GPU_DMEM_ADDR_WIDTH-1:0];
                         bu_is_store <= bu_store_trigger;
-                        // Set override: read base address register (rA)
                         bu_rf_override_r <= 1'b1;
-                        bu_rf_r0_r <= de_rf_r0_addr; // = de_rA_addr
+                        bu_rf_r0_r <= de_rf_r0_addr;
                         bu_state <= BU_SETUP;
                     end
                 end
@@ -563,7 +618,6 @@ module sm_core (
         end
     end
 
-    // Burst combinational outputs
     always @(*) begin
         bu_w1_addr = 4'd0;
         bu_w1_we = 1'b0;
@@ -581,14 +635,8 @@ module sm_core (
     end
 
     // ================================================================
-    // Override RF Read Address Mux (for TC/BU/debug — NOT pipeline)
+    // Override RF Read Address Mux (TC / BU / debug)
     // ================================================================
-    // This mux drives the OVERRIDE read ports of gpr_regfile only.
-    // Pipeline read ports are driven by rr_rf_r*_addr directly — no mux.
-    // All mux select inputs are registered FFs:
-    //   tc_rf_override: registered in tc_top v1.1
-    //   bu_rf_override_r: registered in BU FSM
-    //   fu_running: registered in fetch_unit
     always @(*) begin
         ovr_rf_r0_addr_mux = 4'd0;
         ovr_rf_r1_addr_mux = 4'd0;
@@ -611,23 +659,80 @@ module sm_core (
     end
 
     // ================================================================
-    // RR Pipeline Register (DE → Register Read stage boundary)
+    // Convergence Checker
     // ================================================================
-    // Pipeline read addresses go from DE directly to RR — no override
-    // mux in this path.  Override mux is only for TC/BU/debug ports.
+    wire at_reconv = ~stack_empty & fu_running
+                   & (fu_pc_out == tos_reconv_pc);
+
+    wire conv_phase0_fire = at_reconv & ~tos_phase & ~front_stall;
+    wire conv_phase1_fire = at_reconv &  tos_phase & ~front_stall;
+
+    assign conv_redirect  = conv_phase0_fire;
+    assign conv_target_pc = tos_pend_pc;
+
+    // ================================================================
+    // SIMT Stack Instance
+    // ================================================================
+    assign simt_push   = pbra_divergent_fire;
+    assign simt_pop    = conv_phase1_fire;
+    assign simt_modify = conv_phase0_fire;
+
+    simt_stack #(.DEPTH(8)) u_simt_stack (
+        .clk (clk), .rst_n (rst_n),
+        .clear (kernel_start),
+        .push (simt_push),
+        .push_reconv_pc (de_reconv_pc),
+        .push_saved_mask (active_mask),
+        .push_pend_mask (fall_mask),
+        .push_pend_pc (de_pend_pc),
+        .pop (simt_pop),
+        .modify_tos (simt_modify),
+        .tos_reconv_pc (tos_reconv_pc),
+        .tos_saved_mask (tos_saved_mask),
+        .tos_pend_mask (tos_pend_mask),
+        .tos_pend_pc (tos_pend_pc),
+        .tos_phase (tos_phase),
+        .stack_empty (stack_empty),
+        .stack_full (stack_full)
+    );
+
+    // ================================================================
+    // Active Mask Update
+    // ================================================================
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            active_mask <= 4'b1111;
+        else if (kernel_start)
+            active_mask <= 4'b1111;
+        else if (conv_phase1_fire)
+            active_mask <= tos_saved_mask;
+        else if (conv_phase0_fire)
+            active_mask <= tos_pend_mask;
+        else if (pbra_divergent_fire)
+            active_mask <= taken_mask;
+    end
+
+    // ================================================================
+    // RR Pipeline Register (DE → Register Read)
+    // ================================================================
     reg [4:0] rr_opcode;
     reg rr_dt;
     reg [1:0] rr_cmp_mode;
     reg [3:0] rr_rD_addr;
     reg [15:0] rr_imm16;
     reg rr_rf_we, rr_pred_we;
-    reg [1:0] rr_pred_wr_sel, rr_pred_rd_sel;
+    reg [1:0] rr_pred_wr_sel;
+    // rr_pred_rd_sel declared earlier as forward ref for PBRA mux
     reg [2:0] rr_wb_src;
     reg rr_use_imm;
     reg rr_valid;
 
-    // Registered pipeline RF read addresses
     reg [3:0] rr_rf_r0_addr, rr_rf_r1_addr, rr_rf_r2_addr, rr_rf_r3_addr;
+
+    // ── Bug C fix: pipeline-registered active mask ──────
+    // Captures active_mask at DE→RR so in-flight instructions carry
+    // the mask from their issue cycle, isolated from convergence updates.
+    reg [3:0] rr_active_mask;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -647,10 +752,10 @@ module sm_core (
             rr_rf_r1_addr <= 4'd0;
             rr_rf_r2_addr <= 4'd0;
             rr_rf_r3_addr <= 4'd0;
+            rr_active_mask <= 4'b0000;
         end else if (!sp_stall) begin
             if (!front_stall) begin
-                // Normal advance: DE → RR
-                rr_valid <= de_valid & ~de_wmma_any;
+                rr_valid <= de_valid & ~de_is_ctrl_special;
                 rr_opcode <= de_opcode;
                 rr_dt <= de_dt;
                 rr_cmp_mode <= de_cmp_mode;
@@ -662,27 +767,25 @@ module sm_core (
                 rr_pred_rd_sel <= de_pred_rd_sel;
                 rr_wb_src <= de_wb_src;
                 rr_use_imm <= de_use_imm;
-                // Pipeline path: DE addresses directly (no override mux!)
                 rr_rf_r0_addr <= de_rf_r0_addr;
                 rr_rf_r1_addr <= de_rf_r1_addr;
                 rr_rf_r2_addr <= de_rf_r2_addr;
                 rr_rf_r3_addr <= de_rf_r3_addr;
+                rr_active_mask <= active_mask;
             end else begin
-                // Front stalled → RR drains, then goes empty
                 rr_valid <= 1'b0;
                 rr_rf_we <= 1'b0;
                 rr_pred_we <= 1'b0;
             end
         end
-        // else: sp_stall — RR holds
     end
 
-    // Debug RF data (override port 0 with debug_rf_addr)
+    // Debug RF data
     assign debug_rf_data = {sp_ovr_rf_r0_data[3], sp_ovr_rf_r0_data[2],
                             sp_ovr_rf_r0_data[1], sp_ovr_rf_r0_data[0]};
 
     // ================================================================
-    // External RF Write Mux (TC scatter / burst load — unchanged)
+    // External RF Write Mux (TC scatter / burst load)
     // ================================================================
     reg [3:0] ext_w1_addr [0:3];
     reg [15:0] ext_w1_data [0:3];
@@ -716,12 +819,8 @@ module sm_core (
     end
 
     // ================================================================
-    // Generate: 4× SP Core — dual RF read ports (v1.7)
+    // Generate: 4× SP Core — v1.1: use rr_active_mask (Bug C fix)
     // ================================================================
-    // Pipeline reads: rr_rf_r*_addr → sp_core ppl ports → id_ex (internal)
-    //   Critical path: rr_rf_r*_addr(FF) → RF 16:1 mux → id_ex_opB(FF) ≈ 5-6ns
-    // Override reads: ovr_rf_r*_addr_mux → sp_core ovr ports → external data
-    //   Used by: TC gather (a_hold), BU (bu_rf_data, bu_store_data), debug
     genvar t;
     generate
         for (t = 0; t < 4; t = t + 1) begin : SP_LANE
@@ -729,12 +828,10 @@ module sm_core (
                 .clk (clk), .rst_n (rst_n),
                 .stall (sp_stall),
                 .flush_id (1'b0),
-                // Pipeline RF read (registered addresses, no mux in path)
                 .ppl_rf_r0_addr (rr_rf_r0_addr),
                 .ppl_rf_r1_addr (rr_rf_r1_addr),
                 .ppl_rf_r2_addr (rr_rf_r2_addr),
                 .ppl_rf_r3_addr (rr_rf_r3_addr),
-                // Override RF read (for TC/BU/debug)
                 .ovr_rf_r0_addr (ovr_rf_r0_addr_mux),
                 .ovr_rf_r1_addr (ovr_rf_r1_addr_mux),
                 .ovr_rf_r2_addr (ovr_rf_r2_addr_mux),
@@ -743,10 +840,8 @@ module sm_core (
                 .ovr_rf_r1_data (sp_ovr_rf_r1_data[t]),
                 .ovr_rf_r2_data (sp_ovr_rf_r2_data[t]),
                 .ovr_rf_r3_data (sp_ovr_rf_r3_data[t]),
-                // Predicate
-                .pred_rd_sel (rr_pred_rd_sel),
+                .pred_rd_sel (sp_pred_rd_sel_mux),
                 .pred_rd_val (sp_pred_rd_val[t]),
-                // Control from RR stage
                 .id_opcode (rr_opcode),
                 .id_dt (rr_dt),
                 .id_cmp_mode (rr_cmp_mode),
@@ -755,17 +850,15 @@ module sm_core (
                 .id_rD_addr (rr_rD_addr),
                 .id_pred_wr_sel (rr_pred_wr_sel),
                 .id_valid (rr_valid),
-                .id_active (active_mask[t]),
+                .id_active (rr_active_mask[t]),
                 .id_wb_src (rr_wb_src),
                 .id_use_imm (rr_use_imm),
                 .id_imm16 (rr_imm16),
-                // EX/MEM outputs
                 .ex_mem_result_out (sp_ex_mem_result[t]),
                 .ex_mem_store_out (sp_ex_mem_store[t]),
                 .ex_mem_valid_out (sp_ex_mem_valid[t]),
                 .ex_busy (sp_ex_busy[t]),
                 .mem_rdata (dmem_dout_a[t]),
-                // External writes
                 .wb_ext_w1_addr (ext_w1_addr[t]),
                 .wb_ext_w1_data (ext_w1_data[t]),
                 .wb_ext_w1_we (ext_w1_we[t]),
@@ -775,7 +868,6 @@ module sm_core (
                 .wb_ext_w3_addr (ext_w3_addr[t]),
                 .wb_ext_w3_data (ext_w3_data[t]),
                 .wb_ext_w3_we (ext_w3_we[t]),
-                // MEM/WB outputs
                 .mem_is_load (sp_mem_is_load[t]),
                 .mem_is_store (sp_mem_is_store[t]),
                 .wb_rD_addr (sp_wb_rD_addr[t]),
@@ -815,4 +907,3 @@ module sm_core (
 endmodule
 
 `endif // SM_CORE_V
-
