@@ -1,0 +1,323 @@
+VCD info: dumpfile soc_tb.vcd opened for output.
+
+================================================================
+  SoC Integration Testbench v5.0 (21 tests)
+  Drives NetFPGA RX/TX only — real CPU+CP10+DMA+GPU inside
+================================================================
+
+--- Test 1: CPU ADD ---
+  [C0000] pp= 1 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0001] pp= 2 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0002] pp= 3 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0003] pp= 4 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0004] pp= 5 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0005] pp= 6 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0006] pp= 7 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0007] pp= 4 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0008] pp= 5 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0009] pp= 6 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0010] pp= 7 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0011] pp= 4 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0012] pp= 5 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0013] pp= 6 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0014] pp= 7 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0015] pp= 1 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0016] pp= 2 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0017] pp= 3 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0018] pp= 4 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0019] pp= 5 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0020] pp= 6 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0021] pp= 7 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0022] pp= 4 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0023] pp= 5 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0024] pp= 6 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0025] pp= 7 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0026] pp= 1 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0027] pp= 2 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0028] pp= 3 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0029] pp= 8 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0030] pp= 9 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0031] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00000000 instr=xxxxxxxx v_if2=0
+         PC: T0=00000000 T1=00000000 T2=00000000 T3=00000000 | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0032] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=1 IF=00000000 instr=e3a00000 v_if2=1
+         PC: T0=00000004 T1=00000000 T2=00000000 T3=00000000 | br=0 tgt=00000004 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0033] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=2 IF=00000000 instr=e3a00000 v_if2=1
+         PC: T0=00000004 T1=00000004 T2=00000000 T3=00000000 | br=0 tgt=00000004 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0034] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=3 IF=00000000 instr=e3a00000 v_if2=1
+         PC: T0=00000004 T1=00000004 T2=00000004 T3=00000000 | br=0 tgt=00000004 | cp_w=0 cp_r=0 cr=x | dma=0 gpu=0
+  [C0035] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00000004 instr=e3a00000 v_if2=1
+         PC: T0=00000004 T1=00000004 T2=00000004 T3=00000004 | br=0 tgt=00000008 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0036] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=1 IF=00000004 instr=e5901000 v_if2=1
+         PC: T0=00000008 T1=00000004 T2=00000004 T3=00000004 | br=0 tgt=00000008 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0037] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=2 IF=00000004 instr=e5901000 v_if2=1
+         PC: T0=00000008 T1=00000008 T2=00000004 T3=00000004 | br=0 tgt=00000008 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0038] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=3 IF=00000004 instr=e5901000 v_if2=1
+         PC: T0=00000008 T1=00000008 T2=00000008 T3=00000004 | br=0 tgt=00000008 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0039] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00000008 instr=e5901000 v_if2=1
+         PC: T0=00000008 T1=00000008 T2=00000008 T3=00000008 | br=0 tgt=0000000c | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0040] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=1 IF=00000008 instr=e5902004 v_if2=1
+         PC: T0=0000000c T1=00000008 T2=00000008 T3=00000008 | br=0 tgt=0000000c | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0041] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=2 IF=00000008 instr=e5902004 v_if2=1
+         PC: T0=0000000c T1=0000000c T2=00000008 T3=00000008 | br=0 tgt=0000000c | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0042] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=3 IF=00000008 instr=e5902004 v_if2=1
+         PC: T0=0000000c T1=0000000c T2=0000000c T3=00000008 | br=0 tgt=0000000c | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0043] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=0 IF=0000000c instr=e5902004 v_if2=1
+         PC: T0=0000000c T1=0000000c T2=0000000c T3=0000000c | br=0 tgt=00000014 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0044] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=1 IF=0000000c instr=e0813002 v_if2=1
+         PC: T0=00000010 T1=0000000c T2=0000000c T3=0000000c | br=0 tgt=00000014 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0045] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=2 IF=0000000c instr=e0813002 v_if2=1
+         PC: T0=00000010 T1=00000010 T2=0000000c T3=0000000c | br=0 tgt=00000014 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0046] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=3 IF=0000000c instr=e0813002 v_if2=1
+         PC: T0=00000010 T1=00000010 T2=00000010 T3=0000000c | br=0 tgt=00000014 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0047] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00000010 instr=e0813002 v_if2=1
+         PC: T0=00000010 T1=00000010 T2=00000010 T3=00000010 | br=0 tgt=00000014 | cp_w=0 cp_r=0 cr=1 | dma=0 gpu=0
+  [C0048] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=1 IF=00000010 instr=e5803008 v_if2=1
+         PC: T0=00000014 T1=00000010 T2=00000010 T3=00000010 | br=0 tgt=00000014 | cp_w=0 cp_r=0 cr=1 | dma=0 gpu=0
+  [C0049] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=2 IF=00000010 instr=e5803008 v_if2=1
+         PC: T0=00000014 T1=00000014 T2=00000010 T3=00000010 | br=0 tgt=00000014 | cp_w=0 cp_r=0 cr=1 | dma=0 gpu=0
+  [C0050] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=3 IF=00000010 instr=e5803008 v_if2=1
+         PC: T0=00000014 T1=00000014 T2=00000014 T3=00000010 | br=0 tgt=00000014 | cp_w=0 cp_r=0 cr=1 | dma=0 gpu=0
+  [C0051] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00000014 instr=e5803008 v_if2=1
+         PC: T0=00000014 T1=00000014 T2=00000014 T3=00000014 | br=0 tgt=00000020 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0052] pp= 9 run=1 done=0 halt=0000 hseen=0000 | tid_if=1 IF=00000014 instr=eafffffe v_if2=1
+         PC: T0=00000018 T1=00000014 T2=00000014 T3=00000014 | br=0 tgt=00000020 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+         DMEM WR: [00000008] <= 0000001e
+  [C0053] pp= 9 run=1 done=0 halt=0000 hseen=0001 | tid_if=2 IF=00000014 instr=eafffffe v_if2=1
+         PC: T0=00000018 T1=00000018 T2=00000014 T3=00000014 | br=0 tgt=00000020 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+         DMEM WR: [00000008] <= 0000001e
+  [C0054] pp= 9 run=1 done=0 halt=0000 hseen=0011 | tid_if=3 IF=00000014 instr=eafffffe v_if2=1
+         PC: T0=00000018 T1=00000018 T2=00000018 T3=00000014 | br=0 tgt=00000020 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+         DMEM WR: [00000008] <= 0000001e
+  [C0055] pp= 9 run=1 done=0 halt=0000 hseen=0111 | tid_if=0 IF=00000018 instr=eafffffe v_if2=1
+         PC: T0=00000018 T1=00000018 T2=00000018 T3=00000018 | br=1 tgt=00000014 | cp_w=0 cp_r=0 cr=15 | dma=0 gpu=0
+         DMEM WR: [00000008] <= 0000001e
+  [C0056] pp= 9 run=1 done=0 halt=0000 hseen=1111 | tid_if=1 IF=00000018 instr=xxxxxxxx v_if2=0
+         PC: T0=00000014 T1=00000018 T2=00000018 T3=00000018 | br=1 tgt=00000014 | cp_w=0 cp_r=0 cr=15 | dma=0 gpu=0
+  [C0057] pp= 9 run=1 done=0 halt=0000 hseen=1111 | tid_if=2 IF=00000018 instr=xxxxxxxx v_if2=0
+         PC: T0=00000014 T1=00000014 T2=00000018 T3=00000018 | br=1 tgt=00000014 | cp_w=0 cp_r=0 cr=15 | dma=0 gpu=0
+  [C0058] pp= 9 run=1 done=0 halt=0000 hseen=1111 | tid_if=3 IF=00000018 instr=xxxxxxxx v_if2=0
+         PC: T0=00000014 T1=00000014 T2=00000014 T3=00000018 | br=1 tgt=00000014 | cp_w=0 cp_r=0 cr=15 | dma=0 gpu=0
+  [C0059] pp= 9 run=1 done=0 halt=0000 hseen=1111 | tid_if=0 IF=00000014 instr=xxxxxxxx v_if2=0
+         PC: T0=00000014 T1=00000014 T2=00000014 T3=00000014 | br=0 tgt=00000020 | cp_w=0 cp_r=0 cr=x | dma=0 gpu=0
+  [C0060] pp= 9 run=1 done=0 halt=0000 hseen=1111 | tid_if=1 IF=00000014 instr=eafffffe v_if2=1
+         PC: T0=00000018 T1=00000014 T2=00000014 T3=00000014 | br=0 tgt=00000020 | cp_w=0 cp_r=0 cr=x | dma=0 gpu=0
+  [C0061] pp= 9 run=1 done=0 halt=0001 hseen=1111 | tid_if=2 IF=00000014 instr=eafffffe v_if2=1
+         PC: T0=00000018 T1=00000018 T2=00000014 T3=00000014 | br=0 tgt=00000020 | cp_w=0 cp_r=0 cr=x | dma=0 gpu=0
+  [C0062] pp= 9 run=1 done=0 halt=0011 hseen=1111 | tid_if=3 IF=00000014 instr=eafffffe v_if2=1
+         PC: T0=00000018 T1=00000018 T2=00000018 T3=00000014 | br=0 tgt=00000020 | cp_w=0 cp_r=0 cr=x | dma=0 gpu=0
+  [C0063] pp= 9 run=1 done=0 halt=0111 hseen=1111 | tid_if=0 IF=00000018 instr=eafffffe v_if2=1
+         PC: T0=00000018 T1=00000018 T2=00000018 T3=00000018 | br=1 tgt=00000014 | cp_w=0 cp_r=0 cr=15 | dma=0 gpu=0
+  [C0064] pp= 9 run=1 done=1 halt=1111 hseen=1111 | tid_if=1 IF=00000018 instr=xxxxxxxx v_if2=0
+         PC: T0=00000018 T1=00000018 T2=00000018 T3=00000018 | br=1 tgt=00000014 | cp_w=0 cp_r=0 cr=15 | dma=0 gpu=0
+  [C0065] pp= 1 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0066] pp= 2 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0067] pp= 3 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0068] pp=10 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0069] pp=11 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0070] pp=12 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0071] pp=13 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0072] pp=10 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0073] pp=11 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0074] pp=12 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0075] pp=13 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0076] pp= 1 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0077] pp= 2 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0078] pp= 3 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0079] pp=14 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0080] pp=15 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0081] pp=16 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0082] pp=16 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0083] pp=16 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0084] pp=16 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0085] pp=16 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0086] pp=16 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+  [C0087] pp=17 run=0 done=0 halt=0000 hseen=0000 | tid_if=0 IF=00003ffc instr=xxxxxxxx v_if2=0
+         PC: T0=00003ffc T1=00003ffc T2=00003ffc T3=00003ffc | br=0 tgt=00000000 | cp_w=0 cp_r=0 cr=0 | dma=0 gpu=0
+    [PASS] T1: T1 TX count = 2
+    [PASS] T2: T1 TX[0] inputs 20,10 = 0x000000140000000a
+    [PASS] T3: T1 TX[1] result 0,30 = 0x000000000000001e
+    [PASS] T4: T1 TX[0] ctrl passthrough = 0x04
+
+--- Test 2: CPU MUL ---
+    [PASS] T5: T2 TX count = 1
+    [PASS] T6: T2 MUL 7*6=42 = 0x000000000000002a
+    [PASS] T7: T2 ctrl = 0x08
+
+--- Test 3: CPU MCR/MRC (CP10 scratch) ---
+    [PASS] T8: T3 TX count = 1
+    [PASS] T9: T3 MCR/MRC CR8=42 = 0x000000000000002a
+    [PASS] T10: T3 ctrl = 0x02
+
+--- Test 4: CPU CMP + BEQ ---
+    [PASS] T11: T4 TX count = 1
+    [PASS] T12: T4 BEQ taken, R2=2 = 0x0000000200000005
+    [PASS] T13: T4 ctrl = 0x10
+
+--- Test 5: Full GPU round-trip (CPU+DMA+GPU) ---
+    [PASS] T14: T5 TX count = 2
+    [PASS] T15: T5 TX[0] GPU banks 1,0 = 0x0000012c0000012c
+    [PASS] T16: T5 TX[1] GPU banks 3,2 = 0x0000012c0000012c
+    [PASS] T17: T5 ctrl = 0x20
+
+--- Test 6A: Back-to-back packet A (100+200) ---
+    [PASS] T18: T6A TX count = 2
+    [PASS] T19: T6A inputs 200,100 = 0x000000c800000064
+    [PASS] T20: T6A result 0,300 = 0x000000000000012c
+    [PASS] T21: T6A ctrl = 0x04
+
+--- Test 6B: Back-to-back packet B (1000+2000) ---
+    [PASS] T22: T6B TX count = 2
+    [PASS] T23: T6B inputs 2000,1000 = 0x000007d0000003e8
+    [PASS] T24: T6B result 0,3000 = 0x0000000000000bb8
+    [PASS] T25: T6B ctrl changed = 0x40
+
+--- Test 7: CPU MLA (multiply-accumulate) ---
+    [PASS] T26: T7 TX count = 1
+    [PASS] T27: T7 MLA 7*6+10=52 = 0x0000000000000034
+    [PASS] T28: T7 ctrl = 0x04
+
+--- Test 8: CPU loop (sum 4 elements) ---
+    [PASS] T29: T8 TX count = 3
+    [PASS] T30: T8 TX[0] 20,10 = 0x000000140000000a
+    [PASS] T31: T8 TX[1] 40,30 = 0x000000280000001e
+    [PASS] T32: T8 TX[2] sum=100 = 0x0000000000000064
+
+--- Test 9: Multiple CP10 registers ---
+    [PASS] T33: T9 TX count = 2
+    [PASS] T34: T9 TX[0] CR0=0x500, CR1=0x600 = 0x0000060000000500
+    [PASS] T35: T9 TX[1] CR4=0xFF, CR8=0x100 = 0x00000100000000ff
+    [PASS] T36: T9 ctrl = 0x02
+
+--- Test 10: NOP command skip ---
+    [PASS] T37: T10 TX count = 2
+    [PASS] T38: T10 TX[0] inputs 3,7 = 0x0000000300000007
+    [PASS] T39: T10 TX[1] sum=10 = 0x000000000000000a
+    [PASS] T40: T10 ctrl = 0x08
+
+--- Test 11: Large DMEM load + readback ---
+    [PASS] T41: T11 TX count = 5
+    [PASS] T42: T11 TX[0] inputs = 0x0000200000001000
+    [PASS] T43: T11 TX[1] canary = 0x0000dead0000dead
+    [PASS] T44: T11 TX[2] canary = 0x0000dead0000dead
+    [PASS] T45: T11 TX[3] canary = 0x0000dead0000dead
+    [PASS] T46: T11 TX[4] sum=0x3000 = 0x0000000000003000
+    [PASS] T47: T11 ctrl = 0x01
+
+--- Test 12: CPU CMP + BEQ not-taken (NE path) ---
+    [PASS] T48: T12 TX count = 1
+    [PASS] T49: T12 BEQ not-taken, R2=1 = 0x0000000100000063
+    [PASS] T50: T12 ctrl = 0x10
+
+--- Test 13: GPU LD/ADD/ST with D_UNPACK preload ---
+    [PASS] T51: T13 TX count = 4
+    [PASS] T52: T13 TX[0] bank0 in+result = 0x0000012c00c80064
+    [PASS] T53: T13 TX[1] bank1 = 0x0000012c00c80064
+    [PASS] T54: T13 TX[2] bank2 = 0x0000012c00c80064
+    [PASS] T55: T13 TX[3] bank3 = 0x0000012c00c80064
+    [PASS] T56: T13 ctrl = 0x04
+
+--- Test 14: GPU WMMA.MMA tensor core ---
+    [PASS] T57: T14 TX count = 4
+    [PASS] T58: T14 TX[0] WMMA D=4.0 = 0x4080408040804080
+    [PASS] T59: T14 TX[1] WMMA D=4.0 = 0x4080408040804080
+    [PASS] T60: T14 TX[2] WMMA D=4.0 = 0x4080408040804080
+    [PASS] T61: T14 TX[3] WMMA D=4.0 = 0x4080408040804080
+    [PASS] T62: T14 ctrl = 0x20
+
+--- Test 15: GPU per-thread TID ---
+    [PASS] T63: T15 TX count = 2
+    [PASS] T64: T15 TX[0] SP1=101,SP0=100 = 0x0000006500000064
+    [PASS] T65: T15 TX[1] SP3=103,SP2=102 = 0x0000006700000066
+    [PASS] T66: T15 ctrl = 0x08
+
+--- Test 16: GPU K1 vec_add int16 (LD) ---
+    [PASS] T67: T16 TX count = 2
+    [PASS] T68: T16 K1 10+20=30 = 0x0000001e0000001e
+    [PASS] T69: T16 all banks = 0x0000001e0000001e
+
+--- Test 17: GPU K2 vec_sub int16 (LD) ---
+    [PASS] T70: T17 TX count = 2
+    [PASS] T71: T17 K2 100-30=70 = 0x0000004600000046
+    [PASS] T72: T17 all banks = 0x0000004600000046
+
+--- Test 18: GPU K3 bf16_mul (LD) ---
+    [PASS] T73: T18 TX count = 2
+    [PASS] T74: T18 K3 2*3=6.0 = 0x000040c0000040c0
+    [PASS] T75: T18 all banks = 0x000040c0000040c0
+
+--- Test 19: GPU K4 bf16_fma (LD) ---
+    [PASS] T76: T19 TX count = 2
+    [PASS] T77: T19 K4 2*3+1=7.0 = 0x000040e0000040e0
+    [PASS] T78: T19 all banks = 0x000040e0000040e0
+
+--- Test 20: GPU K5 relu bf16 (per-bank) ---
+    [PASS] T79: T20 TX count = 2
+    [PASS] T80: T20 relu: bank1=2.0, bank0=0 = 0x0000400000000000
+    [PASS] T81: T20 relu: bank3=5.0, bank2=0 = 0x000040a000000000
+
+--- Test 21: GPU K6 WMMA (I * all-2.0) ---
+    [PASS] T82: T21 TX count = 4
+    [PASS] T83: T21 WMMA banks 0,1 D=2.0 = 0x4000400040004000
+    [PASS] T84: T21 WMMA banks 2,3 D=2.0 = 0x4000400040004000
+    [PASS] T85: T21 WMMA banks 4,5 D=2.0 = 0x4000400040004000
+    [PASS] T86: T21 WMMA banks 6,7 D=2.0 = 0x4000400040004000
+
+================================================================
+  *** ALL 86 CHECKS PASSED ***
+  Total checks: 86
+================================================================
+
+../tb/soc_tb.v:1645: $finish called at 80816000 (1ps)
