@@ -1,19 +1,25 @@
-/* file: sm_core_tb_cvt.v
- * CVT-focused testbench addition for sm_core.
- * Adds K39-K45 CVT tests with deep pipeline tracing.
+/* file: sm_core_tb.v
+ * Testbench for sm_core — streaming multiprocessor core.
+ * Instantiates sm_core + IMEM/DMEM BRAM models, loads test
+ * programs, launches kernels, and verifies GPR / DMEM results.
  *
- * Run standalone or append test cases to sm_core_tb.v
- *
- * Key diagnostic signals traced per cycle:
- *   - RF read address + data (rr_rf_r0_addr → ppl_rf_r0_data)
- *   - id_ex operand A (actual CVT input)
- *   - CVT pipeline: valid_in, pipe_valid, done, result
- *   - EX/MEM capture: result, rf_we
- *   - WB writeback:  w0_we, w0_addr, w0_data
- *   - Scoreboard pending bits
+ * CRITICAL: Every @(posedge clk) is followed by #1 to prevent
+ * Verilog simulation race conditions between TB and DUT NBAs.
  *
  * Author: Jeremy Cai
- * Date: Mar. 5, 2026
+ * Date: Mar. 1, 2026
+ * Version: 1.4
+ * Revision history:
+ *   - Mar. 01, 2026: v1.0 — K1–K30 tests (ALU, MEM, BRA, WMMA, PTX).
+ *   - Mar. 04, 2026: v1.1 — K31–K37 SIMT divergence/convergence tests.
+ *     Added: enc_pbra, enc_set helpers. Updated trace with SIMT state.
+ *     Updated PBRA disasm to show target/reconv fields separately.
+ *   - Mar. 04, 2026: v1.2 — K32/K33 temp workaround (enc_set→enc_setp).
+ *   - Mar. 04, 2026: v1.3 — Reverted K32/K33 to enc_set (sp_core.v v1.3
+ *     fixes OP_SET pred write path). Added K38 SET instruction unit test.
+ *   - Mar. 05, 2026: v1.4 — Removed debug_rf ports (sm_core v1.3+).
+ *     GPR reads now use override RF read ports. Added K39–K47 CVT tests
+ *     with deep CVT pipeline diagnostics.
  */
 
 `timescale 1ns / 1ps
@@ -44,7 +50,7 @@ module sm_core_tb;
 
     reg kernel_start;
     reg [`GPU_PC_WIDTH-1:0] kernel_entry_pc;
-    reg [3:0] thread_mask;
+    reg [3:0] thread_mask;               // v1.3: from CP10 CR7
     wire kernel_done;
 
     // ================================================================
@@ -65,9 +71,10 @@ module sm_core_tb;
     );
 
     // ================================================================
-    // IMEM BRAM Model (sync read)
+    // IMEM BRAM Model (sync read, single port)
     // ================================================================
     reg [31:0] imem [0:255];
+
     always @(posedge clk)
         imem_rdata <= imem[imem_addr];
 
@@ -79,6 +86,7 @@ module sm_core_tb;
     reg [15:0] dmem2 [0:1023];
     reg [15:0] dmem3 [0:1023];
 
+    // SP0 DMEM
     always @(posedge clk) begin
         if (dmem_wea[0])
             dmem0[dmem_addra[0*`GPU_DMEM_ADDR_WIDTH +: `GPU_DMEM_ADDR_WIDTH]]
@@ -86,6 +94,7 @@ module sm_core_tb;
         dmem_douta[0*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH]
             <= dmem0[dmem_addra[0*`GPU_DMEM_ADDR_WIDTH +: `GPU_DMEM_ADDR_WIDTH]];
     end
+    // SP1 DMEM
     always @(posedge clk) begin
         if (dmem_wea[1])
             dmem1[dmem_addra[1*`GPU_DMEM_ADDR_WIDTH +: `GPU_DMEM_ADDR_WIDTH]]
@@ -93,6 +102,7 @@ module sm_core_tb;
         dmem_douta[1*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH]
             <= dmem1[dmem_addra[1*`GPU_DMEM_ADDR_WIDTH +: `GPU_DMEM_ADDR_WIDTH]];
     end
+    // SP2 DMEM
     always @(posedge clk) begin
         if (dmem_wea[2])
             dmem2[dmem_addra[2*`GPU_DMEM_ADDR_WIDTH +: `GPU_DMEM_ADDR_WIDTH]]
@@ -100,6 +110,7 @@ module sm_core_tb;
         dmem_douta[2*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH]
             <= dmem2[dmem_addra[2*`GPU_DMEM_ADDR_WIDTH +: `GPU_DMEM_ADDR_WIDTH]];
     end
+    // SP3 DMEM
     always @(posedge clk) begin
         if (dmem_wea[3])
             dmem3[dmem_addra[3*`GPU_DMEM_ADDR_WIDTH +: `GPU_DMEM_ADDR_WIDTH]]
@@ -111,32 +122,90 @@ module sm_core_tb;
     // ================================================================
     // Instruction Encoding Helpers
     // ================================================================
+    // R-type: {OPCODE[4:0], DT, 2'b00, rD[3:0], rA[3:0], rB[3:0], 12'd0}
     function [31:0] enc_r;
-        input [4:0] op; input dt; input [3:0] rd, ra, rb;
+        input [4:0] op;
+        input dt;
+        input [3:0] rd, ra, rb;
         enc_r = {op, dt, 2'b00, rd, ra, rb, 12'd0};
     endfunction
 
+    // I-type: {OPCODE, DT, 2'b00, rD, rA, imm16}
     function [31:0] enc_i;
-        input [4:0] op; input dt; input [3:0] rd, ra; input [15:0] imm;
+        input [4:0] op;
+        input dt;
+        input [3:0] rd, ra;
+        input [15:0] imm;
         enc_i = {op, dt, 2'b00, rd, ra, imm};
     endfunction
 
+    // MOVI rD, imm16
     function [31:0] enc_movi;
-        input [3:0] rd; input [15:0] imm;
+        input [3:0] rd;
+        input [15:0] imm;
         enc_movi = {`OP_MOVI, 1'b0, 2'b00, rd, 4'd0, imm};
     endfunction
 
+    // M-type: LD/ST rD, rA, offset16 (DT=0, int16)
     function [31:0] enc_m;
-        input [4:0] op; input [3:0] rd, ra; input [15:0] offset;
+        input [4:0] op;
+        input [3:0] rd, ra;
+        input [15:0] offset;
         enc_m = {op, 1'b0, 2'b00, rd, ra, offset};
     endfunction
 
+    // M-type bf16: LD/ST rD, rA, offset16 (DT=1, bf16)
+    function [31:0] enc_m_f;
+        input [4:0] op;
+        input [3:0] rd, ra;
+        input [15:0] offset;
+        enc_m_f = {op, 1'b1, 2'b00, rd, ra, offset};
+    endfunction
+
+    // BRA target (absolute 27-bit)
+    function [31:0] enc_bra;
+        input [26:0] target;
+        enc_bra = {`OP_BRA, target};
+    endfunction
+
+    // SETP: {OPCODE, DT, CMP[1:0], pD[3:0], rA[3:0], rB[3:0], 12'd0}
+    function [31:0] enc_setp;
+        input dt;
+        input [1:0] cmp;
+        input [3:0] pd, ra, rb;
+        enc_setp = {`OP_SETP, dt, cmp, pd, ra, rb, 12'd0};
+    endfunction
+
+    // v1.1: PBRA — predicated branch with divergence
+    // Format: {OP_PBRA[4:0], pred_sel[1:0], branch_target[12:0], reconv_pc[11:0]}
+    function [31:0] enc_pbra;
+        input [1:0] pred_sel;
+        input [12:0] branch_target;
+        input [11:0] reconv_pc;
+        enc_pbra = {`OP_PBRA, pred_sel, branch_target, reconv_pc};
+    endfunction
+
+    // v1.1: SET — set predicate register to constant
+    // Format: {OP_SET, DT=0, 2'b00, {2'b00,pD[1:0]}, 4'd0, 15'd0, val}
+    function [31:0] enc_set;
+        input [1:0] pd;
+        input val;
+        enc_set = {`OP_SET, 1'b0, 2'b00, {2'b00, pd}, 4'd0, 15'd0, val};
+    endfunction
+
+    // MOV.TID rD (MOV with DT=1, rA=0)
     function [31:0] enc_mov_tid;
         input [3:0] rd;
         enc_mov_tid = {`OP_MOV, 1'b1, 2'b00, rd, 4'd0, 16'd0};
     endfunction
 
-    // CVT encoding: {OP_CVT, DT, 2'b00, rD, rA, 16'h0}
+    // WMMA.MMA W-type: {OPCODE, DT=1, RES=00, rD[3:0], rA[3:0], rB[3:0], rC[3:0], 8'd0}
+    function [31:0] enc_wmma_mma;
+        input [3:0] rD, rA, rB, rC;
+        enc_wmma_mma = {`WMMA_MMA, 1'b1, 2'b00, rD, rA, rB, rC, 8'd0};
+    endfunction
+
+    // v1.4: CVT encoding: {OP_CVT, DT, 2'b00, rD, rA, 16'h0}
     //   dt=1: int16 → bf16 (i2f)
     //   dt=0: bf16 → int16 (f2i)
     function [31:0] enc_cvt;
@@ -145,6 +214,7 @@ module sm_core_tb;
         enc_cvt = {`OP_CVT, dt, 2'b00, rd, ra, 16'h0000};
     endfunction
 
+    // Constants
     wire [31:0] INST_RET = {`OP_RET, 27'd0};
     wire [31:0] INST_NOP = {`OP_NOP, 27'd0};
 
@@ -155,7 +225,11 @@ module sm_core_tb;
     integer fail_count = 0;
     integer test_num = 0;
 
-    task tick; begin @(posedge clk); #1; end endtask
+    task tick;
+    begin
+        @(posedge clk); #1;
+    end
+    endtask
 
     task reset_dut;
         integer i;
@@ -163,7 +237,7 @@ module sm_core_tb;
         rst_n = 0;
         kernel_start = 0;
         kernel_entry_pc = 32'd0;
-        thread_mask = 4'b1111;
+        thread_mask = 4'b1111;           // v1.3: default all threads active
         for (i = 0; i < 256; i = i + 1) imem[i] = INST_NOP;
         repeat (3) tick;
         rst_n = 1;
@@ -204,24 +278,22 @@ module sm_core_tb;
         end
         if (!kernel_done)
             $display("[TIMEOUT] kernel_done not asserted within %0d cycles", max_cycles);
-        tick;
+        tick; // one extra cycle for final WB to settle
     end
     endtask
 
-    // ── GPR read helper (works around Icarus variable-index limitation) ──
-    // Reads SP's RF via the override read port (combinational).
-    // TC/BU must be idle (they are, after kernel_done).
+    // ================================================================
+    // GPR Read via Override RF Port (v1.4 — replaces debug_rf)
+    // ================================================================
+    // Uses force/release on sm_core's ovr_rf_r0_addr_mux to read any
+    // GPR from any SP. Safe after kernel_done (TC/BU idle).
     reg [15:0] dbg_rf_val [0:3];
 
     task read_gpr;
         input [3:0] addr;
-        // Drive override read address into sm_core's mux input.
-        // When TC and BU are idle, ovr_rf_r0_addr_mux = 0, but we
-        // need to force the address. Use the TB-level force/release.
     begin
-        // Force the override address mux
         force u_dut.ovr_rf_r0_addr_mux = addr;
-        #1; // combinational settle
+        #1;
         dbg_rf_val[0] = u_dut.SP_LANE[0].u_sp.ovr_rf_r0_data;
         dbg_rf_val[1] = u_dut.SP_LANE[1].u_sp.ovr_rf_r0_data;
         dbg_rf_val[2] = u_dut.SP_LANE[2].u_sp.ovr_rf_r0_data;
@@ -231,7 +303,7 @@ module sm_core_tb;
     end
     endtask
 
-    // ── GPR check via override read port ─────────────────
+    // Check GPR via override read port
     task check_gpr;
         input [1:0] sp;
         input [3:0] addr;
@@ -254,6 +326,7 @@ module sm_core_tb;
     end
     endtask
 
+    // Check GPR across all 4 SPs (same expected value — SIMT)
     task check_gpr_all;
         input [3:0] addr;
         input [15:0] expected;
@@ -266,6 +339,7 @@ module sm_core_tb;
     end
     endtask
 
+    // Check DMEM value for a specific SP
     task check_dmem;
         input [1:0] sp;
         input [9:0] addr;
@@ -292,6 +366,7 @@ module sm_core_tb;
     end
     endtask
 
+    // Check DMEM across all 4 SPs
     task check_dmem_all;
         input [9:0] addr;
         input [15:0] expected;
@@ -304,7 +379,349 @@ module sm_core_tb;
     end
     endtask
 
-    // ── Dump SP0-3 RF range via override port ───────────
+    // ================================================================
+    // Waveform Dump
+    // ================================================================
+    initial begin
+        $dumpfile("sm_core_tb.vcd");
+        $dumpvars(0, sm_core_tb);
+    end
+
+    // Global timeout
+    initial begin
+        #2000000;
+        $display("[TIMEOUT] Global simulation timeout reached");
+        $finish;
+    end
+
+    // ================================================================
+    // Pipeline Monitor — cycle-by-cycle trace (v1.4: SIMT + CVT)
+    // ================================================================
+    integer cycle_count;
+    reg trace_en;
+    reg cvt_trace_en;
+
+    initial begin
+        cycle_count = 0;
+        trace_en = 0;
+        cvt_trace_en = 0;
+    end
+
+    // --- Opcode name decode (for display) ---
+    reg [8*8-1:0] opname;
+    always @(*) begin
+        case (u_dut.dec_opcode)
+            `OP_NOP:      opname = "NOP     ";
+            `OP_MOV:      opname = "MOV     ";
+            `OP_MOVI:     opname = "MOVI    ";
+            `OP_ADD:      opname = "ADD     ";
+            `OP_SUB:      opname = "SUB     ";
+            `OP_MUL:      opname = "MUL     ";
+            `OP_FMA:      opname = "FMA     ";
+            `OP_MAX:      opname = "MAX     ";
+            `OP_MIN:      opname = "MIN     ";
+            `OP_AND:      opname = "AND     ";
+            `OP_OR:       opname = "OR      ";
+            `OP_XOR:      opname = "XOR     ";
+            `OP_NEG:      opname = "NEG     ";
+            `OP_ABS:      opname = "ABS     ";
+            `OP_SHL:      opname = "SHL     ";
+            `OP_SHR:      opname = "SHR     ";
+            `OP_ADDI:     opname = "ADDI    ";
+            `OP_MULI:     opname = "MULI    ";
+            `OP_LD:       opname = "LD      ";
+            `OP_ST:       opname = "ST      ";
+            `OP_BRA:      opname = "BRA     ";
+            `OP_PBRA:     opname = "PBRA    ";
+            `OP_SETP:     opname = "SETP    ";
+            `OP_SELP:     opname = "SELP    ";
+            `OP_CVT:      opname = "CVT     ";
+            `OP_RET:      opname = "RET     ";
+            `OP_SET:      opname = "SET     ";
+            `OP_LDS:      opname = "LDS     ";
+            `OP_STS:      opname = "STS     ";
+            `WMMA_MMA:    opname = "WMMA.MMA";
+            `WMMA_LOAD:   opname = "WMMA.LD ";
+            `WMMA_STORE:  opname = "WMMA.ST ";
+            default:      opname = "???     ";
+        endcase
+    end
+
+    // --- TC state name decode ---
+    reg [8*8-1:0] tc_state_name;
+    always @(*) begin
+        case (u_dut.u_tc_top.state)
+            3'd0: tc_state_name = "IDLE    ";
+            3'd1: tc_state_name = "GATH_A  ";
+            3'd2: tc_state_name = "GATH_B  ";
+            3'd3: tc_state_name = "GATH_C  ";
+            3'd4: tc_state_name = "COMPUTE ";
+            3'd5: tc_state_name = "SCAT_0  ";
+            3'd6: tc_state_name = "SCAT_1  ";
+            default: tc_state_name = "???     ";
+        endcase
+    end
+
+    // --- Burst state name decode ---
+    reg [8*8-1:0] bu_state_name;
+    always @(*) begin
+        case (u_dut.bu_state)
+            3'd0: bu_state_name = "IDLE    ";
+            3'd1: bu_state_name = "LD_ADDR ";
+            3'd2: bu_state_name = "LD_BEAT ";
+            3'd3: bu_state_name = "ST_READ ";
+            3'd4: bu_state_name = "ST_BEAT ";
+            default: bu_state_name = "???     ";
+        endcase
+    end
+
+    // --- Enhanced trace (v1.4: SIMT + CVT deep diagnostics) ---
+    always @(posedge clk) begin
+        cycle_count <= cycle_count + 1;
+        if (trace_en) begin
+            // Line 1: Pipeline state
+            $display("  [C%03d] PC=%0d dec=%08h %0s fv=%b | fstl=%b sb=%b exb=%b drn=%b de_fl=%b | mask=%b stk_e=%b conv=%b%b pbra=%b | done=%b",
+                cycle_count,
+                u_dut.u_fetch.pc_reg,
+                u_dut.dec_ir,
+                opname,
+                u_dut.fetch_valid,
+                u_dut.front_stall,
+                u_dut.sb_stall,
+                u_dut.any_ex_busy,
+                u_dut.pipeline_drained,
+                u_dut.de_flush,
+                u_dut.active_mask,
+                u_dut.stack_empty,
+                u_dut.conv_phase0_fire,
+                u_dut.conv_phase1_fire,
+                u_dut.pbra_fire,
+                kernel_done);
+            // Line 2: Scoreboard + WB + DE + Stack details
+            $display("         SB: pend0=%04h pend1=%04h pend2=%04h pend3=%04h | wb_we_any=%b wb_rD=%0d wb_amsk=%b | wb_we[3:0]=%b%b%b%b | DE: v=%b pbra=%b rD=%0d | stk_sp=%0d tos_rpc=%0d tos_ph=%b",
+                u_dut.u_sb.pending[0],
+                u_dut.u_sb.pending[1],
+                u_dut.u_sb.pending[2],
+                u_dut.u_sb.pending[3],
+                u_dut.sb_wb_rf_we_any,
+                u_dut.sp_wb_rD_addr[0],
+                {u_dut.sp_wb_active[3], u_dut.sp_wb_active[2],
+                 u_dut.sp_wb_active[1], u_dut.sp_wb_active[0]},
+                u_dut.sp_wb_rf_we[3],
+                u_dut.sp_wb_rf_we[2],
+                u_dut.sp_wb_rf_we[1],
+                u_dut.sp_wb_rf_we[0],
+                u_dut.de_valid,
+                u_dut.de_is_pbra,
+                u_dut.de_rD_addr,
+                u_dut.u_simt_stack.sp,
+                u_dut.tos_reconv_pc,
+                u_dut.tos_phase);
+        end
+
+        if (cvt_trace_en) begin
+            // CVT-focused compact trace
+            $display("  [C%03d] PC=%0d fv=%b | fstl=%b sp_stl=%b sb=%b exb=%b|%b|%b|%b drn=%b | amask=%b done=%b | de_v=%b de_op=%02h rD=%0d",
+                cycle_count,
+                u_dut.u_fetch.pc_reg,
+                u_dut.fetch_valid,
+                u_dut.front_stall,
+                u_dut.sp_stall,
+                u_dut.sb_stall,
+                u_dut.SP_LANE[0].u_sp.ex_busy,
+                u_dut.SP_LANE[1].u_sp.ex_busy,
+                u_dut.SP_LANE[2].u_sp.ex_busy,
+                u_dut.SP_LANE[3].u_sp.ex_busy,
+                u_dut.pipeline_drained,
+                u_dut.active_mask,
+                kernel_done,
+                u_dut.de_valid,
+                u_dut.de_opcode,
+                u_dut.de_rD_addr);
+            $display("         RR: v=%b op=%02h rD=%0d we=%b dt=%b | addr0=%0d addr1=%0d",
+                u_dut.rr_valid,
+                u_dut.rr_opcode,
+                u_dut.rr_rD_addr,
+                u_dut.rr_rf_we,
+                u_dut.rr_dt,
+                u_dut.rr_rf_r0_addr,
+                u_dut.rr_rf_r1_addr);
+            $display("         SB: pend[0]=%04h [1]=%04h [2]=%04h [3]=%04h | wb_we=%b wb_rD=%0d",
+                u_dut.u_sb.pending[0],
+                u_dut.u_sb.pending[1],
+                u_dut.u_sb.pending[2],
+                u_dut.u_sb.pending[3],
+                u_dut.sb_wb_rf_we_any,
+                u_dut.sp_wb_rD_addr[0]);
+            $display("         SP0 id_ex: v=%b op=%02h dt=%b rD=%0d launched=%b | opA=%04h opB=%04h | rf_we=%b active=%b",
+                u_dut.SP_LANE[0].u_sp.id_ex_valid,
+                u_dut.SP_LANE[0].u_sp.id_ex_opcode,
+                u_dut.SP_LANE[0].u_sp.id_ex_dt,
+                u_dut.SP_LANE[0].u_sp.id_ex_rD_addr,
+                u_dut.SP_LANE[0].u_sp.id_ex_launched,
+                u_dut.SP_LANE[0].u_sp.id_ex_opA,
+                u_dut.SP_LANE[0].u_sp.id_ex_opB,
+                u_dut.SP_LANE[0].u_sp.id_ex_rf_we,
+                u_dut.SP_LANE[0].u_sp.id_ex_active);
+            $display("         SP0 CVT: valid_in=%b pipe=%02b done=%b busy=%b | cvt_result=%04h | is_cvt=%b ex_valid=%b",
+                u_dut.SP_LANE[0].u_sp.cvt_valid_in,
+                u_dut.SP_LANE[0].u_sp.cvt_pipe_valid,
+                u_dut.SP_LANE[0].u_sp.cvt_done,
+                u_dut.SP_LANE[0].u_sp.cvt_busy,
+                u_dut.SP_LANE[0].u_sp.cvt_result,
+                u_dut.SP_LANE[0].u_sp.is_cvt,
+                u_dut.SP_LANE[0].u_sp.ex_valid_out);
+            $display("         SP0 EX/MEM: v=%b rD=%0d we=%b result=%04h | ex_result_muxed=%04h",
+                u_dut.SP_LANE[0].u_sp.ex_mem_valid,
+                u_dut.SP_LANE[0].u_sp.ex_mem_rD_addr,
+                u_dut.SP_LANE[0].u_sp.ex_mem_rf_we,
+                u_dut.SP_LANE[0].u_sp.ex_mem_result,
+                u_dut.SP_LANE[0].u_sp.ex_result_muxed);
+            $display("         SP0 MEM/WB: v=%b rD=%0d we=%b data=%04h active=%b",
+                u_dut.SP_LANE[0].u_sp.mem_wb_valid,
+                u_dut.SP_LANE[0].u_sp.mem_wb_rD_addr,
+                u_dut.SP_LANE[0].u_sp.mem_wb_rf_we,
+                u_dut.SP_LANE[0].u_sp.mem_wb_data,
+                u_dut.SP_LANE[0].u_sp.mem_wb_active);
+            $display("         SP0 WB: w0_we=%b w0_addr=%0d w0_data=%04h | wb_data_final=%04h",
+                u_dut.SP_LANE[0].u_sp.w0_we,
+                u_dut.SP_LANE[0].u_sp.w0_addr,
+                u_dut.SP_LANE[0].u_sp.w0_data,
+                u_dut.SP_LANE[0].u_sp.wb_data_final);
+            $display("         SP0 RF_RD: ppl_r0_addr=%0d ppl_r0_data=%04h | stall=%b",
+                u_dut.SP_LANE[0].u_sp.ppl_rf_r0_addr,
+                u_dut.SP_LANE[0].u_sp.ppl_rf_r0_data,
+                u_dut.SP_LANE[0].u_sp.stall);
+            $display("         SP0 ALU/FPU: alu_v_in=%b alu_v_out=%b fpu_v_in=%b fpu_v_out=%b | set_v=%b",
+                u_dut.SP_LANE[0].u_sp.alu_valid_in,
+                u_dut.SP_LANE[0].u_sp.alu_valid_out,
+                u_dut.SP_LANE[0].u_sp.fpu_valid_in,
+                u_dut.SP_LANE[0].u_sp.fpu_valid_out,
+                u_dut.SP_LANE[0].u_sp.set_valid);
+            if (|dmem_wea)
+                $display("         >>> DMEM WRITE: we=%04b addr0=%0d din0=%04h addr1=%0d din1=%04h",
+                    dmem_wea,
+                    dmem_addra[0*`GPU_DMEM_ADDR_WIDTH +: `GPU_DMEM_ADDR_WIDTH],
+                    dmem_dina[0*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH],
+                    dmem_addra[1*`GPU_DMEM_ADDR_WIDTH +: `GPU_DMEM_ADDR_WIDTH],
+                    dmem_dina[1*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH]);
+            $display("");
+        end
+    end
+
+    task enable_trace;
+    begin
+        trace_en = 1;
+        cycle_count = 0;
+    end
+    endtask
+
+    task disable_trace;
+    begin
+        trace_en = 0;
+    end
+    endtask
+
+    task enable_cvt_trace;
+    begin
+        cvt_trace_en = 1;
+        cycle_count = 0;
+    end
+    endtask
+
+    task disable_cvt_trace;
+    begin
+        cvt_trace_en = 0;
+    end
+    endtask
+
+    // ================================================================
+    // Instruction Disassembler (v1.4: added CVT)
+    // ================================================================
+    task disasm;
+        input integer addr;
+        input [31:0] inst;
+        reg [4:0] op;
+        reg dt;
+        reg [3:0] rD, rA, rB, rC;
+        reg [15:0] imm;
+    begin
+        op  = inst[31:27];
+        dt  = inst[26];
+        rD  = inst[23:20];
+        rA  = inst[19:16];
+        rB  = inst[15:12];
+        rC  = inst[11:8];
+        imm = inst[15:0];
+        case (op)
+            `OP_NOP:  $display("    [%2d] %08h  NOP", addr, inst);
+            `OP_MOVI: $display("    [%2d] %08h  MOVI    R%0d, %0d (0x%04h)", addr, inst, rD, imm, imm);
+            `OP_MOV:  begin
+                if (dt)
+                    $display("    [%2d] %08h  MOV.TID R%0d", addr, inst, rD);
+                else
+                    $display("    [%2d] %08h  MOV     R%0d, R%0d", addr, inst, rD, rA);
+            end
+            `OP_ADD:  $display("    [%2d] %08h  ADD%s   R%0d, R%0d, R%0d", addr, inst, dt?".f":"  ", rD, rA, rB);
+            `OP_SUB:  $display("    [%2d] %08h  SUB%s   R%0d, R%0d, R%0d", addr, inst, dt?".f":"  ", rD, rA, rB);
+            `OP_MUL:  $display("    [%2d] %08h  MUL%s   R%0d, R%0d, R%0d", addr, inst, dt?".f":"  ", rD, rA, rB);
+            `OP_FMA:  $display("    [%2d] %08h  FMA%s   R%0d, R%0d, R%0d, R%0d", addr, inst, dt?".f":"  ", rD, rA, rB, rD);
+            `OP_MAX:  $display("    [%2d] %08h  MAX%s   R%0d, R%0d, R%0d", addr, inst, dt?".f":"  ", rD, rA, rB);
+            `OP_MIN:  $display("    [%2d] %08h  MIN%s   R%0d, R%0d, R%0d", addr, inst, dt?".f":"  ", rD, rA, rB);
+            `OP_AND:  $display("    [%2d] %08h  AND     R%0d, R%0d, R%0d", addr, inst, rD, rA, rB);
+            `OP_OR:   $display("    [%2d] %08h  OR      R%0d, R%0d, R%0d", addr, inst, rD, rA, rB);
+            `OP_XOR:  $display("    [%2d] %08h  XOR     R%0d, R%0d, R%0d", addr, inst, rD, rA, rB);
+            `OP_NEG:  $display("    [%2d] %08h  NEG%s   R%0d, R%0d", addr, inst, dt?".f":"  ", rD, rA);
+            `OP_ABS:  $display("    [%2d] %08h  ABS%s   R%0d, R%0d", addr, inst, dt?".f":"  ", rD, rA);
+            `OP_SHL:  $display("    [%2d] %08h  SHL     R%0d, R%0d, %0d", addr, inst, rD, rA, imm);
+            `OP_SHR:  $display("    [%2d] %08h  SHR     R%0d, R%0d, %0d", addr, inst, rD, rA, imm);
+            `OP_ADDI: $display("    [%2d] %08h  ADDI%s  R%0d, R%0d, %0d", addr, inst, dt?".f":"  ", rD, rA, imm);
+            `OP_MULI: $display("    [%2d] %08h  MULI%s  R%0d, R%0d, %0d", addr, inst, dt?".f":"  ", rD, rA, imm);
+            `OP_LD:   $display("    [%2d] %08h  LD      R%0d, [R%0d + %0d]", addr, inst, rD, rA, imm);
+            `OP_ST:   $display("    [%2d] %08h  ST      R%0d, [R%0d + %0d]", addr, inst, rD, rA, imm);
+            `OP_LDS:  $display("    [%2d] %08h  LDS     R%0d, [R%0d + %0d]", addr, inst, rD, rA, imm);
+            `OP_STS:  $display("    [%2d] %08h  STS     R%0d, [R%0d + %0d]", addr, inst, rD, rA, imm);
+            `OP_BRA:  $display("    [%2d] %08h  BRA     %0d", addr, inst, inst[26:0]);
+            `OP_PBRA: $display("    [%2d] %08h  PBRA    P%0d, target=%0d, reconv=%0d",
+                           addr, inst, inst[26:25], inst[24:12], inst[11:0]);
+            `OP_RET:  $display("    [%2d] %08h  RET", addr, inst);
+            `OP_SETP: $display("    [%2d] %08h  SETP    P%0d, R%0d, R%0d (cmp=%0d)", addr, inst, rD, rA, rB, inst[25:24]);
+            `OP_SELP: $display("    [%2d] %08h  SELP    R%0d, R%0d, R%0d (P%0d)", addr, inst, rD, rA, rB, inst[25:24]);
+            `OP_SET:  $display("    [%2d] %08h  SET     P%0d, %0d", addr, inst, rD[1:0], imm[0]);
+            `OP_CVT:  $display("    [%2d] %08h  CVT.%s  R%0d, R%0d", addr, inst, dt?"i2f":"f2i", rD, rA);
+            `WMMA_MMA:   $display("    [%2d] %08h  WMMA.MMA  D=R%0d..%0d, A=R%0d..%0d, B=R%0d..%0d, C=R%0d..%0d",
+                           addr, inst, rD, rD+4'd3, rA, rA+4'd3, rB, rB+4'd3, rC, rC+4'd3);
+            `WMMA_LOAD:  $display("    [%2d] %08h  WMMA.LOAD R%0d..%0d, [R%0d + %0d]",
+                           addr, inst, rD, rD+4'd3, rA, imm);
+            `WMMA_STORE: $display("    [%2d] %08h  WMMA.STORE R%0d..%0d, [R%0d + %0d]",
+                           addr, inst, rD, rD+4'd3, rA, imm);
+            default:  $display("    [%2d] %08h  ??? (op=%02d)", addr, inst, op);
+        endcase
+    end
+    endtask
+
+    // Print full program listing
+    task print_program;
+        input integer start_addr;
+        input integer length;
+        integer pi;
+    begin
+        $display("  Program listing:");
+        for (pi = start_addr; pi < start_addr + length; pi = pi + 1)
+            disasm(pi, imem[pi]);
+    end
+    endtask
+
+    // ================================================================
+    // BF16 display helpers
+    // ================================================================
+    // bf16 value reference table:
+    //   0x0000 = 0.0     0x3F80 = 1.0     0x4000 = 2.0
+    //   0x4040 = 3.0     0x4080 = 4.0     0x40A0 = 5.0
+    //   0x40C0 = 6.0     0x41C0 = 24.0    0x41C8 = 25.0
+    //   0x4170 = 15.0    0x42C8 = 100.0
+
+    // Dump SP0-3 RF contents for registers rStart..rEnd
     task dump_rf_range;
         input [3:0] r_start;
         input [3:0] r_end;
@@ -325,202 +742,862 @@ module sm_core_tb;
     end
     endtask
 
-    // ── Print program listing ────────────────────────────
-    task disasm;
-        input integer addr;
-        input [31:0] inst;
-        reg [4:0] op;
-        reg dt;
-        reg [3:0] rD, rA;
-        reg [15:0] imm;
-    begin
-        op = inst[31:27]; dt = inst[26];
-        rD = inst[23:20]; rA = inst[19:16]; imm = inst[15:0];
-        case (op)
-            `OP_NOP:  $display("    [%2d] %08h  NOP", addr, inst);
-            `OP_MOVI: $display("    [%2d] %08h  MOVI    R%0d, %0d (0x%04h)", addr, inst, rD, imm, imm);
-            `OP_MOV:  begin
-                if (dt) $display("    [%2d] %08h  MOV.TID R%0d", addr, inst, rD);
-                else    $display("    [%2d] %08h  MOV     R%0d, R%0d", addr, inst, rD, rA);
-            end
-            `OP_ADD:  $display("    [%2d] %08h  ADD%s   R%0d, R%0d, R%0d", addr, inst, dt?".f":"  ", rD, rA, inst[15:12]);
-            `OP_CVT:  $display("    [%2d] %08h  CVT.%s  R%0d, R%0d", addr, inst, dt?"i2f":"f2i", rD, rA);
-            `OP_LD:   $display("    [%2d] %08h  LD      R%0d, [R%0d + %0d]", addr, inst, rD, rA, imm);
-            `OP_ST:   $display("    [%2d] %08h  ST      R%0d, [R%0d + %0d]", addr, inst, rD, rA, imm);
-            `OP_RET:  $display("    [%2d] %08h  RET", addr, inst);
-            default:  $display("    [%2d] %08h  op=%0d dt=%b rD=%0d rA=%0d", addr, inst, op, dt, rD, rA);
-        endcase
-    end
-    endtask
-
-    task print_program;
-        input integer start_addr;
-        input integer length;
-        integer pi;
-    begin
-        $display("  Program listing:");
-        for (pi = start_addr; pi < start_addr + length; pi = pi + 1)
-            disasm(pi, imem[pi]);
-    end
-    endtask
 
     // ================================================================
-    // Waveform Dump
-    // ================================================================
-    initial begin
-        $dumpfile("sm_core_tb.vcd");
-        $dumpvars(0, sm_core_tb);
-    end
-
-    initial begin
-        #500000;
-        $display("[TIMEOUT] Global simulation timeout reached");
-        $finish;
-    end
-
-    // ================================================================
-    // CVT Deep Diagnostic Trace
-    // ================================================================
-    integer cycle_count;
-    reg trace_en;
-    reg cvt_trace_en;
-
-    initial begin
-        cycle_count = 0;
-        trace_en = 0;
-        cvt_trace_en = 0;
-    end
-
-    // ── Standard pipeline trace ──────────────────────────
-    always @(posedge clk) begin
-        cycle_count <= cycle_count + 1;
-
-        if (trace_en || cvt_trace_en) begin
-            // Line 1: Pipeline overview
-            $display("  [C%03d] PC=%0d fv=%b | fstl=%b sp_stl=%b sb=%b exb=%b|%b|%b|%b drn=%b | amask=%b done=%b | de_v=%b de_op=%02h rD=%0d",
-                cycle_count,
-                u_dut.u_fetch.pc_reg,
-                u_dut.fetch_valid,
-                u_dut.front_stall,
-                u_dut.sp_stall,
-                u_dut.sb_stall,
-                u_dut.SP_LANE[0].u_sp.ex_busy,
-                u_dut.SP_LANE[1].u_sp.ex_busy,
-                u_dut.SP_LANE[2].u_sp.ex_busy,
-                u_dut.SP_LANE[3].u_sp.ex_busy,
-                u_dut.pipeline_drained,
-                u_dut.active_mask,
-                kernel_done,
-                u_dut.de_valid,
-                u_dut.de_opcode,
-                u_dut.de_rD_addr);
-
-            // Line 2: RR stage
-            $display("         RR: v=%b op=%02h rD=%0d we=%b dt=%b | addr0=%0d addr1=%0d",
-                u_dut.rr_valid,
-                u_dut.rr_opcode,
-                u_dut.rr_rD_addr,
-                u_dut.rr_rf_we,
-                u_dut.rr_dt,
-                u_dut.rr_rf_r0_addr,
-                u_dut.rr_rf_r1_addr);
-
-            // Line 3: Scoreboard
-            $display("         SB: pend[0]=%04h [1]=%04h [2]=%04h [3]=%04h | wb_we=%b wb_rD=%0d",
-                u_dut.u_sb.pending[0],
-                u_dut.u_sb.pending[1],
-                u_dut.u_sb.pending[2],
-                u_dut.u_sb.pending[3],
-                u_dut.sb_wb_rf_we_any,
-                u_dut.sp_wb_rD_addr[0]);
-        end
-
-        if (cvt_trace_en) begin
-            // Line 4: SP0 id_ex — the actual operand values
-            $display("         SP0 id_ex: v=%b op=%02h dt=%b rD=%0d launched=%b | opA=%04h opB=%04h | rf_we=%b active=%b",
-                u_dut.SP_LANE[0].u_sp.id_ex_valid,
-                u_dut.SP_LANE[0].u_sp.id_ex_opcode,
-                u_dut.SP_LANE[0].u_sp.id_ex_dt,
-                u_dut.SP_LANE[0].u_sp.id_ex_rD_addr,
-                u_dut.SP_LANE[0].u_sp.id_ex_launched,
-                u_dut.SP_LANE[0].u_sp.id_ex_opA,
-                u_dut.SP_LANE[0].u_sp.id_ex_opB,
-                u_dut.SP_LANE[0].u_sp.id_ex_rf_we,
-                u_dut.SP_LANE[0].u_sp.id_ex_active);
-
-            // Line 5: CVT pipeline — valid signals + result
-            $display("         SP0 CVT: valid_in=%b pipe=%02b done=%b busy=%b | cvt_result=%04h | is_cvt=%b ex_valid=%b",
-                u_dut.SP_LANE[0].u_sp.cvt_valid_in,
-                u_dut.SP_LANE[0].u_sp.cvt_pipe_valid,
-                u_dut.SP_LANE[0].u_sp.cvt_done,
-                u_dut.SP_LANE[0].u_sp.cvt_busy,
-                u_dut.SP_LANE[0].u_sp.cvt_result,
-                u_dut.SP_LANE[0].u_sp.is_cvt,
-                u_dut.SP_LANE[0].u_sp.ex_valid_out);
-
-            // Line 6: EX/MEM
-            $display("         SP0 EX/MEM: v=%b rD=%0d we=%b result=%04h | ex_result_muxed=%04h",
-                u_dut.SP_LANE[0].u_sp.ex_mem_valid,
-                u_dut.SP_LANE[0].u_sp.ex_mem_rD_addr,
-                u_dut.SP_LANE[0].u_sp.ex_mem_rf_we,
-                u_dut.SP_LANE[0].u_sp.ex_mem_result,
-                u_dut.SP_LANE[0].u_sp.ex_result_muxed);
-
-            // Line 7: MEM/WB
-            $display("         SP0 MEM/WB: v=%b rD=%0d we=%b data=%04h active=%b",
-                u_dut.SP_LANE[0].u_sp.mem_wb_valid,
-                u_dut.SP_LANE[0].u_sp.mem_wb_rD_addr,
-                u_dut.SP_LANE[0].u_sp.mem_wb_rf_we,
-                u_dut.SP_LANE[0].u_sp.mem_wb_data,
-                u_dut.SP_LANE[0].u_sp.mem_wb_active);
-
-            // Line 8: WB — actual RF write
-            $display("         SP0 WB: w0_we=%b w0_addr=%0d w0_data=%04h | wb_data_final=%04h",
-                u_dut.SP_LANE[0].u_sp.w0_we,
-                u_dut.SP_LANE[0].u_sp.w0_addr,
-                u_dut.SP_LANE[0].u_sp.w0_data,
-                u_dut.SP_LANE[0].u_sp.wb_data_final);
-
-            // Line 9: RF read port — what the pipeline actually reads
-            $display("         SP0 RF_RD: ppl_r0_addr=%0d ppl_r0_data=%04h | stall=%b",
-                u_dut.SP_LANE[0].u_sp.ppl_rf_r0_addr,
-                u_dut.SP_LANE[0].u_sp.ppl_rf_r0_data,
-                u_dut.SP_LANE[0].u_sp.stall);
-
-            // Line 10: ALU/FPU valid (to distinguish from CVT path)
-            $display("         SP0 ALU/FPU: alu_v_in=%b alu_v_out=%b fpu_v_in=%b fpu_v_out=%b | set_v=%b",
-                u_dut.SP_LANE[0].u_sp.alu_valid_in,
-                u_dut.SP_LANE[0].u_sp.alu_valid_out,
-                u_dut.SP_LANE[0].u_sp.fpu_valid_in,
-                u_dut.SP_LANE[0].u_sp.fpu_valid_out,
-                u_dut.SP_LANE[0].u_sp.set_valid);
-
-            // Line 11: DMEM write observation
-            if (|dmem_wea)
-                $display("         >>> DMEM WRITE: we=%04b addr0=%0d din0=%04h addr1=%0d din1=%04h",
-                    dmem_wea,
-                    dmem_addra[0*`GPU_DMEM_ADDR_WIDTH +: `GPU_DMEM_ADDR_WIDTH],
-                    dmem_dina[0*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH],
-                    dmem_addra[1*`GPU_DMEM_ADDR_WIDTH +: `GPU_DMEM_ADDR_WIDTH],
-                    dmem_dina[1*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH]);
-
-            $display(""); // blank line for readability
-        end
-    end
-
-    // ================================================================
-    // Main Test Sequence — CVT-focused tests K39-K45
+    // Main Test Sequence
     // ================================================================
     initial begin
         $display("============================================");
-        $display("  SM Core CVT Testbench — Starting");
-        $display("  Tests K39-K45: CVT pipeline diagnostics");
+        $display("  SM Core Testbench v1.4 — Starting");
         $display("============================================");
 
-        // ════════════════════════════════════════════════════════
-        //  K39: MOVI sanity (non-CVT baseline)
-        //  Verify basic MOVI+ST works before testing CVT.
-        // ════════════════════════════════════════════════════════
+        // ── K1: Basic ALU (MOVI + ADD) ───────────────────
+        begin
+            $display("\n--- K1: Basic ALU (MOVI + ADD) ---");
+            reset_dut;
+            clear_dmem;
+            imem[0] = enc_movi(4'd1, 16'd100);
+            imem[1] = enc_movi(4'd2, 16'd200);
+            imem[2] = enc_r(`OP_ADD, 1'b0, 4'd3, 4'd1, 4'd2);
+            imem[3] = INST_RET;
+            launch_kernel(32'd0);
+            wait_kernel_done(100);
+
+            check_gpr_all(4'd1, 16'd100, "K1 R1=100");
+            check_gpr_all(4'd2, 16'd200, "K1 R2=200");
+            check_gpr_all(4'd3, 16'd300, "K1 R3=300");
+        end
+
+        // ── K2: Memory LD / ST ───────────────────────────
+        begin
+            $display("\n--- K2: Memory LD / ST ---");
+            reset_dut;
+            clear_dmem;
+            dmem0[10] = 16'hABCD;
+            dmem1[10] = 16'hABCD;
+            dmem2[10] = 16'hABCD;
+            dmem3[10] = 16'hABCD;
+
+            imem[0] = enc_movi(4'd1, 16'd10);
+            imem[1] = enc_m(`OP_LD, 4'd2, 4'd1, 16'd0);
+            imem[2] = enc_i(`OP_ADDI, 1'b0, 4'd3, 4'd2, 16'd1);
+            imem[3] = enc_m(`OP_ST, 4'd3, 4'd1, 16'd5);
+            imem[4] = INST_RET;
+            launch_kernel(32'd0);
+            wait_kernel_done(100);
+
+            check_gpr_all(4'd2, 16'hABCD, "K2 R2=DMEM[10]");
+            check_gpr_all(4'd3, 16'hABCE, "K2 R3=R2+1");
+            check_dmem_all(10'd15, 16'hABCE, "K2 DMEM[15]=R3");
+        end
+
+        // ── K3: Branch (BRA skips instruction) ───────────
+        begin
+            $display("\n--- K3: Branch (BRA) ---");
+            reset_dut;
+            clear_dmem;
+            imem[0] = enc_movi(4'd1, 16'd42);
+            imem[1] = enc_bra(27'd4);
+            imem[2] = enc_movi(4'd1, 16'd99);
+            imem[3] = enc_movi(4'd1, 16'd88);
+            imem[4] = enc_movi(4'd2, 16'd55);
+            imem[5] = INST_RET;
+            launch_kernel(32'd0);
+            wait_kernel_done(100);
+
+            check_gpr_all(4'd1, 16'd42, "K3 R1=42 (not overwritten)");
+            check_gpr_all(4'd2, 16'd55, "K3 R2=55 (after branch)");
+        end
+
+        // ── K4: Multi-cycle MUL + Scoreboard Stall ───────
+        begin
+            $display("\n--- K4: MUL + Scoreboard Stall ---");
+            reset_dut;
+            clear_dmem;
+            imem[0] = enc_movi(4'd1, 16'd3);
+            imem[1] = enc_movi(4'd2, 16'd7);
+            imem[2] = enc_r(`OP_MUL, 1'b0, 4'd3, 4'd1, 4'd2);
+            imem[3] = enc_r(`OP_ADD, 1'b0, 4'd4, 4'd3, 4'd1);
+            imem[4] = INST_RET;
+            launch_kernel(32'd0);
+            wait_kernel_done(100);
+
+            check_gpr_all(4'd3, 16'd21, "K4 R3=3*7=21");
+            check_gpr_all(4'd4, 16'd24, "K4 R4=21+3=24");
+        end
+
+        // ── K5: MOV.TID — Thread Identity ────────────────
+        begin
+            $display("\n--- K5: MOV.TID ---");
+            reset_dut;
+            clear_dmem;
+            imem[0] = enc_mov_tid(4'd1);
+            imem[1] = INST_RET;
+            launch_kernel(32'd0);
+            wait_kernel_done(100);
+
+            check_gpr(2'd0, 4'd1, 16'd0, "K5 SP0.R1=TID0");
+            check_gpr(2'd1, 4'd1, 16'd1, "K5 SP1.R1=TID1");
+            check_gpr(2'd2, 4'd1, 16'd2, "K5 SP2.R1=TID2");
+            check_gpr(2'd3, 4'd1, 16'd3, "K5 SP3.R1=TID3");
+        end
+
+        // ── K6: Back-to-back MOVI (no hazard) ────────────
+        begin
+            $display("\n--- K6: Back-to-back MOVI (no hazard) ---");
+            reset_dut;
+            clear_dmem;
+            imem[0] = enc_movi(4'd1, 16'd10);
+            imem[1] = enc_movi(4'd2, 16'd20);
+            imem[2] = enc_movi(4'd3, 16'd30);
+            imem[3] = enc_movi(4'd4, 16'd40);
+            imem[4] = enc_movi(4'd5, 16'd50);
+            imem[5] = INST_RET;
+            launch_kernel(32'd0);
+            wait_kernel_done(100);
+
+            check_gpr_all(4'd1, 16'd10, "K6 R1=10");
+            check_gpr_all(4'd2, 16'd20, "K6 R2=20");
+            check_gpr_all(4'd3, 16'd30, "K6 R3=30");
+            check_gpr_all(4'd4, 16'd40, "K6 R4=40");
+            check_gpr_all(4'd5, 16'd50, "K6 R5=50");
+        end
+
+        // ── K7: Per-thread LD/ST with MOV.TID offset ─────
+        begin
+            $display("\n--- K7: Per-thread LD/ST ---");
+            reset_dut; clear_dmem;
+            imem[0] = enc_mov_tid(4'd1);
+            imem[1] = enc_movi(4'd2, 16'hCAFE);
+            imem[2] = enc_m(`OP_ST, 4'd2, 4'd1, 16'd100);
+            imem[3] = enc_m(`OP_LD, 4'd3, 4'd1, 16'd100);
+            imem[4] = INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(100);
+            check_dmem(2'd0, 10'd100, 16'hCAFE, "K7 SP0 DMEM[100]");
+            check_dmem(2'd1, 10'd101, 16'hCAFE, "K7 SP1 DMEM[101]");
+            check_dmem(2'd2, 10'd102, 16'hCAFE, "K7 SP2 DMEM[102]");
+            check_dmem(2'd3, 10'd103, 16'hCAFE, "K7 SP3 DMEM[103]");
+            check_gpr_all(4'd3, 16'hCAFE, "K7 R3=loaded CAFE");
+        end
+
+        // ── K8: Logic + Shift ────────────────────────────
+        begin
+            $display("\n--- K8: Logic + Shift ---");
+            reset_dut; clear_dmem;
+            imem[0] = enc_movi(4'd1, 16'h00FF);
+            imem[1] = enc_movi(4'd2, 16'h0F0F);
+            imem[2] = enc_r(`OP_AND, 1'b0, 4'd3, 4'd1, 4'd2);
+            imem[3] = enc_r(`OP_OR,  1'b0, 4'd4, 4'd1, 4'd2);
+            imem[4] = enc_r(`OP_XOR, 1'b0, 4'd5, 4'd1, 4'd2);
+            imem[5] = enc_i(`OP_SHL, 1'b0, 4'd6, 4'd1, 16'd4);
+            imem[6] = enc_i(`OP_SHR, 1'b0, 4'd7, 4'd1, 16'd4);
+            imem[7] = INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(100);
+            check_gpr_all(4'd3, 16'h000F, "K8 AND");
+            check_gpr_all(4'd4, 16'h0FFF, "K8 OR");
+            check_gpr_all(4'd5, 16'h0FF0, "K8 XOR");
+            check_gpr_all(4'd6, 16'h0FF0, "K8 SHL 4");
+            check_gpr_all(4'd7, 16'h000F, "K8 SHR 4");
+        end
+
+        // ── K9: FMA ──────────────────────────────────────
+        begin
+            $display("\n--- K9: FMA ---");
+            reset_dut; clear_dmem;
+            imem[0] = enc_movi(4'd1, 16'd5);
+            imem[1] = enc_movi(4'd2, 16'd6);
+            imem[2] = enc_movi(4'd3, 16'd10);
+            imem[3] = enc_r(`OP_FMA, 1'b0, 4'd3, 4'd1, 4'd2);
+            imem[4] = INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(100);
+            check_gpr_all(4'd3, 16'd40, "K9 FMA 5*6+10=40");
+        end
+
+        // ── K10: Non-zero entry PC ───────────────────────
+        begin
+            $display("\n--- K10: Non-zero entry PC ---");
+            reset_dut; clear_dmem;
+            imem[10] = enc_movi(4'd1, 16'hBEEF);
+            imem[11] = enc_movi(4'd2, 16'hDEAD);
+            imem[12] = INST_RET;
+            launch_kernel(32'd10); wait_kernel_done(100);
+            check_gpr_all(4'd1, 16'hBEEF, "K10 R1=0xBEEF");
+            check_gpr_all(4'd2, 16'hDEAD, "K10 R2=0xDEAD");
+        end
+
+        // ── K11: SUB + NEG + ABS ─────────────────────────
+        begin
+            $display("\n--- K11: SUB + NEG + ABS ---");
+            reset_dut; clear_dmem;
+            imem[0] = enc_movi(4'd1, 16'd30);
+            imem[1] = enc_movi(4'd2, 16'd50);
+            imem[2] = enc_r(`OP_SUB, 1'b0, 4'd3, 4'd1, 4'd2);
+            imem[3] = enc_r(`OP_NEG, 1'b0, 4'd4, 4'd3, 4'd0);
+            imem[4] = enc_r(`OP_ABS, 1'b0, 4'd5, 4'd3, 4'd0);
+            imem[5] = INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(100);
+            check_gpr_all(4'd3, 16'hFFEC, "K11 SUB 30-50=-20");
+            check_gpr_all(4'd4, 16'd20,   "K11 NEG(-20)=20");
+            check_gpr_all(4'd5, 16'd20,   "K11 ABS(-20)=20");
+        end
+
+        // ── K12: ADDI chain (scoreboard stress) ──────────
+        begin
+            $display("\n--- K12: ADDI chain (scoreboard stress) ---");
+            reset_dut; clear_dmem;
+            imem[0] = enc_movi(4'd1, 16'd0);
+            imem[1] = enc_i(`OP_ADDI, 1'b0, 4'd1, 4'd1, 16'd1);
+            imem[2] = enc_i(`OP_ADDI, 1'b0, 4'd1, 4'd1, 16'd1);
+            imem[3] = enc_i(`OP_ADDI, 1'b0, 4'd1, 4'd1, 16'd1);
+            imem[4] = enc_i(`OP_ADDI, 1'b0, 4'd1, 4'd1, 16'd1);
+            imem[5] = INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(200);
+            check_gpr_all(4'd1, 16'd4, "K12 ADDI chain R1=4");
+        end
+
+        // ── K13: MAX / MIN ───────────────────────────────
+        begin
+            $display("\n--- K13: MAX / MIN ---");
+            reset_dut; clear_dmem;
+            imem[0] = enc_movi(4'd1, 16'd100);
+            imem[1] = enc_movi(4'd2, 16'd200);
+            imem[2] = enc_r(`OP_MAX, 1'b0, 4'd3, 4'd1, 4'd2);
+            imem[3] = enc_r(`OP_MIN, 1'b0, 4'd4, 4'd1, 4'd2);
+            imem[4] = INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(100);
+            check_gpr_all(4'd3, 16'd200, "K13 MAX(100,200)=200");
+            check_gpr_all(4'd4, 16'd100, "K13 MIN(100,200)=100");
+        end
+
+        // ── K14–K24: WMMA tests ──────────────────────────
+        begin
+            $display("\n--- K14: WMMA.LOAD basic ---");
+            reset_dut; clear_dmem;
+            dmem0[200]=16'h1111; dmem0[201]=16'h2222; dmem0[202]=16'h3333; dmem0[203]=16'h4444;
+            dmem1[200]=16'h1111; dmem1[201]=16'h2222; dmem1[202]=16'h3333; dmem1[203]=16'h4444;
+            dmem2[200]=16'h1111; dmem2[201]=16'h2222; dmem2[202]=16'h3333; dmem2[203]=16'h4444;
+            dmem3[200]=16'h1111; dmem3[201]=16'h2222; dmem3[202]=16'h3333; dmem3[203]=16'h4444;
+            imem[0] = enc_movi(4'd15, 16'd200);
+            imem[1] = enc_m(`WMMA_LOAD, 4'd4, 4'd15, 16'd0);
+            imem[2] = INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(100);
+            check_gpr_all(4'd4, 16'h1111, "K14 R4=0x1111");
+            check_gpr_all(4'd5, 16'h2222, "K14 R5=0x2222");
+            check_gpr_all(4'd6, 16'h3333, "K14 R6=0x3333");
+            check_gpr_all(4'd7, 16'h4444, "K14 R7=0x4444");
+        end
+
+        begin
+            $display("\n--- K15: WMMA.STORE basic ---");
+            reset_dut; clear_dmem;
+            imem[0] = enc_movi(4'd0, 16'h1234);
+            imem[1] = enc_movi(4'd1, 16'h5678);
+            imem[2] = enc_movi(4'd2, 16'h9ABC);
+            imem[3] = enc_movi(4'd3, 16'hDEF0);
+            imem[4] = enc_movi(4'd8, 16'd300);
+            imem[5] = enc_m(`WMMA_STORE, 4'd0, 4'd8, 16'd0);
+            imem[6] = INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(100);
+            check_dmem_all(10'd300, 16'h1234, "K15 DMEM[300]=0x1234");
+            check_dmem_all(10'd301, 16'h5678, "K15 DMEM[301]=0x5678");
+            check_dmem_all(10'd302, 16'h9ABC, "K15 DMEM[302]=0x9ABC");
+            check_dmem_all(10'd303, 16'hDEF0, "K15 DMEM[303]=0xDEF0");
+        end
+
+        begin
+            $display("\n--- K16: WMMA.MMA uniform 1*1+0=4.0 ---");
+            reset_dut; clear_dmem;
+            imem[0]=enc_movi(4'd0,16'h3F80); imem[1]=enc_movi(4'd1,16'h3F80);
+            imem[2]=enc_movi(4'd2,16'h3F80); imem[3]=enc_movi(4'd3,16'h3F80);
+            imem[4]=enc_movi(4'd4,16'h3F80); imem[5]=enc_movi(4'd5,16'h3F80);
+            imem[6]=enc_movi(4'd6,16'h3F80); imem[7]=enc_movi(4'd7,16'h3F80);
+            imem[8]=enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
+            imem[9]=INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(200);
+            check_gpr_all(4'd12, 16'h4080, "K16 D=4.0");
+            check_gpr_all(4'd13, 16'h4080, "K16 D=4.0");
+            check_gpr_all(4'd14, 16'h4080, "K16 D=4.0");
+            check_gpr_all(4'd15, 16'h4080, "K16 D=4.0");
+        end
+
+        begin
+            $display("\n--- K17: WMMA.MMA 2*3+1=25.0 ---");
+            reset_dut; clear_dmem;
+            imem[0]=enc_movi(4'd0,16'h4000); imem[1]=enc_movi(4'd1,16'h4000);
+            imem[2]=enc_movi(4'd2,16'h4000); imem[3]=enc_movi(4'd3,16'h4000);
+            imem[4]=enc_movi(4'd4,16'h4040); imem[5]=enc_movi(4'd5,16'h4040);
+            imem[6]=enc_movi(4'd6,16'h4040); imem[7]=enc_movi(4'd7,16'h4040);
+            imem[8]=enc_movi(4'd8,16'h3F80); imem[9]=enc_movi(4'd9,16'h3F80);
+            imem[10]=enc_movi(4'd10,16'h3F80); imem[11]=enc_movi(4'd11,16'h3F80);
+            imem[12]=enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
+            imem[13]=INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(200);
+            check_gpr_all(4'd12, 16'h41C8, "K17 D=25.0");
+            check_gpr_all(4'd13, 16'h41C8, "K17 D=25.0");
+            check_gpr_all(4'd14, 16'h41C8, "K17 D=25.0");
+            check_gpr_all(4'd15, 16'h41C8, "K17 D=25.0");
+        end
+
+        begin
+            $display("\n--- K18: WMMA LOAD->MMA->STORE ---");
+            reset_dut; clear_dmem;
+            dmem0[200]=16'h3F80; dmem0[201]=16'h0000; dmem0[202]=16'h0000; dmem0[203]=16'h0000;
+            dmem1[200]=16'h0000; dmem1[201]=16'h3F80; dmem1[202]=16'h0000; dmem1[203]=16'h0000;
+            dmem2[200]=16'h0000; dmem2[201]=16'h0000; dmem2[202]=16'h3F80; dmem2[203]=16'h0000;
+            dmem3[200]=16'h0000; dmem3[201]=16'h0000; dmem3[202]=16'h0000; dmem3[203]=16'h3F80;
+            dmem0[204]=16'h4000; dmem0[205]=16'h4000; dmem0[206]=16'h4000; dmem0[207]=16'h4000;
+            dmem1[204]=16'h4000; dmem1[205]=16'h4000; dmem1[206]=16'h4000; dmem1[207]=16'h4000;
+            dmem2[204]=16'h4000; dmem2[205]=16'h4000; dmem2[206]=16'h4000; dmem2[207]=16'h4000;
+            dmem3[204]=16'h4000; dmem3[205]=16'h4000; dmem3[206]=16'h4000; dmem3[207]=16'h4000;
+            imem[0]=enc_movi(4'd0,16'd200);
+            imem[1]=enc_m(`WMMA_LOAD,4'd4,4'd0,16'd0);
+            imem[2]=enc_m(`WMMA_LOAD,4'd8,4'd0,16'd4);
+            imem[3]=INST_NOP; imem[4]=INST_NOP; imem[5]=INST_NOP; imem[6]=INST_NOP;
+            imem[7]=enc_movi(4'd0,16'd0); imem[8]=enc_movi(4'd1,16'd0);
+            imem[9]=enc_movi(4'd2,16'd0); imem[10]=enc_movi(4'd3,16'd0);
+            imem[11]=enc_wmma_mma(4'd12,4'd4,4'd8,4'd0);
+            imem[12]=INST_NOP; imem[13]=INST_NOP; imem[14]=INST_NOP; imem[15]=INST_NOP;
+            imem[16]=enc_movi(4'd0,16'd300);
+            imem[17]=enc_m(`WMMA_STORE,4'd12,4'd0,16'd0);
+            imem[18]=INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(300);
+            check_gpr_all(4'd12, 16'h4000, "K18 D=2.0");
+            check_gpr_all(4'd13, 16'h4000, "K18 D=2.0");
+            check_dmem_all(10'd300, 16'h4000, "K18 DMEM=2.0");
+            check_dmem_all(10'd301, 16'h4000, "K18 DMEM=2.0");
+        end
+
+        begin
+            $display("\n--- K19: MMA zero passthrough ---");
+            reset_dut; clear_dmem;
+            imem[0]=enc_movi(4'd4,16'h4040); imem[1]=enc_movi(4'd5,16'h4040);
+            imem[2]=enc_movi(4'd6,16'h4040); imem[3]=enc_movi(4'd7,16'h4040);
+            imem[4]=enc_movi(4'd8,16'h40A0); imem[5]=enc_movi(4'd9,16'h40A0);
+            imem[6]=enc_movi(4'd10,16'h40A0); imem[7]=enc_movi(4'd11,16'h40A0);
+            imem[8]=enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
+            imem[9]=INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(200);
+            check_gpr_all(4'd12, 16'h40A0, "K19 D=5.0");
+        end
+
+        begin
+            $display("\n--- K20: MMA negative -1*2+0=-8.0 ---");
+            reset_dut; clear_dmem;
+            imem[0]=enc_movi(4'd0,16'hBF80); imem[1]=enc_movi(4'd1,16'hBF80);
+            imem[2]=enc_movi(4'd2,16'hBF80); imem[3]=enc_movi(4'd3,16'hBF80);
+            imem[4]=enc_movi(4'd4,16'h4000); imem[5]=enc_movi(4'd5,16'h4000);
+            imem[6]=enc_movi(4'd6,16'h4000); imem[7]=enc_movi(4'd7,16'h4000);
+            imem[8]=enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
+            imem[9]=INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(200);
+            check_gpr_all(4'd12, 16'hC100, "K20 D=-8.0");
+        end
+
+        begin
+            $display("\n--- K21: MMA mixed 1*1+(-2)=2.0 ---");
+            reset_dut; clear_dmem;
+            imem[0]=enc_movi(4'd0,16'h3F80); imem[1]=enc_movi(4'd1,16'h3F80);
+            imem[2]=enc_movi(4'd2,16'h3F80); imem[3]=enc_movi(4'd3,16'h3F80);
+            imem[4]=enc_movi(4'd4,16'h3F80); imem[5]=enc_movi(4'd5,16'h3F80);
+            imem[6]=enc_movi(4'd6,16'h3F80); imem[7]=enc_movi(4'd7,16'h3F80);
+            imem[8]=enc_movi(4'd8,16'hC000); imem[9]=enc_movi(4'd9,16'hC000);
+            imem[10]=enc_movi(4'd10,16'hC000); imem[11]=enc_movi(4'd11,16'hC000);
+            imem[12]=enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
+            imem[13]=INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(200);
+            check_gpr_all(4'd12, 16'h4000, "K21 D=2.0");
+        end
+
+        begin
+            $display("\n--- K22: MMA fractional 0.5*0.5+0=1.0 ---");
+            reset_dut; clear_dmem;
+            imem[0]=enc_movi(4'd0,16'h3F00); imem[1]=enc_movi(4'd1,16'h3F00);
+            imem[2]=enc_movi(4'd2,16'h3F00); imem[3]=enc_movi(4'd3,16'h3F00);
+            imem[4]=enc_movi(4'd4,16'h3F00); imem[5]=enc_movi(4'd5,16'h3F00);
+            imem[6]=enc_movi(4'd6,16'h3F00); imem[7]=enc_movi(4'd7,16'h3F00);
+            imem[8]=enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
+            imem[9]=INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(200);
+            check_gpr_all(4'd12, 16'h3F80, "K22 D=1.0");
+        end
+
+        begin
+            $display("\n--- K23: Chained MMA D1=4.0, D2=16.0 ---");
+            reset_dut; clear_dmem;
+            imem[0]=enc_movi(4'd0,16'h3F80); imem[1]=enc_movi(4'd1,16'h3F80);
+            imem[2]=enc_movi(4'd2,16'h3F80); imem[3]=enc_movi(4'd3,16'h3F80);
+            imem[4]=enc_movi(4'd4,16'h3F80); imem[5]=enc_movi(4'd5,16'h3F80);
+            imem[6]=enc_movi(4'd6,16'h3F80); imem[7]=enc_movi(4'd7,16'h3F80);
+            imem[8]=enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
+            imem[9]=enc_wmma_mma(4'd0, 4'd12, 4'd4, 4'd8);
+            imem[10]=INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(400);
+            check_gpr_all(4'd12, 16'h4080, "K23 D1=4.0");
+            check_gpr_all(4'd0, 16'h4180, "K23 D2=16.0");
+        end
+
+        begin
+            $display("\n--- K24: Per-thread SIMT diag(2)*3+1=7.0 ---");
+            reset_dut; clear_dmem;
+            dmem0[100]=16'h4000; dmem0[101]=16'h0000; dmem0[102]=16'h0000; dmem0[103]=16'h0000;
+            dmem1[100]=16'h0000; dmem1[101]=16'h4000; dmem1[102]=16'h0000; dmem1[103]=16'h0000;
+            dmem2[100]=16'h0000; dmem2[101]=16'h0000; dmem2[102]=16'h4000; dmem2[103]=16'h0000;
+            dmem3[100]=16'h0000; dmem3[101]=16'h0000; dmem3[102]=16'h0000; dmem3[103]=16'h4000;
+            imem[0]=enc_movi(4'd0,16'd100);
+            imem[1]=enc_m(`WMMA_LOAD,4'd0,4'd0,16'd0);
+            imem[2]=enc_movi(4'd4,16'h4040); imem[3]=enc_movi(4'd5,16'h4040);
+            imem[4]=enc_movi(4'd6,16'h4040); imem[5]=enc_movi(4'd7,16'h4040);
+            imem[6]=enc_movi(4'd8,16'h3F80); imem[7]=enc_movi(4'd9,16'h3F80);
+            imem[8]=enc_movi(4'd10,16'h3F80); imem[9]=enc_movi(4'd11,16'h3F80);
+            imem[10]=enc_wmma_mma(4'd12, 4'd0, 4'd4, 4'd8);
+            imem[11]=INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(300);
+            check_gpr_all(4'd12, 16'h40E0, "K24 D=7.0");
+        end
+
+        // ── K25–K30: PTX-mapped kernels ──────────────────
+        begin
+            $display("\n--- K25: PTX K1 vec_add int16 ---");
+            reset_dut; clear_dmem;
+            dmem0[0]=16'd10; dmem1[2]=16'd20; dmem2[4]=16'd30; dmem3[6]=16'd40;
+            dmem0[16]=16'd5; dmem1[18]=16'd15; dmem2[20]=16'd25; dmem3[22]=16'd35;
+            imem[0]=enc_mov_tid(4'd0); imem[1]=enc_movi(4'd1,16'd0);
+            imem[2]=enc_movi(4'd2,16'd16); imem[3]=enc_movi(4'd3,16'd32);
+            imem[4]=enc_i(`OP_SHL,1'b0,4'd4,4'd0,16'd1);
+            imem[5]=enc_r(`OP_ADD,1'b0,4'd5,4'd1,4'd4);
+            imem[6]=enc_m(`OP_LD,4'd5,4'd5,16'd0);
+            imem[7]=enc_r(`OP_ADD,1'b0,4'd6,4'd2,4'd4);
+            imem[8]=enc_m(`OP_LD,4'd6,4'd6,16'd0);
+            imem[9]=enc_r(`OP_ADD,1'b0,4'd7,4'd6,4'd5);
+            imem[10]=enc_r(`OP_ADD,1'b0,4'd8,4'd3,4'd4);
+            imem[11]=enc_m(`OP_ST,4'd7,4'd8,16'd0);
+            imem[12]=INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(200);
+            check_dmem(2'd0,10'd32,16'd15, "K25 SP0 C=10+5");
+            check_dmem(2'd1,10'd34,16'd35, "K25 SP1 C=20+15");
+            check_dmem(2'd2,10'd36,16'd55, "K25 SP2 C=30+25");
+            check_dmem(2'd3,10'd38,16'd75, "K25 SP3 C=40+35");
+        end
+
+        begin
+            $display("\n--- K26: PTX K2 vec_sub int16 ---");
+            reset_dut; clear_dmem;
+            dmem0[0]=16'd100; dmem1[2]=16'd200; dmem2[4]=16'd300; dmem3[6]=16'd400;
+            dmem0[16]=16'd30; dmem1[18]=16'd50; dmem2[20]=16'd100; dmem3[22]=16'd150;
+            imem[0]=enc_mov_tid(4'd0); imem[1]=enc_movi(4'd1,16'd0);
+            imem[2]=enc_movi(4'd2,16'd16); imem[3]=enc_movi(4'd3,16'd32);
+            imem[4]=enc_i(`OP_SHL,1'b0,4'd4,4'd0,16'd1);
+            imem[5]=enc_r(`OP_ADD,1'b0,4'd5,4'd1,4'd4);
+            imem[6]=enc_m(`OP_LD,4'd5,4'd5,16'd0);
+            imem[7]=enc_r(`OP_ADD,1'b0,4'd6,4'd2,4'd4);
+            imem[8]=enc_m(`OP_LD,4'd6,4'd6,16'd0);
+            imem[9]=enc_r(`OP_SUB,1'b0,4'd7,4'd5,4'd6);
+            imem[10]=enc_r(`OP_ADD,1'b0,4'd8,4'd3,4'd4);
+            imem[11]=enc_m(`OP_ST,4'd7,4'd8,16'd0);
+            imem[12]=INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(200);
+            check_dmem(2'd0,10'd32,16'd70,  "K26 SP0 C=100-30");
+            check_dmem(2'd1,10'd34,16'd150, "K26 SP1 C=200-50");
+            check_dmem(2'd2,10'd36,16'd200, "K26 SP2 C=300-100");
+            check_dmem(2'd3,10'd38,16'd250, "K26 SP3 C=400-150");
+        end
+
+        begin
+            $display("\n--- K27: PTX K3 bf16_vector_mul ---");
+            reset_dut; clear_dmem;
+            dmem0[0]=16'h4000; dmem1[2]=16'h4000; dmem2[4]=16'h4000; dmem3[6]=16'h4000;
+            dmem0[16]=16'h4040; dmem1[18]=16'h4040; dmem2[20]=16'h4040; dmem3[22]=16'h4040;
+            imem[0]=enc_mov_tid(4'd0); imem[1]=enc_movi(4'd1,16'd0);
+            imem[2]=enc_movi(4'd2,16'd16); imem[3]=enc_movi(4'd3,16'd32);
+            imem[4]=enc_i(`OP_SHL,1'b0,4'd4,4'd0,16'd1);
+            imem[5]=enc_r(`OP_ADD,1'b0,4'd5,4'd1,4'd4);
+            imem[6]=enc_m_f(`OP_LD,4'd5,4'd5,16'd0);
+            imem[7]=enc_r(`OP_ADD,1'b0,4'd6,4'd2,4'd4);
+            imem[8]=enc_m_f(`OP_LD,4'd6,4'd6,16'd0);
+            imem[9]=enc_r(`OP_MUL,1'b1,4'd7,4'd5,4'd6);
+            imem[10]=enc_r(`OP_ADD,1'b0,4'd8,4'd3,4'd4);
+            imem[11]=enc_m_f(`OP_ST,4'd7,4'd8,16'd0);
+            imem[12]=INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(200);
+            check_gpr_all(4'd7, 16'h40C0, "K27 MUL.f 2*3=6.0");
+        end
+
+        begin
+            $display("\n--- K28: PTX K4 bf16_fma ---");
+            reset_dut; clear_dmem;
+            dmem0[0]=16'h4000; dmem1[2]=16'h4000; dmem2[4]=16'h4000; dmem3[6]=16'h4000;
+            dmem0[16]=16'h4040; dmem1[18]=16'h4040; dmem2[20]=16'h4040; dmem3[22]=16'h4040;
+            dmem0[32]=16'h3F80; dmem1[34]=16'h3F80; dmem2[36]=16'h3F80; dmem3[38]=16'h3F80;
+            imem[0]=enc_mov_tid(4'd0); imem[1]=enc_movi(4'd1,16'd0);
+            imem[2]=enc_movi(4'd2,16'd16); imem[3]=enc_movi(4'd3,16'd32);
+            imem[4]=enc_movi(4'd9,16'd48);
+            imem[5]=enc_i(`OP_SHL,1'b0,4'd4,4'd0,16'd1);
+            imem[6]=enc_r(`OP_ADD,1'b0,4'd5,4'd1,4'd4);
+            imem[7]=enc_m_f(`OP_LD,4'd5,4'd5,16'd0);
+            imem[8]=enc_r(`OP_ADD,1'b0,4'd6,4'd2,4'd4);
+            imem[9]=enc_m_f(`OP_LD,4'd6,4'd6,16'd0);
+            imem[10]=enc_r(`OP_ADD,1'b0,4'd7,4'd3,4'd4);
+            imem[11]=enc_m_f(`OP_LD,4'd7,4'd7,16'd0);
+            imem[12]=enc_r(`OP_FMA,1'b1,4'd7,4'd5,4'd6);
+            imem[13]=enc_r(`OP_ADD,1'b0,4'd8,4'd9,4'd4);
+            imem[14]=enc_m_f(`OP_ST,4'd7,4'd8,16'd0);
+            imem[15]=INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(200);
+            check_gpr_all(4'd7, 16'h40E0, "K28 FMA.f 2*3+1=7.0");
+        end
+
+        begin
+            $display("\n--- K29: PTX K5 relu bf16 ---");
+            reset_dut; clear_dmem;
+            dmem0[0]=16'hBF80; dmem1[2]=16'h4000; dmem2[4]=16'hC040; dmem3[6]=16'h40A0;
+            imem[0]=enc_mov_tid(4'd0); imem[1]=enc_movi(4'd1,16'd0);
+            imem[2]=enc_movi(4'd2,16'd16);
+            imem[3]=enc_i(`OP_SHL,1'b0,4'd4,4'd0,16'd1);
+            imem[4]=enc_r(`OP_ADD,1'b0,4'd5,4'd1,4'd4);
+            imem[5]=enc_m_f(`OP_LD,4'd5,4'd5,16'd0);
+            imem[6]=enc_movi(4'd8,16'h0000);
+            imem[7]=enc_r(`OP_MAX,1'b1,4'd6,4'd5,4'd8);
+            imem[8]=enc_r(`OP_ADD,1'b0,4'd7,4'd2,4'd4);
+            imem[9]=enc_m_f(`OP_ST,4'd6,4'd7,16'd0);
+            imem[10]=INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(200);
+            check_gpr(2'd0,4'd6,16'h0000, "K29 SP0 relu(-1)=0");
+            check_gpr(2'd1,4'd6,16'h4000, "K29 SP1 relu(2)=2.0");
+            check_gpr(2'd2,4'd6,16'h0000, "K29 SP2 relu(-3)=0");
+            check_gpr(2'd3,4'd6,16'h40A0, "K29 SP3 relu(5)=5.0");
+        end
+
+        begin
+            $display("\n--- K30: PTX K6 wmma_bf16 matmul ---");
+            reset_dut; clear_dmem;
+            dmem0[0]=16'h3F80; dmem0[1]=16'h0000; dmem0[2]=16'h0000; dmem0[3]=16'h0000;
+            dmem1[8]=16'h0000; dmem1[9]=16'h3F80; dmem1[10]=16'h0000; dmem1[11]=16'h0000;
+            dmem2[16]=16'h0000; dmem2[17]=16'h0000; dmem2[18]=16'h3F80; dmem2[19]=16'h0000;
+            dmem3[24]=16'h0000; dmem3[25]=16'h0000; dmem3[26]=16'h0000; dmem3[27]=16'h3F80;
+            dmem0[32]=16'h4000; dmem0[33]=16'h4000; dmem0[34]=16'h4000; dmem0[35]=16'h4000;
+            dmem1[40]=16'h4000; dmem1[41]=16'h4000; dmem1[42]=16'h4000; dmem1[43]=16'h4000;
+            dmem2[48]=16'h4000; dmem2[49]=16'h4000; dmem2[50]=16'h4000; dmem2[51]=16'h4000;
+            dmem3[56]=16'h4000; dmem3[57]=16'h4000; dmem3[58]=16'h4000; dmem3[59]=16'h4000;
+            imem[0]=enc_mov_tid(4'd0); imem[1]=enc_movi(4'd1,16'd0);
+            imem[2]=enc_movi(4'd2,16'd32); imem[3]=enc_movi(4'd3,16'd64);
+            imem[4]=enc_i(`OP_SHL,1'b0,4'd4,4'd0,16'd3);
+            imem[5]=enc_r(`OP_ADD,1'b0,4'd1,4'd1,4'd4);
+            imem[6]=enc_r(`OP_ADD,1'b0,4'd2,4'd2,4'd4);
+            imem[7]=enc_r(`OP_ADD,1'b0,4'd3,4'd3,4'd4);
+            imem[8]=enc_m_f(`WMMA_LOAD,4'd4,4'd1,16'd0);
+            imem[9]=enc_m_f(`WMMA_LOAD,4'd8,4'd2,16'd0);
+            imem[10]=enc_movi(4'd12,16'h0000); imem[11]=enc_movi(4'd13,16'h0000);
+            imem[12]=enc_movi(4'd14,16'h0000); imem[13]=enc_movi(4'd15,16'h0000);
+            imem[14]=enc_wmma_mma(4'd12,4'd4,4'd8,4'd12);
+            imem[15]=enc_m_f(`WMMA_STORE,4'd12,4'd3,16'd0);
+            imem[16]=INST_RET;
+            launch_kernel(32'd0); wait_kernel_done(400);
+            check_gpr_all(4'd12, 16'h4000, "K30 D=2.0");
+            check_gpr_all(4'd13, 16'h4000, "K30 D=2.0");
+            check_dmem(2'd0,10'd64,16'h4000, "K30 SP0 D[0][0]=2.0");
+            check_dmem(2'd1,10'd72,16'h4000, "K30 SP1 D[1][0]=2.0");
+            check_dmem(2'd2,10'd80,16'h4000, "K30 SP2 D[2][0]=2.0");
+            check_dmem(2'd3,10'd88,16'h4000, "K30 SP3 D[3][0]=2.0");
+        end
+
+
+        // ================================================================
+        // SIMT Divergence / Convergence Tests (K31–K37) — v1.2
+        // ================================================================
+
+        // ── K31: Basic 2+2 divergence ────────────────────
+        begin
+            $display("\n--- K31: SIMT 2+2 divergence ---");
+            reset_dut;
+            clear_dmem;
+            enable_trace;
+
+            imem[0]  = enc_mov_tid(4'd0);
+            imem[1]  = enc_movi(4'd1, 16'd2);
+            imem[2]  = enc_movi(4'd5, 16'd0);
+            imem[3]  = enc_setp(1'b0, 2'd2, 4'd0, 4'd0, 4'd1); // P0 = (R0 < R1)
+            imem[4]  = INST_NOP;
+            imem[5]  = INST_NOP;
+            imem[6]  = INST_NOP;
+            imem[7]  = enc_pbra(2'd0, 13'd10, 12'd12);          // PBRA P0, 10, 12
+            imem[8]  = enc_movi(4'd5, 16'hBBBB);                // fall path
+            imem[9]  = enc_bra(27'd12);
+            imem[10] = enc_movi(4'd5, 16'hAAAA);                // taken path
+            imem[11] = INST_NOP;
+            imem[12] = enc_movi(4'd6, 16'hCCCC);                // reconv
+            imem[13] = INST_RET;
+
+            $display("  P0=(TID<2): SP0,SP1 taken, SP2,SP3 fall");
+            print_program(0, 14);
+            launch_kernel(32'd0);
+            wait_kernel_done(200);
+            disable_trace;
+            dump_rf_range(4'd0, 4'd7);
+
+            check_gpr(2'd0, 4'd5, 16'hAAAA, "K31 SP0 R5=taken");
+            check_gpr(2'd1, 4'd5, 16'hAAAA, "K31 SP1 R5=taken");
+            check_gpr(2'd2, 4'd5, 16'hBBBB, "K31 SP2 R5=fall");
+            check_gpr(2'd3, 4'd5, 16'hBBBB, "K31 SP3 R5=fall");
+            check_gpr_all(4'd6, 16'hCCCC, "K31 R6=reconv");
+        end
+
+        // ── K32: Uniform-taken PBRA ──────────────────────
+        begin
+            $display("\n--- K32: SIMT uniform-taken PBRA ---");
+            reset_dut;
+            clear_dmem;
+            enable_trace;
+
+            imem[0]  = enc_movi(4'd5, 16'd0);
+            imem[1]  = enc_movi(4'd6, 16'd0);
+            imem[2]  = enc_set(2'd0, 1'b1);                     // SET P0, 1
+            imem[3]  = INST_NOP;
+            imem[4]  = INST_NOP;
+            imem[5]  = INST_NOP;
+            imem[6]  = enc_pbra(2'd0, 13'd9, 12'd11);           // PBRA P0, 9, 11
+            imem[7]  = enc_movi(4'd5, 16'hBBBB);
+            imem[8]  = enc_bra(27'd11);
+            imem[9]  = enc_movi(4'd5, 16'hAAAA);
+            imem[10] = INST_NOP;
+            imem[11] = enc_movi(4'd6, 16'hCCCC);
+            imem[12] = INST_RET;
+
+            $display("  SET P0=1 → all taken, no stack push");
+            print_program(0, 13);
+            launch_kernel(32'd0);
+            wait_kernel_done(200);
+            disable_trace;
+
+            check_gpr_all(4'd5, 16'hAAAA, "K32 R5=taken path");
+            check_gpr_all(4'd6, 16'hCCCC, "K32 R6=reconv");
+        end
+
+        // ── K33: Uniform-fall PBRA ───────────────────────
+        begin
+            $display("\n--- K33: SIMT uniform-fall PBRA ---");
+            reset_dut;
+            clear_dmem;
+            enable_trace;
+
+            imem[0]  = enc_movi(4'd5, 16'd0);
+            imem[1]  = enc_movi(4'd6, 16'd0);
+            imem[2]  = enc_set(2'd0, 1'b0);                     // SET P0, 0
+            imem[3]  = INST_NOP;
+            imem[4]  = INST_NOP;
+            imem[5]  = INST_NOP;
+            imem[6]  = enc_pbra(2'd0, 13'd9, 12'd11);           // PBRA P0, 9, 11
+            imem[7]  = enc_movi(4'd5, 16'hBBBB);
+            imem[8]  = enc_bra(27'd11);
+            imem[9]  = enc_movi(4'd5, 16'hAAAA);
+            imem[10] = INST_NOP;
+            imem[11] = enc_movi(4'd6, 16'hCCCC);
+            imem[12] = INST_RET;
+
+            $display("  SET P0=0 → all fall, no redirect, no stack");
+            print_program(0, 13);
+            launch_kernel(32'd0);
+            wait_kernel_done(200);
+            disable_trace;
+
+            check_gpr_all(4'd5, 16'hBBBB, "K33 R5=fall path");
+            check_gpr_all(4'd6, 16'hCCCC, "K33 R6=reconv");
+        end
+
+        // ── K34: 1+3 asymmetric split ────────────────────
+        begin
+            $display("\n--- K34: SIMT 1+3 asymmetric split ---");
+            reset_dut;
+            clear_dmem;
+            enable_trace;
+
+            imem[0]  = enc_mov_tid(4'd0);
+            imem[1]  = enc_movi(4'd1, 16'd1);
+            imem[2]  = enc_movi(4'd5, 16'd0);
+            imem[3]  = enc_setp(1'b0, 2'd2, 4'd0, 4'd0, 4'd1); // P0 = (TID < 1)
+            imem[4]  = INST_NOP;
+            imem[5]  = INST_NOP;
+            imem[6]  = INST_NOP;
+            imem[7]  = enc_pbra(2'd0, 13'd10, 12'd12);
+            imem[8]  = enc_movi(4'd5, 16'hBBBB);
+            imem[9]  = enc_bra(27'd12);
+            imem[10] = enc_movi(4'd5, 16'hAAAA);
+            imem[11] = INST_NOP;
+            imem[12] = enc_movi(4'd6, 16'hCCCC);
+            imem[13] = INST_RET;
+
+            $display("  P0=(TID<1): SP0 taken, SP1-SP3 fall");
+            print_program(0, 14);
+            launch_kernel(32'd0);
+            wait_kernel_done(200);
+            disable_trace;
+
+            check_gpr(2'd0, 4'd5, 16'hAAAA, "K34 SP0 R5=taken");
+            check_gpr(2'd1, 4'd5, 16'hBBBB, "K34 SP1 R5=fall");
+            check_gpr(2'd2, 4'd5, 16'hBBBB, "K34 SP2 R5=fall");
+            check_gpr(2'd3, 4'd5, 16'hBBBB, "K34 SP3 R5=fall");
+            check_gpr_all(4'd6, 16'hCCCC, "K34 R6=reconv");
+        end
+
+        // ── K35: Nested divergence (stack depth 2) ───────
+        begin
+            $display("\n--- K35: SIMT nested divergence (depth 2) ---");
+            reset_dut;
+            clear_dmem;
+            enable_trace;
+
+            imem[0]  = enc_mov_tid(4'd0);
+            imem[1]  = enc_movi(4'd1, 16'd2);
+            imem[2]  = enc_movi(4'd2, 16'd1);
+            imem[3]  = enc_movi(4'd5, 16'd0);
+            imem[4]  = enc_setp(1'b0, 2'd2, 4'd0, 4'd0, 4'd1); // P0 = TID<2
+            imem[5]  = INST_NOP;
+            imem[6]  = INST_NOP;
+            imem[7]  = INST_NOP;
+            imem[8]  = enc_pbra(2'd0, 13'd11, 12'd22);
+            imem[9]  = enc_movi(4'd5, 16'h3333);
+            imem[10] = enc_bra(27'd22);
+            imem[11] = enc_setp(1'b0, 2'd2, 4'd1, 4'd0, 4'd2); // P1 = TID<1
+            imem[12] = INST_NOP;
+            imem[13] = INST_NOP;
+            imem[14] = INST_NOP;
+            imem[15] = enc_pbra(2'd1, 13'd18, 12'd20);
+            imem[16] = enc_movi(4'd5, 16'h2222);
+            imem[17] = enc_bra(27'd20);
+            imem[18] = enc_movi(4'd5, 16'h1111);
+            imem[19] = INST_NOP;
+            imem[20] = INST_NOP;
+            imem[21] = INST_NOP;
+            imem[22] = enc_movi(4'd6, 16'hDDDD);
+            imem[23] = INST_RET;
+
+            $display("  Outer: P0=(TID<2), Inner: P1=(TID<1)");
+            $display("  SP0→0x1111, SP1→0x2222, SP2,SP3→0x3333");
+            print_program(0, 24);
+            launch_kernel(32'd0);
+            wait_kernel_done(400);
+            disable_trace;
+            dump_rf_range(4'd0, 4'd7);
+
+            check_gpr(2'd0, 4'd5, 16'h1111, "K35 SP0 inner taken");
+            check_gpr(2'd1, 4'd5, 16'h2222, "K35 SP1 inner fall");
+            check_gpr(2'd2, 4'd5, 16'h3333, "K35 SP2 outer fall");
+            check_gpr(2'd3, 4'd5, 16'h3333, "K35 SP3 outer fall");
+            check_gpr_all(4'd6, 16'hDDDD, "K35 R6=reconv all");
+        end
+
+        // ── K36: Divergent ST to DMEM ────────────────────
+        begin
+            $display("\n--- K36: SIMT divergent DMEM store ---");
+            reset_dut;
+            clear_dmem;
+            enable_trace;
+
+            imem[0]  = enc_mov_tid(4'd0);
+            imem[1]  = enc_movi(4'd1, 16'd2);
+            imem[2]  = enc_setp(1'b0, 2'd2, 4'd0, 4'd0, 4'd1); // P0 = TID<2
+            imem[3]  = INST_NOP;
+            imem[4]  = INST_NOP;
+            imem[5]  = INST_NOP;
+            imem[6]  = enc_pbra(2'd0, 13'd10, 12'd13);
+            imem[7]  = enc_movi(4'd5, 16'hBBBB);
+            imem[8]  = enc_m(`OP_ST, 4'd5, 4'd0, 16'd200);
+            imem[9]  = enc_bra(27'd13);
+            imem[10] = enc_movi(4'd5, 16'hAAAA);
+            imem[11] = enc_m(`OP_ST, 4'd5, 4'd0, 16'd200);
+            imem[12] = INST_NOP;
+            imem[13] = INST_RET;
+
+            $display("  Taken: ST 0xAAAA, Fall: ST 0xBBBB to DMEM[200+TID]");
+            print_program(0, 14);
+            launch_kernel(32'd0);
+            wait_kernel_done(200);
+            disable_trace;
+
+            check_dmem(2'd0, 10'd200, 16'hAAAA, "K36 SP0 DMEM=taken");
+            check_dmem(2'd1, 10'd201, 16'hAAAA, "K36 SP1 DMEM=taken");
+            check_dmem(2'd2, 10'd202, 16'hBBBB, "K36 SP2 DMEM=fall");
+            check_dmem(2'd3, 10'd203, 16'hBBBB, "K36 SP3 DMEM=fall");
+        end
+
+        // ── K37: PBRA after MUL (pipeline drain stress) ──
+        begin
+            $display("\n--- K37: SIMT PBRA after MUL (drain) ---");
+            reset_dut;
+            clear_dmem;
+            enable_trace;
+
+            imem[0]  = enc_mov_tid(4'd0);
+            imem[1]  = enc_movi(4'd1, 16'd3);
+            imem[2]  = enc_movi(4'd2, 16'd7);
+            imem[3]  = enc_r(`OP_MUL, 1'b0, 4'd5, 4'd1, 4'd2);
+            imem[4]  = enc_setp(1'b0, 2'd2, 4'd0, 4'd0, 4'd1);
+            imem[5]  = INST_NOP;
+            imem[6]  = INST_NOP;
+            imem[7]  = INST_NOP;
+            imem[8]  = enc_pbra(2'd0, 13'd11, 12'd13);
+            imem[9]  = enc_i(`OP_ADDI, 1'b0, 4'd5, 4'd5, 16'd100);
+            imem[10] = enc_bra(27'd13);
+            imem[11] = enc_i(`OP_ADDI, 1'b0, 4'd5, 4'd5, 16'd10);
+            imem[12] = INST_NOP;
+            imem[13] = enc_m(`OP_ST, 4'd5, 4'd0, 16'd300);
+            imem[14] = INST_RET;
+
+            $display("  MUL R5=21, then PBRA. Taken: R5+=10=31, Fall: R5+=100=121");
+            print_program(0, 15);
+            launch_kernel(32'd0);
+            wait_kernel_done(300);
+            disable_trace;
+
+            check_gpr(2'd0, 4'd5, 16'd31,  "K37 SP0 R5=21+10");
+            check_gpr(2'd1, 4'd5, 16'd31,  "K37 SP1 R5=21+10");
+            check_gpr(2'd2, 4'd5, 16'd31,  "K37 SP2 R5=21+10");
+            check_gpr(2'd3, 4'd5, 16'd121, "K37 SP3 R5=21+100");
+            check_dmem(2'd0, 10'd300, 16'd31,  "K37 SP0 DMEM=31");
+            check_dmem(2'd1, 10'd301, 16'd31,  "K37 SP1 DMEM=31");
+            check_dmem(2'd2, 10'd302, 16'd31,  "K37 SP2 DMEM=31");
+            check_dmem(2'd3, 10'd303, 16'd121, "K37 SP3 DMEM=121");
+        end
+
+        // ── K38: SET instruction unit test ───────────────
+        begin
+            $display("\n--- K38: SET instruction unit test ---");
+            reset_dut;
+            clear_dmem;
+
+            imem[0]  = enc_movi(4'd1, 16'hAAAA);
+            imem[1]  = enc_movi(4'd2, 16'hBBBB);
+            imem[2]  = enc_set(2'd0, 1'b1);
+            imem[3]  = INST_NOP;
+            imem[4]  = INST_NOP;
+            imem[5]  = INST_NOP;
+            imem[6]  = {`OP_SELP, 1'b0, 2'd0, 4'd3, 4'd1, 4'd2, 12'd0};
+            imem[7]  = enc_set(2'd0, 1'b0);
+            imem[8]  = INST_NOP;
+            imem[9]  = INST_NOP;
+            imem[10] = INST_NOP;
+            imem[11] = {`OP_SELP, 1'b0, 2'd0, 4'd4, 4'd1, 4'd2, 12'd0};
+            imem[12] = enc_set(2'd1, 1'b1);
+            imem[13] = INST_NOP;
+            imem[14] = INST_NOP;
+            imem[15] = INST_NOP;
+            imem[16] = {`OP_SELP, 1'b0, 2'd1, 4'd5, 4'd1, 4'd2, 12'd0};
+            imem[17] = INST_RET;
+
+            print_program(0, 18);
+            launch_kernel(32'd0);
+            wait_kernel_done(200);
+
+            check_gpr_all(4'd3, 16'hAAAA, "K38 SET P0=1 SELP→R1");
+            check_gpr_all(4'd4, 16'hBBBB, "K38 SET P0=0 SELP→R2");
+            check_gpr_all(4'd5, 16'hAAAA, "K38 SET P1=1 SELP→R1");
+        end
+
+
+        // ================================================================
+        // CVT Tests (K39–K47) — v1.4
+        // ================================================================
+
+        // ── K39: MOVI+ST sanity baseline ─────────────────
         begin
             $display("\n--- K39: MOVI+ST sanity baseline ---");
             reset_dut;
@@ -528,9 +1605,9 @@ module sm_core_tb;
             dmem0[0] = 16'hDEAD; dmem1[0] = 16'hDEAD;
             dmem2[0] = 16'hDEAD; dmem3[0] = 16'hDEAD;
 
-            imem[0] = enc_movi(4'd1, 16'd15);    // R1 = 15
-            imem[1] = enc_movi(4'd2, 16'd0);     // R2 = 0 (base addr)
-            imem[2] = enc_m(`OP_ST, 4'd1, 4'd2, 16'd0); // DMEM[0] = R1
+            imem[0] = enc_movi(4'd1, 16'd15);
+            imem[1] = enc_movi(4'd2, 16'd0);
+            imem[2] = enc_m(`OP_ST, 4'd1, 4'd2, 16'd0);
             imem[3] = INST_RET;
 
             print_program(0, 4);
@@ -541,58 +1618,33 @@ module sm_core_tb;
             check_dmem_all(10'd0, 16'd15, "K39 DMEM[0]=15");
         end
 
-        // ════════════════════════════════════════════════════════
-        //  K40: CVT.i2f basic — different regs, NO scoreboard stall
-        //
-        //  MOVI R1, 15
-        //  NOP × 8  (guarantee R1 written back, SB clear)
-        //  CVT.i2f R2, R1  (dt=1, rD≠rA)
-        //  NOP × 8  (guarantee R2 written back)
-        //  MOVI R3, 0
-        //  ST R2, [R3+0]
-        //  RET
-        //
-        //  Expected: R2 = bf16(15.0) = 0x4170
-        //            DMEM[0] = 0x4170
-        // ════════════════════════════════════════════════════════
+        // ── K40: CVT.i2f basic (no stall, diff regs) ────
         begin
             $display("\n--- K40: CVT.i2f basic (no stall, diff regs) ---");
             reset_dut;
             clear_dmem;
-            dmem0[0] = 16'hDEAD; dmem1[0] = 16'hDEAD;
-            dmem2[0] = 16'hDEAD; dmem3[0] = 16'hDEAD;
-            cvt_trace_en = 1;
-            cycle_count = 0;
+            enable_cvt_trace;
 
             imem[0]  = enc_movi(4'd1, 16'd15);
-            imem[1]  = INST_NOP;
-            imem[2]  = INST_NOP;
-            imem[3]  = INST_NOP;
-            imem[4]  = INST_NOP;
-            imem[5]  = INST_NOP;
-            imem[6]  = INST_NOP;
-            imem[7]  = INST_NOP;
-            imem[8]  = INST_NOP;
+            imem[1]  = INST_NOP; imem[2]  = INST_NOP;
+            imem[3]  = INST_NOP; imem[4]  = INST_NOP;
+            imem[5]  = INST_NOP; imem[6]  = INST_NOP;
+            imem[7]  = INST_NOP; imem[8]  = INST_NOP;
             imem[9]  = enc_cvt(1'b1, 4'd2, 4'd1);   // CVT.i2f R2, R1
-            imem[10] = INST_NOP;
-            imem[11] = INST_NOP;
-            imem[12] = INST_NOP;
-            imem[13] = INST_NOP;
-            imem[14] = INST_NOP;
-            imem[15] = INST_NOP;
-            imem[16] = INST_NOP;
-            imem[17] = INST_NOP;
+            imem[10] = INST_NOP; imem[11] = INST_NOP;
+            imem[12] = INST_NOP; imem[13] = INST_NOP;
+            imem[14] = INST_NOP; imem[15] = INST_NOP;
+            imem[16] = INST_NOP; imem[17] = INST_NOP;
             imem[18] = enc_movi(4'd3, 16'd0);
-            imem[19] = enc_m(`OP_ST, 4'd2, 4'd3, 16'd0); // DMEM[0] = R2
+            imem[19] = enc_m(`OP_ST, 4'd2, 4'd3, 16'd0);
             imem[20] = INST_RET;
 
             $display("  bf16(15.0) = 0x4170");
             print_program(0, 21);
             launch_kernel(32'd0);
             wait_kernel_done(200);
-            cvt_trace_en = 0;
+            disable_cvt_trace;
 
-            $display("  Post-execution RF dump:");
             dump_rf_range(4'd0, 4'd5);
 
             check_gpr_all(4'd1, 16'd15,    "K40 R1=15 (unchanged)");
@@ -600,46 +1652,23 @@ module sm_core_tb;
             check_dmem_all(10'd0, 16'h4170, "K40 DMEM[0]=0x4170");
         end
 
-        // ════════════════════════════════════════════════════════
-        //  K41: CVT.f2i basic — different regs, NO scoreboard stall
-        //
-        //  MOVI R1, 0x4170  (bf16 for 15.0)
-        //  NOP × 8
-        //  CVT.f2i R2, R1  (dt=0, rD≠rA)
-        //  NOP × 8
-        //  MOVI R3, 0
-        //  ST R2, [R3+0]
-        //  RET
-        //
-        //  Expected: R2 = 15
-        // ════════════════════════════════════════════════════════
+        // ── K41: CVT.f2i basic (no stall, diff regs) ────
         begin
             $display("\n--- K41: CVT.f2i basic (no stall, diff regs) ---");
             reset_dut;
             clear_dmem;
-            dmem0[0] = 16'hDEAD; dmem1[0] = 16'hDEAD;
-            dmem2[0] = 16'hDEAD; dmem3[0] = 16'hDEAD;
-            cvt_trace_en = 1;
-            cycle_count = 0;
+            enable_cvt_trace;
 
             imem[0]  = enc_movi(4'd1, 16'h4170);     // R1 = bf16(15.0)
-            imem[1]  = INST_NOP;
-            imem[2]  = INST_NOP;
-            imem[3]  = INST_NOP;
-            imem[4]  = INST_NOP;
-            imem[5]  = INST_NOP;
-            imem[6]  = INST_NOP;
-            imem[7]  = INST_NOP;
-            imem[8]  = INST_NOP;
+            imem[1]  = INST_NOP; imem[2]  = INST_NOP;
+            imem[3]  = INST_NOP; imem[4]  = INST_NOP;
+            imem[5]  = INST_NOP; imem[6]  = INST_NOP;
+            imem[7]  = INST_NOP; imem[8]  = INST_NOP;
             imem[9]  = enc_cvt(1'b0, 4'd2, 4'd1);   // CVT.f2i R2, R1
-            imem[10] = INST_NOP;
-            imem[11] = INST_NOP;
-            imem[12] = INST_NOP;
-            imem[13] = INST_NOP;
-            imem[14] = INST_NOP;
-            imem[15] = INST_NOP;
-            imem[16] = INST_NOP;
-            imem[17] = INST_NOP;
+            imem[10] = INST_NOP; imem[11] = INST_NOP;
+            imem[12] = INST_NOP; imem[13] = INST_NOP;
+            imem[14] = INST_NOP; imem[15] = INST_NOP;
+            imem[16] = INST_NOP; imem[17] = INST_NOP;
             imem[18] = enc_movi(4'd3, 16'd0);
             imem[19] = enc_m(`OP_ST, 4'd2, 4'd3, 16'd0);
             imem[20] = INST_RET;
@@ -647,7 +1676,7 @@ module sm_core_tb;
             print_program(0, 21);
             launch_kernel(32'd0);
             wait_kernel_done(200);
-            cvt_trace_en = 0;
+            disable_cvt_trace;
 
             dump_rf_range(4'd0, 4'd5);
 
@@ -656,31 +1685,13 @@ module sm_core_tb;
             check_dmem_all(10'd0, 16'd15,   "K41 DMEM[0]=15");
         end
 
-        // ════════════════════════════════════════════════════════
-        //  K42: CVT round-trip — different regs, NOP-padded
-        //
-        //  MOVI R1, 15
-        //  NOP × 8
-        //  CVT.i2f R2, R1
-        //  NOP × 8
-        //  CVT.f2i R3, R2
-        //  NOP × 8
-        //  MOVI R4, 0
-        //  ST R3, [R4+0]
-        //  RET
-        //
-        //  Expected: R2=0x4170, R3=15, DMEM[0]=15
-        // ════════════════════════════════════════════════════════
+        // ── K42: CVT round-trip (diff regs, NOP padded) ──
         begin
             $display("\n--- K42: CVT round-trip (diff regs, NOP padded) ---");
             reset_dut;
             clear_dmem;
-            dmem0[0] = 16'hBEEF; dmem1[0] = 16'hBEEF;
-            dmem2[0] = 16'hBEEF; dmem3[0] = 16'hBEEF;
-            cvt_trace_en = 1;
-            cycle_count = 0;
 
-            imem[0]  = enc_movi(4'd1, 16'd15);       // R1 = 15
+            imem[0]  = enc_movi(4'd1, 16'd15);
             imem[1]  = INST_NOP; imem[2]  = INST_NOP;
             imem[3]  = INST_NOP; imem[4]  = INST_NOP;
             imem[5]  = INST_NOP; imem[6]  = INST_NOP;
@@ -702,7 +1713,6 @@ module sm_core_tb;
             print_program(0, 30);
             launch_kernel(32'd0);
             wait_kernel_done(300);
-            cvt_trace_en = 0;
 
             dump_rf_range(4'd0, 4'd5);
 
@@ -712,26 +1722,12 @@ module sm_core_tb;
             check_dmem_all(10'd0, 16'd15,   "K42 DMEM[0]=15");
         end
 
-        // ════════════════════════════════════════════════════════
-        //  K43: CVT round-trip — different regs, scoreboard stalls
-        //
-        //  MOVI R1, 15
-        //  CVT.i2f R2, R1   (SB stall: R1 pending from MOVI)
-        //  CVT.f2i R3, R2   (SB stall: R2 pending from CVT.i2f)
-        //  MOVI R4, 0
-        //  ST R3, [R4+0]    (SB stall: R3 pending from CVT.f2i)
-        //  RET
-        //
-        //  Expected: same results, but exercises stall-resume path
-        // ════════════════════════════════════════════════════════
+        // ── K43: CVT round-trip (diff regs, SB stalls) ──
         begin
             $display("\n--- K43: CVT round-trip (diff regs, SB stalls) ---");
             reset_dut;
             clear_dmem;
-            dmem0[0] = 16'hBEEF; dmem1[0] = 16'hBEEF;
-            dmem2[0] = 16'hBEEF; dmem3[0] = 16'hBEEF;
-            cvt_trace_en = 1;
-            cycle_count = 0;
+            enable_cvt_trace;
 
             imem[0] = enc_movi(4'd1, 16'd15);
             imem[1] = enc_cvt(1'b1, 4'd2, 4'd1);    // CVT.i2f R2, R1
@@ -743,7 +1739,7 @@ module sm_core_tb;
             print_program(0, 6);
             launch_kernel(32'd0);
             wait_kernel_done(200);
-            cvt_trace_en = 0;
+            disable_cvt_trace;
 
             dump_rf_range(4'd0, 4'd5);
 
@@ -753,33 +1749,11 @@ module sm_core_tb;
             check_dmem_all(10'd0, 16'd15,   "K43 DMEM[0]=15");
         end
 
-        // ════════════════════════════════════════════════════════
-        //  K44: CVT self-ref (rD==rA) — NOP padded, NO SB stall
-        //
-        //  MOVI R1, 15
-        //  NOP × 8
-        //  CVT.i2f R1, R1   (self-referencing, rD=rA=1)
-        //  NOP × 8
-        //  MOVI R5, 0
-        //  ST R1, [R5+0]    (intermediate: should be bf16(15)=0x4170)
-        //  NOP × 4
-        //  CVT.f2i R1, R1   (self-ref again)
-        //  NOP × 8
-        //  ST R1, [R5+1]    (final: should be 15)
-        //  RET
-        //
-        //  Expected: DMEM[0]=0x4170, DMEM[1]=15
-        // ════════════════════════════════════════════════════════
+        // ── K44: CVT self-ref rD==rA (NOP padded) ────────
         begin
             $display("\n--- K44: CVT self-ref rD==rA (NOP padded) ---");
             reset_dut;
             clear_dmem;
-            dmem0[0] = 16'hDEAD; dmem1[0] = 16'hDEAD;
-            dmem2[0] = 16'hDEAD; dmem3[0] = 16'hDEAD;
-            dmem0[1] = 16'hDEAD; dmem1[1] = 16'hDEAD;
-            dmem2[1] = 16'hDEAD; dmem3[1] = 16'hDEAD;
-            cvt_trace_en = 1;
-            cycle_count = 0;
 
             imem[0]  = enc_movi(4'd1, 16'd15);
             imem[1]  = INST_NOP; imem[2]  = INST_NOP;
@@ -806,7 +1780,6 @@ module sm_core_tb;
             print_program(0, 35);
             launch_kernel(32'd0);
             wait_kernel_done(300);
-            cvt_trace_en = 0;
 
             dump_rf_range(4'd0, 4'd5);
 
@@ -815,106 +1788,73 @@ module sm_core_tb;
             check_dmem_all(10'd1, 16'd15,   "K44 DMEM[1]=15");
         end
 
-        // ════════════════════════════════════════════════════════
-        //  K45: CVT self-ref (rD==rA) — with scoreboard stalls
-        //
-        //  MOVI R1, 15
-        //  CVT.i2f R1, R1   (SB stall on R1 from MOVI)
-        //  CVT.f2i R1, R1   (SB stall on R1 from CVT.i2f)
-        //  MOVI R2, 0
-        //  ST R1, [R2+0]    (SB stall on R1 from CVT.f2i)
-        //  RET
-        //
-        //  This is the exact program from soc_tb Test 24.
-        //  Expected: DMEM[0]=15 (if working) or 0 (if data bug)
-        // ════════════════════════════════════════════════════════
+        // ── K45: CVT self-ref rD==rA (SB stalls) ─────────
+        //    Exact program from soc_tb Test 24.
         begin
             $display("\n--- K45: CVT self-ref rD==rA (SB stalls) ---");
             reset_dut;
             clear_dmem;
             dmem0[0] = 16'hBEEF; dmem1[0] = 16'hBEEF;
             dmem2[0] = 16'hBEEF; dmem3[0] = 16'hBEEF;
-            cvt_trace_en = 1;
-            cycle_count = 0;
+            enable_cvt_trace;
 
             imem[0] = enc_movi(4'd0, 16'd0);         // R0 = 0 (base addr)
             imem[1] = enc_movi(4'd1, 16'd15);        // R1 = 15
             imem[2] = enc_cvt(1'b1, 4'd1, 4'd1);    // CVT.i2f R1, R1
             imem[3] = enc_cvt(1'b0, 4'd1, 4'd1);    // CVT.f2i R1, R1
-            imem[4] = enc_m(`OP_ST, 4'd1, 4'd0, 16'd0); // DMEM[0] = R1
+            imem[4] = enc_m(`OP_ST, 4'd1, 4'd0, 16'd0);
             imem[5] = enc_movi(4'd2, 16'd0);
-            imem[6] = enc_m(`OP_ST, 4'd2, 4'd0, 16'd1); // DMEM[1] = 0
+            imem[6] = enc_m(`OP_ST, 4'd2, 4'd0, 16'd1);
             imem[7] = INST_RET;
 
             print_program(0, 8);
             launch_kernel(32'd0);
             wait_kernel_done(200);
-            cvt_trace_en = 0;
+            disable_cvt_trace;
 
-            $display("  Post-execution RF dump:");
             dump_rf_range(4'd0, 4'd5);
-            $display("  DMEM[0..1]: SP0=%04h,%04h  SP1=%04h,%04h  SP2=%04h,%04h  SP3=%04h,%04h",
-                dmem0[0], dmem0[1], dmem1[0], dmem1[1],
-                dmem2[0], dmem2[1], dmem3[0], dmem3[1]);
 
             check_gpr_all(4'd1, 16'd15,   "K45 R1=15 (self-ref round-trip)");
             check_dmem_all(10'd0, 16'd15,  "K45 DMEM[0]=15");
             check_dmem_all(10'd1, 16'd0,   "K45 DMEM[1]=0");
         end
 
-        // ════════════════════════════════════════════════════════
-        //  K46: CVT.i2f known values sweep (no stall)
-        //
-        //  Tests several known int→bf16 conversions:
-        //    0  → 0x0000 (0.0)
-        //    1  → 0x3F80 (1.0)
-        //    2  → 0x4000 (2.0)
-        //    15 → 0x4170 (15.0)
-        //    100→ 0x42C8 (100.0)
-        // ════════════════════════════════════════════════════════
+        // ── K46: CVT.i2f known values sweep ──────────────
         begin
             $display("\n--- K46: CVT.i2f known values sweep ---");
             reset_dut;
             clear_dmem;
-            cvt_trace_en = 1;
-            cycle_count = 0;
 
-            // R1=0, R2=1, R3=2, R4=15, R5=100
             imem[0]  = enc_movi(4'd1, 16'd0);
             imem[1]  = enc_movi(4'd2, 16'd1);
             imem[2]  = enc_movi(4'd3, 16'd2);
             imem[3]  = enc_movi(4'd4, 16'd15);
             imem[4]  = enc_movi(4'd5, 16'd100);
-            // NOP padding to drain MOVI writebacks
             imem[5]  = INST_NOP; imem[6]  = INST_NOP;
             imem[7]  = INST_NOP; imem[8]  = INST_NOP;
             imem[9]  = INST_NOP; imem[10] = INST_NOP;
             imem[11] = INST_NOP; imem[12] = INST_NOP;
-            // CVT.i2f to R6..R10 (different dest, no SB stall)
             imem[13] = enc_cvt(1'b1, 4'd6, 4'd1);   // R6 = cvt(0)
             imem[14] = enc_cvt(1'b1, 4'd7, 4'd2);   // R7 = cvt(1)
             imem[15] = enc_cvt(1'b1, 4'd8, 4'd3);   // R8 = cvt(2)
             imem[16] = enc_cvt(1'b1, 4'd9, 4'd4);   // R9 = cvt(15)
             imem[17] = enc_cvt(1'b1, 4'd10, 4'd5);  // R10 = cvt(100)
-            // NOP padding to drain CVT writebacks
             imem[18] = INST_NOP; imem[19] = INST_NOP;
             imem[20] = INST_NOP; imem[21] = INST_NOP;
             imem[22] = INST_NOP; imem[23] = INST_NOP;
             imem[24] = INST_NOP; imem[25] = INST_NOP;
             imem[26] = INST_NOP; imem[27] = INST_NOP;
             imem[28] = INST_NOP; imem[29] = INST_NOP;
-            // Store results to DMEM
-            imem[30] = enc_m(`OP_ST, 4'd6, 4'd1, 16'd0); // DMEM[0] = R6
-            imem[31] = enc_m(`OP_ST, 4'd7, 4'd1, 16'd1); // DMEM[1] = R7
-            imem[32] = enc_m(`OP_ST, 4'd8, 4'd1, 16'd2); // DMEM[2] = R8
-            imem[33] = enc_m(`OP_ST, 4'd9, 4'd1, 16'd3); // DMEM[3] = R9
-            imem[34] = enc_m(`OP_ST, 4'd10, 4'd1, 16'd4); // DMEM[4] = R10
+            imem[30] = enc_m(`OP_ST, 4'd6, 4'd1, 16'd0);
+            imem[31] = enc_m(`OP_ST, 4'd7, 4'd1, 16'd1);
+            imem[32] = enc_m(`OP_ST, 4'd8, 4'd1, 16'd2);
+            imem[33] = enc_m(`OP_ST, 4'd9, 4'd1, 16'd3);
+            imem[34] = enc_m(`OP_ST, 4'd10, 4'd1, 16'd4);
             imem[35] = INST_RET;
 
             print_program(0, 36);
             launch_kernel(32'd0);
             wait_kernel_done(400);
-            cvt_trace_en = 0;
 
             dump_rf_range(4'd1, 4'd10);
 
@@ -931,21 +1871,13 @@ module sm_core_tb;
             check_dmem_all(10'd4, 16'h42C8, "K46 DMEM[4] cvt(100)");
         end
 
-        // ════════════════════════════════════════════════════════
-        //  K47: CVT.i2f with ADD.f verification
-        //
-        //  If CVT.i2f R2,R1 produces 0x4170 (bf16 15.0),
-        //  then ADD.f R3,R2,R2 should produce bf16(30.0) = 0x41F0.
-        //  This cross-checks the CVT result against the FPU.
-        // ════════════════════════════════════════════════════════
+        // ── K47: CVT.i2f + ADD.f cross-check ────────────
         begin
             $display("\n--- K47: CVT.i2f + ADD.f cross-check ---");
             reset_dut;
             clear_dmem;
-            cvt_trace_en = 1;
-            cycle_count = 0;
 
-            imem[0]  = enc_movi(4'd1, 16'd15);       // R1 = 15
+            imem[0]  = enc_movi(4'd1, 16'd15);
             imem[1]  = INST_NOP; imem[2]  = INST_NOP;
             imem[3]  = INST_NOP; imem[4]  = INST_NOP;
             imem[5]  = INST_NOP; imem[6]  = INST_NOP;
@@ -960,14 +1892,13 @@ module sm_core_tb;
             imem[21] = INST_NOP; imem[22] = INST_NOP;
             imem[23] = INST_NOP; imem[24] = INST_NOP;
             imem[25] = enc_movi(4'd4, 16'd0);
-            imem[26] = enc_m(`OP_ST, 4'd2, 4'd4, 16'd0); // DMEM[0] = R2 (bf16)
-            imem[27] = enc_m(`OP_ST, 4'd3, 4'd4, 16'd1); // DMEM[1] = R3 (bf16)
+            imem[26] = enc_m(`OP_ST, 4'd2, 4'd4, 16'd0);
+            imem[27] = enc_m(`OP_ST, 4'd3, 4'd4, 16'd1);
             imem[28] = INST_RET;
 
             print_program(0, 29);
             launch_kernel(32'd0);
             wait_kernel_done(300);
-            cvt_trace_en = 0;
 
             dump_rf_range(4'd0, 4'd5);
 
@@ -977,11 +1908,9 @@ module sm_core_tb;
             check_dmem_all(10'd1, 16'h41F0, "K47 DMEM[1]=0x41F0");
         end
 
-        // ════════════════════════════════════════════════════════
-        //  Summary
-        // ════════════════════════════════════════════════════════
+        // ── Summary ──────────────────────────────────────
         $display("\n============================================");
-        $display("  SM Core CVT Testbench — Summary");
+        $display("  SM Core Testbench v1.4 — Summary");
         $display("  PASSED: %0d", pass_count);
         $display("  FAILED: %0d", fail_count);
         $display("  TOTAL:  %0d", pass_count + fail_count);
