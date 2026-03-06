@@ -90,6 +90,8 @@ localparam [31:0] HALT_ENCODING = 32'hEAFF_FFFE;
 reg [3:0] halted;
 reg [3:0] halt_seen_once;
 
+reg [`PC_WIDTH-1:0] pc_thread [0:3];
+
 /* cpu_done: primary = all halted, fallback = all PCs at CPU_DONE_PC */
 wire pc_done = (pc_thread[0] == `CPU_DONE_PC) &&
                (pc_thread[1] == `CPU_DONE_PC) &&
@@ -113,8 +115,6 @@ end
 
 reg [1:0] tid_if2, tid_id, tid_ex1, tid_ex2, tid_mem, tid_wb;
 reg valid_if2, valid_id, valid_ex1, valid_ex2, valid_mem, valid_wb;
-
-reg [`PC_WIDTH-1:0] pc_thread [0:3];
 
 wire [`PC_WIDTH-1:0] pc_if = pc_thread[tid_if];
 wire [`PC_WIDTH-1:0] pc_plus4_if = pc_if + 32'd4;

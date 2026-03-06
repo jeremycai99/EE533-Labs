@@ -12,16 +12,14 @@
 `include "define.v"
 
 module test_int32mult (
-    input wire [31:0] operand_a,
-    input wire [31:0] operand_b,
-    input wire is_signed,
-    output wire [63:0] product
+    input wire [31:0] a,
+    input wire [31:0] b,
+    output wire [63:0] p
 );
 
-wire signed [63:0] s_product = $signed(operand_a) * $signed(operand_b);
-wire [63:0] u_product = operand_a * operand_b;
+wire signed [63:0] s_product = $signed(a) * $signed(b);
 
-assign product = is_signed ? s_product : u_product;
+assign p = s_product;
 
 endmodule
 

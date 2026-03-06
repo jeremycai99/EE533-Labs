@@ -41,10 +41,9 @@ module mac (
 wire [63:0] product;
 
 test_int32mult u_mult (
-    .operand_a(rm),
-    .operand_b(rs),
-    .is_signed(mul_signed),
-    .product(product)
+    .a(rm),
+    .b(rs),
+    .p(product)
 );
 
 // ================================================================
