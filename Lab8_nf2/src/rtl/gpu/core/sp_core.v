@@ -5,12 +5,14 @@
     operation.
  Author: Jeremy Cai
  Date: Feb. 28, 2026
- Version: 1.3
+ Version: 1.4
  Revision history:
     - Feb. 28, 2026: Initial implementation of the CUDA-like SP core pipeline.
     - Mar. 01, 2026: v1.1 — Remove ~stall from WB write enables to fix timing.
     - Mar. 02, 2026: v1.2 — Dual RF read ports for timing isolation.
     - Mar. 04, 2026: v1.3 — Fix OP_SET predicate write path.
+    - Mar. 05, 2026: v1.4 — Fix CVT deadlock: MEM/WB always drains regardless
+      of front_stall.
 */
 
 `ifndef SP_CORE_V
@@ -222,6 +224,8 @@ module sp_core #(
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n)
             id_ex_launched <= 1'b0;
+        else if (flush_id)
+            id_ex_launched <= 1'b0;
         else if (!stall)
             id_ex_launched <= 1'b0;
         else if (!id_ex_launched)
@@ -284,12 +288,14 @@ module sp_core #(
 
     pplbfintcvt u_cvt (
         .clk(clk), .rst_n(rst_n),
-        .dt(id_ex_dt), .in(id_ex_opA), .out(cvt_result)
+        .dt(~id_ex_dt), .in(id_ex_opA), .out(cvt_result)
     );
 
     reg [1:0] cvt_pipe_valid;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n)
+            cvt_pipe_valid <= 2'b00;
+        else if (flush_id)
             cvt_pipe_valid <= 2'b00;
         else begin
             cvt_pipe_valid[0] <= cvt_valid_in;
@@ -305,7 +311,10 @@ module sp_core #(
     wire alu_fpu_valid = id_ex_dt ? fpu_valid_out : alu_valid_out;
     wire ex_valid_out = cvt_done | alu_fpu_valid | set_valid; // SET combinational
     wire alu_fpu_busy = id_ex_dt ? fpu_busy : alu_busy;
-    assign ex_busy = cvt_busy | alu_fpu_busy;
+
+    // v1.4 FIX: Include cvt_valid_in so stall goes high on the SAME cycle
+    // CVT launches, preventing id_ex from being overwritten next cycle.
+    assign ex_busy = cvt_busy | cvt_valid_in | alu_fpu_busy;
 
     // --- Comparator output MUX ---
     wire alu_cmp_selected = (id_ex_cmp_mode == 2'd0) ? alu_cmp_eq :
@@ -398,7 +407,7 @@ module sp_core #(
             mem_wb_rD_addr <= 4'd0;
             mem_wb_pred_wr_sel <= 2'd0;
             mem_wb_wb_src <= 3'd0;
-        end else if (!stall) begin
+        end else begin
             mem_wb_data <= ex_mem_result;
             mem_wb_cmp_out <= ex_mem_cmp_out;
             mem_wb_rf_we <= ex_mem_rf_we;

@@ -2,8 +2,8 @@
 Description: This file contains the implementation of the CUDA-like SM core, integrating the fetch unit,
 decoder, scoreboard, SP cores, tensor core, and SIMT stack.
 Author: Jeremy Cai
-Date: Mar. 4, 2026
-Version: 1.2
+Date: Mar. 5, 2026
+Version: 1.4
 Revision history:
 - Feb. 27, 2026: Initial implementation of the CUDA-like SM core.
 - Mar. 4, 2026: v1.0 — Add SIMT stack and PBRA handling logic. Add convergence redirect support
@@ -11,6 +11,8 @@ Revision history:
 - Mar. 4, 2026: v1.1 — Bug fixes
 - Mar. 4, 2026: v1.2 — SoC integration: add thread_mask[3:0] input port (from CP10 CR7).
     Kernel launch uses thread_mask instead of hardcoded 4'b1111 for active_mask init.
+- Mar. 5, 2026: v1.3 — Remove debug_rf_addr/debug_rf_data ports and debug override mux.
+- Mar. 5, 2026: v1.4 — Fix CVT deadlock
  */
 
 `ifndef SM_CORE_V
@@ -174,6 +176,9 @@ module sm_core (
         if (!rst_n) begin
             ir_latched <= 1'b0;
             ir_latch <= 32'd0;
+        end else if (kernel_start) begin
+            ir_latched <= 1'b0;
+            ir_latch <= 32'd0;
         end else if (!front_stall) begin
             ir_latched <= 1'b0;
         end else if (front_stall & ~ir_latched) begin
@@ -247,6 +252,11 @@ module sm_core (
             de_rf_r0_addr <= 4'd0; de_rf_r1_addr <= 4'd0;
             de_rf_r2_addr <= 4'd0; de_rf_r3_addr <= 4'd0;
             de_pc <= {`GPU_PC_WIDTH{1'b0}};
+        end else if (kernel_start) begin
+            // v1.3: flush decode on kernel launch to clear stale instructions.
+            // Without this, a stalled CVT in decode (with front_stall=1 from
+            // scoreboard) survives kernel_start and blocks new kernel execution.
+            de_valid <= 1'b0; de_rf_we <= 1'b0; de_pred_we <= 1'b0;
         end else if (de_flush) begin
             de_valid <= 1'b0; de_rf_we <= 1'b0; de_pred_we <= 1'b0;
         end else if (!front_stall) begin
@@ -346,6 +356,7 @@ module sm_core (
 
     scoreboard u_sb (
         .clk(clk), .rst_n(rst_n),
+        .clear(kernel_start),
         .rA_addr(de_rA_addr), .rB_addr(de_rB_addr), .rD_addr(de_rD_addr),
         .uses_rA(de_uses_rA), .uses_rB(de_uses_rB),
         .is_fma(de_is_fma), .is_st(de_is_st),
@@ -577,6 +588,9 @@ module sm_core (
             rr_rf_r0_addr <= 4'd0; rr_rf_r1_addr <= 4'd0;
             rr_rf_r2_addr <= 4'd0; rr_rf_r3_addr <= 4'd0;
             rr_active_mask <= 4'b0000;
+        end else if (kernel_start) begin
+            // Flush RR on kernel launch
+            rr_valid <= 1'b0; rr_rf_we <= 1'b0; rr_pred_we <= 1'b0;
         end else if (!sp_stall) begin
             if (!front_stall) begin
                 rr_valid <= de_valid & ~de_is_ctrl_special;
@@ -635,7 +649,7 @@ module sm_core (
         for (t = 0; t < 4; t = t + 1) begin : SP_LANE
             sp_core #(.TID(t[1:0])) u_sp (
                 .clk(clk), .rst_n(rst_n),
-                .stall(sp_stall), .flush_id(1'b0),
+                .stall(sp_stall), .flush_id(kernel_start),
                 .ppl_rf_r0_addr(rr_rf_r0_addr), .ppl_rf_r1_addr(rr_rf_r1_addr),
                 .ppl_rf_r2_addr(rr_rf_r2_addr), .ppl_rf_r3_addr(rr_rf_r3_addr),
                 .ovr_rf_r0_addr(ovr_rf_r0_addr_mux), .ovr_rf_r1_addr(ovr_rf_r1_addr_mux),

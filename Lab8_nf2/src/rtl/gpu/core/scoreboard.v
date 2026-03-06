@@ -1,11 +1,14 @@
 /* file: scoreboard.v
- Description: This file implements the scoreboard for the CUDA-like SP (streaming processor) core pipeline.
- The scoreboard is designed to track the status of registers and manage hazards in the pipeline.
+ Description: Scoreboard for the CUDA-like SM core pipeline.
+ Tracks in-flight register writes and stalls on RAW hazards.
  Author: Jeremy Cai
  Date: Feb. 27, 2026
- Version: 1.0
+ Version: 1.1
  Revision history:
-    - Feb. 27, 2026: Initial implementation of the scoreboard for the CUDA-like SP core pipeline.
+    - Feb. 27, 2026: v1.0 — Initial implementation.
+    - Mar. 05, 2026: v1.1 — Add synchronous clear input for kernel_start.
+      Without this, stale pending bits from a deadlocked or incomplete kernel
+      persist across kernel launches, causing permanent front_stall.
 */
 
 `ifndef SCOREBOARD_V
@@ -16,49 +19,40 @@
 module scoreboard (
     input  wire clk,
     input  wire rst_n,
+    // Synchronous clear (connected to kernel_start)
+    input  wire clear,
     // From decode (ID stage)
-    input  wire [3:0] rA_addr, // source A
-    input  wire [3:0] rB_addr, // source B (R-type)
-    input  wire [3:0] rD_addr, // destination (or source for FMA/ST/STS)
-    input  wire uses_rA, // instruction reads rA
-    input  wire uses_rB, // instruction reads rB
-    input  wire is_fma, // FMA: rD is also a read source
-    input  wire is_st, // ST/STS: rD is a read source, not write
-    input  wire rf_we, // instruction writes GPR (not NOP/ST/BRA/etc)
+    input  wire [3:0] rA_addr,
+    input  wire [3:0] rB_addr,
+    input  wire [3:0] rD_addr,
+    input  wire uses_rA,
+    input  wire uses_rB,
+    input  wire is_fma,
+    input  wire is_st,
+    input  wire rf_we,
     // From SIMT controller
-    input  wire [3:0] active_mask,   // current active thread mask. 1111 for now
+    input  wire [3:0] active_mask,
     // Issue handshake
-    input  wire issue,         // instruction issued this cycle
-                                      // (decode_valid & ~stall & ~global_stall)
-    // From WB stage (pipeline sideband)
-    input wire [3:0] wb_rD_addr,    // register being written back
-    input wire wb_rf_we,      // WB has a valid GPR write
-    input wire [3:0] wb_active_mask,// active mask snapshot from issue time
+    input  wire issue,
+    // From WB stage
+    input wire [3:0] wb_rD_addr,
+    input wire wb_rf_we,
+    input wire [3:0] wb_active_mask,
 
     // Outputs
-    output wire stall,         // RAW hazard → freeze IF+ID, bubble EX
-    output wire any_pending    // any register in-flight (for WMMA drain)
+    output wire stall,
+    output wire any_pending
 );
-    // Pending registers: 4 threads × 16 bits = 64 FFs
     reg [15:0] pending [0:3];
 
-    // SET mask: one-hot decode of rD for instruction being issued
     wire [15:0] set_mask = (16'b1 << rD_addr);
-
-    // CLEAR mask: one-hot decode of rD from WB stage
     wire [15:0] clr_mask = (16'b1 << wb_rD_addr);
 
-    // Per-thread SET/CLEAR enables
-    wire [3:0] set_en;    // which threads get SET this cycle
-    wire [3:0] clr_en;    // which threads get CLEAR this cycle
+    wire [3:0] set_en;
+    wire [3:0] clr_en;
 
-    // SET fires when: issuing a GPR-writing instruction, per active thread
     assign set_en = {4{issue & rf_we}} & active_mask;
-
-    // CLEAR fires when: WB commits a GPR write, per WB-active thread
     assign clr_en = {4{wb_rf_we}} & wb_active_mask;
-
-    // Pending register update (SET has priority over CLEAR)
 
     genvar t;
     generate
@@ -68,6 +62,8 @@ module scoreboard (
 
             always @(posedge clk or negedge rst_n) begin
                 if (!rst_n)
+                    pending[t] <= 16'b0;
+                else if (clear)
                     pending[t] <= 16'b0;
                 else
                     pending[t] <= (pending[t] & ~clr_vec) | set_vec;
@@ -82,21 +78,15 @@ module scoreboard (
             wire [15:0] eff_clr  = clr_en[t] ? clr_mask : 16'b0;
             wire [15:0] pend_eff = pending[t] & ~eff_clr;
 
-            // Source hazard checks
             wire src_a = uses_rA & pend_eff[rA_addr];
             wire src_b = uses_rB & pend_eff[rB_addr];
-
-            // FMA reads rD as accumulator; ST/STS reads rD as store data
             wire src_d = (is_fma | is_st) & pend_eff[rD_addr];
 
             assign hazard[t] = src_a | src_b | src_d;
         end
     endgenerate
 
-    // Stall if ANY active thread has a hazard
     assign stall = |(active_mask & hazard);
-
-    // Any register pending across all threads (pipeline not drained)
     assign any_pending = |{pending[3], pending[2], pending[1], pending[0]};
 
 endmodule

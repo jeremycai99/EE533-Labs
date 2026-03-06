@@ -23,6 +23,10 @@
  * Test 19: GPU K4 bf16_fma (LD, 2.0x3.0+1.0=7.0)
  * Test 20: GPU K5 relu bf16 (LD, per-bank: -1→0, 2→2, -3→0, 5→5)
  * Test 21: GPU K6 WMMA matmul (LD, per-bank identity A, D=I×2=all-2.0)
+ * Test 22: Full heterogeneous pipeline (CPU pre→GPU K1×2→GPU K2+10→CPU post)
+ * Test 23: CVT round-trip with different rD/rA (int→bf16→int, canary-guarded)
+ * Test 24: CVT self-referencing rD==rA (deadlock diagnostic, canary-guarded)
+ * Test 25: Full heterogeneous with CVT (CPU pre→GPU CVT×2→GPU CVT+10→CPU post)
  *
  * ARM encoding reference:
  *   MOV Rd, #imm8:        E3A0{Rd}{rot}{imm8}
@@ -40,7 +44,7 @@
  *
  * Author: Jeremy Cai
  * Date: Mar. 5, 2026
- * Version: 5.0
+ * Version: 6.0
  */
 
 `timescale 1ns / 1ps
@@ -294,45 +298,151 @@ initial trace_en = 1;
 always @(posedge clk) begin
     if (rst_n && u_soc.pp_active) begin
         cycle_cnt <= cycle_cnt + 1;
-        if (trace_en && cycle_cnt <= 300) begin
-            // Line 1: pkt_proc + CPU overview
-            $display("  [C%04d] pp=%2d run=%b done=%b halt=%04b hseen=%04b | tid_if=%0d IF=%08h instr=%08h v_if2=%b",
-                     cycle_cnt, u_soc.u_pkt_proc.state,
-                     u_soc.u_cpu_mt.running, u_soc.cpu_done_w,
-                     u_soc.u_cpu_mt.halted, u_soc.u_cpu_mt.halt_seen_once,
-                     u_soc.u_cpu_mt.tid_if,
-                     u_soc.cpu_imem_byte_addr,
-                     u_soc.cpu_imem_rdata,
-                     u_soc.u_cpu_mt.valid_if2);
-            // Line 2: Per-thread PCs + pipeline stage info
-            $display("         PC: T0=%08h T1=%08h T2=%08h T3=%08h | br=%b tgt=%08h | cp_w=%b cp_r=%b cr=%0d | dma=%b gpu=%b",
-                     u_soc.u_cpu_mt.pc_thread[0], u_soc.u_cpu_mt.pc_thread[1],
-                     u_soc.u_cpu_mt.pc_thread[2], u_soc.u_cpu_mt.pc_thread[3],
-                     u_soc.u_cpu_mt.branch_taken_ex2, u_soc.u_cpu_mt.branch_target_ex2,
-                     u_soc.cp_wen, u_soc.cp_ren, u_soc.cp_reg,
-                     u_soc.dma_busy, u_soc.gpu_active_r);
-            // Line 3: DMEM access (only when active)
-            if (u_soc.cpu_dmem_wen)
-                $display("         DMEM WR: [%08h] <= %08h",
-                         u_soc.cpu_dmem_byte_addr, u_soc.cpu_dmem_wdata);
-            // Line 4: GPU state (when gpu_active)
+        if (trace_en) begin
+            // ── Event-driven trace: only print when something interesting happens ──
+
+            // CP10 write (MCR execution)
+            if (u_soc.cp_wen)
+                $display("  [C%04d] CP10 WR: CR%0d <= 0x%08h", cycle_cnt, u_soc.cp_reg, u_soc.cp_wr_data);
+
+            // DMA start/finish
+            if (u_soc.u_dma.state == 0 && u_soc.dma_start)
+                $display("  [C%04d] DMA START: dir=%b tgt=%b bank=%0d len=%0d burst=%b src=%0d dst=%0d",
+                         cycle_cnt, u_soc.u_dma.dma_dir, u_soc.u_dma.dma_tgt,
+                         u_soc.u_dma.dma_bank, u_soc.u_dma.dma_xfer_len,
+                         u_soc.u_dma.dma_burst_all,
+                         u_soc.u_dma.dma_src_addr, u_soc.u_dma.dma_dst_addr);
+            if (u_soc.u_dma.state == 11) // S_DONE
+                $display("  [C%04d] DMA DONE", cycle_cnt);
+
+            // DMA bank switch
+            if (u_soc.u_dma.state == 10) // S_BANK_NEXT
+                $display("  [C%04d] DMA BANK_NEXT: done=%0d cur=%0d gpu_sel=%0d",
+                         cycle_cnt, u_soc.u_dma.banks_done, u_soc.u_dma.cur_bank,
+                         u_soc.u_dma.gpu_dmem_sel);
+
+            // DMA writes to GPU DMEM
+            if (u_soc.dma_gpu_dmem_we)
+                $display("  [C%04d] DMA→GPU_DMEM: sel=%0d addr=%0d data=%04h",
+                         cycle_cnt, u_soc.dma_gpu_dmem_sel,
+                         u_soc.dma_gpu_dmem_addr, u_soc.dma_gpu_dmem_din);
+
+            // DMA writes to GPU IMEM
+            if (u_soc.dma_gpu_imem_we)
+                $display("  [C%04d] DMA→GPU_IMEM: addr=%0d data=%08h",
+                         cycle_cnt, u_soc.dma_gpu_imem_addr, u_soc.dma_gpu_imem_din);
+
+            // DMA writes to CPU DMEM (D_PACK)
+            if (u_soc.u_dma.cpu_dmem_we)
+                $display("  [C%04d] DMA→CPU_DMEM: addr=%0d data=%08h",
+                         cycle_cnt, u_soc.u_dma.cpu_dmem_addr, u_soc.u_dma.cpu_dmem_din);
+
+            // GPU kernel start/done transitions
+            if (u_soc.gpu_kernel_start_w)
+                $display("  [C%04d] GPU KERNEL_START: entry_pc=%0d mask=%04b rst=%b",
+                         cycle_cnt, u_soc.gpu_entry_pc_w,
+                         u_soc.gpu_thread_mask_w, u_soc.gpu_rst_gated);
+            if (u_soc.gpu_kernel_done_w && u_soc.gpu_active_r)
+                $display("  [C%04d] GPU KERNEL_DONE", cycle_cnt);
+
+            // GPU ret detected
+            if (u_soc.u_sm_core.ret_detected)
+                $display("  [C%04d] GPU RET_DETECTED: amask=%04b",
+                         cycle_cnt, u_soc.u_sm_core.active_mask);
+
+            // GPU fetch unit internal — print every cycle when GPU is active
             if (u_soc.gpu_active_r)
-                $display("         GPU: run=%b done=%b amask=%04b | we=%04b addr0=%0d din0=%04h | dma_sel=%0d dma_we=%b dma_addr=%0d",
-                         u_soc.u_sm_core.u_fetch.running,
-                         u_soc.gpu_kernel_done_w,
+                $display("  [C%04d] GPU: run=%b pc=%0d fv=%b ir=%08h amask=%04b front_stall=%b sp_stall=%b ret=%b done=%b | op=%02h de_valid=%b",
+                         cycle_cnt,
+                         u_soc.u_sm_core.fu_running,
+                         u_soc.u_sm_core.fu_pc_out,
+                         u_soc.u_sm_core.fetch_valid,
+                         u_soc.u_sm_core.ir_latch,
                          u_soc.u_sm_core.active_mask,
-                         u_soc.core_dmem_we,
-                         u_soc.core_dmem_addr[0*`GPU_DMEM_ADDR_WIDTH +: `GPU_DMEM_ADDR_WIDTH],
-                         u_soc.core_dmem_din[0*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH],
-                         u_soc.dma_gpu_dmem_sel,
-                         u_soc.dma_gpu_dmem_we,
-                         u_soc.dma_gpu_dmem_addr);
-            // Line 5: DMA engine state (when busy)
-            if (u_soc.dma_busy)
-                $display("         DMA: state=%0d bank=%0d words=%0d gpu_sel=%0d cpu_addr=%0d",
-                         u_soc.u_dma.state, u_soc.u_dma.cur_bank,
-                         u_soc.u_dma.words_left, u_soc.u_dma.gpu_dmem_sel,
-                         u_soc.u_dma.cpu_dmem_addr);
+                         u_soc.u_sm_core.front_stall,
+                         u_soc.u_sm_core.sp_stall,
+                         u_soc.u_sm_core.ret_detected,
+                         u_soc.u_sm_core.kernel_done,
+                         u_soc.u_sm_core.de_opcode,
+                         u_soc.u_sm_core.de_valid);
+
+            // Stall decomposition (only when front_stall=1)
+            if (u_soc.gpu_active_r && u_soc.u_sm_core.front_stall)
+                $display("         STALL: sb=%b sb_gated=%b ex_busy=%b|%b|%b|%b cvt_busy=%b|%b|%b|%b any_ex=%b tc=%b burst=%b",
+                         u_soc.u_sm_core.sb_stall,
+                         u_soc.u_sm_core.sb_stall_gated,
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.ex_busy,
+                         u_soc.u_sm_core.SP_LANE[1].u_sp.ex_busy,
+                         u_soc.u_sm_core.SP_LANE[2].u_sp.ex_busy,
+                         u_soc.u_sm_core.SP_LANE[3].u_sp.ex_busy,
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.cvt_busy,
+                         u_soc.u_sm_core.SP_LANE[1].u_sp.cvt_busy,
+                         u_soc.u_sm_core.SP_LANE[2].u_sp.cvt_busy,
+                         u_soc.u_sm_core.SP_LANE[3].u_sp.cvt_busy,
+                         u_soc.u_sm_core.any_ex_busy,
+                         u_soc.u_sm_core.tc_busy,
+                         u_soc.u_sm_core.burst_busy);
+
+            // SP0 pipeline detail (only when stalled or GPU active with valid)
+            if (u_soc.gpu_active_r && u_soc.u_sm_core.front_stall)
+                $display("         SP0: id_ex_valid=%b id_ex_op=%02h id_ex_dt=%b id_ex_rD=%0d id_ex_launched=%b | cvt_pipe=%02b cvt_done=%b",
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.id_ex_valid,
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.id_ex_opcode,
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.id_ex_dt,
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.id_ex_rD_addr,
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.id_ex_launched,
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.cvt_pipe_valid,
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.cvt_done);
+
+            // SP0 EX/MEM/WB pipeline (only when stalled)
+            if (u_soc.gpu_active_r && u_soc.u_sm_core.front_stall)
+                $display("         SP0 EX/MEM: valid=%b rD=%0d rf_we=%b | MEM/WB: valid=%b rD=%0d rf_we=%b active=%b | WB: w0_we=%b",
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.ex_mem_valid,
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.ex_mem_rD_addr,
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.ex_mem_rf_we,
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.mem_wb_valid,
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.mem_wb_rD_addr,
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.mem_wb_rf_we,
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.mem_wb_active,
+                         u_soc.u_sm_core.SP_LANE[0].u_sp.w0_we);
+
+            // Scoreboard pending bits (only when stalled)
+            if (u_soc.gpu_active_r && u_soc.u_sm_core.front_stall)
+                $display("         SB: pending[0]=%04h pending[1]=%04h pending[2]=%04h pending[3]=%04h | wb_rf_we=%b wb_rD=%0d wb_amask=%04b",
+                         u_soc.u_sm_core.u_sb.pending[0],
+                         u_soc.u_sm_core.u_sb.pending[1],
+                         u_soc.u_sm_core.u_sb.pending[2],
+                         u_soc.u_sm_core.u_sb.pending[3],
+                         u_soc.u_sm_core.u_sb.wb_rf_we,
+                         u_soc.u_sm_core.u_sb.wb_rD_addr,
+                         u_soc.u_sm_core.u_sb.wb_active_mask);
+
+            // RR stage (only when stalled)
+            if (u_soc.gpu_active_r && u_soc.u_sm_core.front_stall)
+                $display("         RR: valid=%b op=%02h rD=%0d rf_we=%b dt=%b",
+                         u_soc.u_sm_core.rr_valid,
+                         u_soc.u_sm_core.rr_opcode,
+                         u_soc.u_sm_core.rr_rD_addr,
+                         u_soc.u_sm_core.rr_rf_we,
+                         u_soc.u_sm_core.rr_dt);
+
+            // GPU DMEM writes (sm_core stores)
+            if (|u_soc.core_dmem_we)
+                $display("  [C%04d] GPU_SP→DMEM: we=%04b addr0=%0d din0=%04h addr1=%0d din1=%04h",
+                         cycle_cnt, u_soc.core_dmem_we,
+                         u_soc.core_dmem_addr[0*10 +: 10],
+                         u_soc.core_dmem_din[0*16 +: 16],
+                         u_soc.core_dmem_addr[1*10 +: 10],
+                         u_soc.core_dmem_din[1*16 +: 16]);
+
+            // CPU DMEM writes (ARM stores via Port A)
+            if (u_soc.cpu_dmem_wen)
+                $display("  [C%04d] CPU→DMEM: byte_addr=%08h data=%08h",
+                         cycle_cnt, u_soc.cpu_dmem_byte_addr, u_soc.cpu_dmem_wdata);
+
+            // CPU halt
+            if (u_soc.cpu_done_w && u_soc.u_cpu_mt.running)
+                $display("  [C%04d] CPU DONE (halted=%04b)", cycle_cnt, u_soc.u_cpu_mt.halted);
         end
     end
 end
@@ -341,7 +451,7 @@ end
 //  Waveform + Global Timeout
 // ═══════════════════════════════════════════════════════════════════
 initial begin $dumpfile("soc_tb.vcd"); $dumpvars(0, soc_tb); end
-initial begin #20000000; $display("[TIMEOUT] Global"); $finish; end
+initial begin #40000000; $display("[TIMEOUT] Global"); $finish; end
 
 // ═══════════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════
@@ -352,7 +462,7 @@ initial begin #20000000; $display("[TIMEOUT] Global"); $finish; end
 initial begin
     $display("");
     $display("================================================================");
-    $display("  SoC Integration Testbench v5.0 (21 tests)");
+    $display("  SoC Integration Testbench v6.0 (25 tests)");
     $display("  Drives NetFPGA RX/TX only — real CPU+CP10+DMA+GPU inside");
     $display("================================================================");
     $display("");
@@ -1626,6 +1736,495 @@ initial begin
         check64(tx_data[1], 64'h40004000_40004000, "T21 WMMA banks 2,3 D=2.0");
         check64(tx_data[2], 64'h40004000_40004000, "T21 WMMA banks 4,5 D=2.0");
         check64(tx_data[3], 64'h40004000_40004000, "T21 WMMA banks 6,7 D=2.0");
+        settle;
+    end
+
+    // ════════════════════════════════════════════════════════════
+    //  Test 22: Full Heterogeneous Compute Pipeline
+    //
+    //  Complete packet flow:
+    //    1. pkt_proc loads ARM IMEM + CPU DMEM (GPU programs + input)
+    //    2. CPU pre-processes: adds 5 to each input integer
+    //    3. DMA D_IMEM: both GPU kernels → GPU IMEM[0..15]
+    //    4. DMA D_UNPACK: pre-processed data → GPU DMEM (per-bank)
+    //    5. GPU K1: ADD R,R,R (×2, int16)
+    //    6. GPU K2: MOVI+ADD (+10, int16)
+    //       (K2 reads K1 results directly from GPU DMEM — no round-trip!)
+    //    7. DMA D_PACK: GPU results → CPU DMEM
+    //    8. CPU post-processes: adds 7 to each result
+    //    9. CPU halts → pkt_proc READBACK → TX
+    //
+    //  Input:  [10, 20, 30, 40] per bank
+    //  Pre +5: [15, 25, 35, 45]
+    //  K1 ×2:  [30, 50, 70, 90]
+    //  K2 +10: [40, 60, 80, 100]
+    //  Post+7: [47, 67, 87, 107]
+    //
+    //  GPU K1 (IMEM[0..7]): MOVI R0,0; LD R1,[R0]; ADD R2,R1,R1;
+    //    ST R2,[R0]; MOVI R3,0; ST R3,[R0+1]; NOP; RET
+    //  GPU K2 (IMEM[8..15]): MOVI R0,0; LD R1,[R0]; MOVI R2,10;
+    //    ADD R3,R1,R2; ST R3,[R0]; MOVI R4,0; ST R4,[R0+1]; RET
+    //
+    //  NOTE: Uses pure int16 ops (ADD DT=0, all verified in sm_core_tb K25).
+    //  CVT (opcode 0x05) stalls GPU pipeline — separate RTL investigation needed.
+    //
+    //  CPU DMEM layout:
+    //    [0..7]:   GPU K1 program (8 instrs)
+    //    [8..15]:  GPU K2 program (8 instrs)
+    //    [16..19]: Input data (per bank, 1 word each via D_UNPACK burst_all)
+    //    [24..27]: GPU output (D_PACK target)
+    //    [32..35]: CPU post-processed output (readback)
+    // ════════════════════════════════════════════════════════════
+    begin
+        $display("\n--- Test 22: Full heterogeneous compute pipeline ---");
+        cycle_cnt = 0;
+        trace_en = 1; // enable full trace for T22 debug
+
+        // ── ARM IMEM: 134 instrs = 67 DWs ───────────────────
+
+        rx(cmd(4'h1, 12'h000, 16'd67, 32'h0), 8'h04);
+
+        // ── Phase 1: CPU pre-process (add 5 to DMEM[16..19]) ─
+        // DMEM word 16 = byte addr 64 = 0x40
+        // [0] MOV R0,#64  [1] LDR R1,[R0]
+        rx({32'hE5901000, 32'hE3A00040}, 8'h00);
+        // [2] ADD R1,R1,#5  [3] STR R1,[R0]
+        rx({32'hE5801000, 32'hE2811005}, 8'h00);
+        // [4] LDR R1,[R0,#4]  [5] ADD R1,R1,#5
+        rx({32'hE2811005, 32'hE5901004}, 8'h00);
+        // [6] STR R1,[R0,#4]  [7] LDR R1,[R0,#8]
+        rx({32'hE5901008, 32'hE5801004}, 8'h00);
+        // [8] ADD R1,R1,#5  [9] STR R1,[R0,#8]
+        rx({32'hE5801008, 32'hE2811005}, 8'h00);
+        // [10] LDR R1,[R0,#12]  [11] ADD R1,R1,#5
+        rx({32'hE2811005, 32'hE590100C}, 8'h00);
+        // [12] STR R1,[R0,#12]  [13] NOP
+        rx({ARM_NOP, 32'hE580100C}, 8'h00);
+
+        // ── Phase 2: DMA D_IMEM (CPU[0..15] → GPU IMEM) ─────
+        // CR0=0(src), CR1=0(dst), CR2=16(len), CR3=5(D_IMEM)
+        // [14] MOV R0,#0  [15] MCR CR0
+        rx({32'hEE000A10, 32'hE3A00000}, 8'h00);
+        // [16] MCR CR1  [17] MOV R1,#16
+        rx({32'hE3A01010, 32'hEE010A10}, 8'h00);
+        // [18] MCR CR2  [19] MOV R2,#5
+        rx({32'hE3A02005, 32'hEE021A10}, 8'h00);
+        // [20] MCR CR3  [21] NOP
+        rx({ARM_NOP, 32'hEE032A10}, 8'h00);
+        send_nop_pairs(5); // [22..31] wait DMA (16 words)
+
+        // ── Phase 3: DMA D_UNPACK (CPU[16..19] → GPU DMEM) ──
+        // CR0=16(src), CR1=0(dst), CR2=1(len), CR3=65(burst_all)
+        // [32] MOV R0,#16  [33] MCR CR0
+        rx({32'hEE000A10, 32'hE3A00010}, 8'h00);
+        // [34] MOV R1,#0  [35] MCR CR1
+        rx({32'hEE011A10, 32'hE3A01000}, 8'h00);
+        // [36] MOV R2,#1  [37] MCR CR2
+        rx({32'hEE022A10, 32'hE3A02001}, 8'h00);
+        // [38] MOV R3,#65  [39] MCR CR3
+        rx({32'hEE033A10, 32'hE3A03041}, 8'h00);
+        send_nop_pairs(4); // [40..47] wait DMA
+
+        // ── Phase 4: GPU launch K1 (entry_pc=0) ─────────────
+        // [48] MOV R0,#0  [49] MCR CR4
+        rx({32'hEE040A10, 32'hE3A00000}, 8'h00);
+        // [50] MOV R1,#15  [51] MCR CR7
+        rx({32'hEE071A10, 32'hE3A0100F}, 8'h00);
+        // [52] MOV R2,#1  [53] MCR CR5 → launch
+        rx({32'hEE052A10, 32'hE3A02001}, 8'h00);
+        send_nop_pairs(10); // [54..73] wait GPU K1 (8 instrs × 4 threads + pipeline)
+
+        // ── Phase 5: GPU launch K2 (entry_pc=8) ─────────────
+        // K2 reads K1 results directly from GPU DMEM — no DMA!
+        // [74] MOV R0,#8  [75] MCR CR4
+        rx({32'hEE040A10, 32'hE3A00008}, 8'h00);
+        // [76] MOV R1,#15  [77] MCR CR7
+        rx({32'hEE071A10, 32'hE3A0100F}, 8'h00);
+        // [78] MOV R2,#1  [79] MCR CR5 → launch
+        rx({32'hEE052A10, 32'hE3A02001}, 8'h00);
+        send_nop_pairs(10); // [80..99] wait GPU K2
+
+        // ── Phase 6: DMA D_PACK (GPU → CPU[24..27]) ─────────
+        // CR0=0(src), CR1=24(dst), CR2=1(len), CR3=67(burst_all,pack)
+        // [100] MOV R0,#0  [101] MCR CR0
+        rx({32'hEE000A10, 32'hE3A00000}, 8'h00);
+        // [102] MOV R1,#24  [103] MCR CR1
+        rx({32'hEE011A10, 32'hE3A01018}, 8'h00);
+        // [104] MOV R2,#1  [105] MCR CR2
+        rx({32'hEE022A10, 32'hE3A02001}, 8'h00);
+        // [106] MOV R3,#67  [107] MCR CR3
+        rx({32'hEE033A10, 32'hE3A03043}, 8'h00);
+        send_nop_pairs(5); // [108..117] wait DMA
+
+        // ── Phase 7: CPU post-process ────────────────────────
+        // Load DMEM[24..27] (byte 96), add 7, store DMEM[32..35] (byte 128)
+        // [118] MOV R0,#96  [119] MOV R2,#128
+        rx({32'hE3A02080, 32'hE3A00060}, 8'h00);
+        // [120] LDR R1,[R0]  [121] ADD R1,R1,#7
+        rx({32'hE2811007, 32'hE5901000}, 8'h00);
+        // [122] STR R1,[R2]  [123] LDR R1,[R0,#4]
+        rx({32'hE5901004, 32'hE5821000}, 8'h00);
+        // [124] ADD R1,R1,#7  [125] STR R1,[R2,#4]
+        rx({32'hE5821004, 32'hE2811007}, 8'h00);
+        // [126] LDR R1,[R0,#8]  [127] ADD R1,R1,#7
+        rx({32'hE2811007, 32'hE5901008}, 8'h00);
+        // [128] STR R1,[R2,#8]  [129] LDR R1,[R0,#12]
+        rx({32'hE590100C, 32'hE5821008}, 8'h00);
+        // [130] ADD R1,R1,#7  [131] STR R1,[R2,#12]
+        rx({32'hE582100C, 32'hE2811007}, 8'h00);
+
+        // ── Phase 8: Halt ────────────────────────────────────
+        // [132] B .  [133] NOP
+        rx({ARM_NOP, ARM_HALT}, 8'h00);
+
+        // ── CPU DMEM: GPU K1 program (words 0..7) ────────────
+        //   ×2 via int16 ADD to self (no CVT needed)
+        //   [0] MOVI R0,0      [1] LD R1,[R0]
+        //   [2] ADD R2,R1,R1   [3] ST R2,[R0]
+        //   [4] MOVI R3,0      [5] ST R3,[R0+1]
+        //   [6] NOP             [7] RET
+        rx(cmd(4'h2, 12'h000, 16'd4, 32'h0), 8'h00);
+        rx({32'h10100000, 32'h20000000}, 8'h00); // {LD R1;      MOVI R0,0}
+        rx({32'h08200000, 32'h30211000}, 8'h00); // {ST R2,[R0]; ADD R2,R1,R1}
+        rx({32'h08300001, 32'h20300000}, 8'h00); // {ST R3,[1];  MOVI R3,0}
+        rx({32'hC8000000, 32'h00000000}, 8'h00); // {RET;        NOP}
+
+        // ── CPU DMEM: GPU K2 program (words 8..15) ───────────
+        //   +10 via int16 MOVI+ADD (no CVT needed)
+        //   [8]  MOVI R0,0      [9]  LD R1,[R0]
+        //   [10] MOVI R2,10     [11] ADD R3,R1,R2
+        //   [12] ST R3,[R0]     [13] MOVI R4,0
+        //   [14] ST R4,[R0+1]   [15] RET
+        rx(cmd(4'h2, 12'h008, 16'd4, 32'h0), 8'h00);
+        rx({32'h10100000, 32'h20000000}, 8'h00); // {LD R1;        MOVI R0,0}
+        rx({32'h30312000, 32'h2020000A}, 8'h00); // {ADD R3,R1,R2; MOVI R2,10}
+        rx({32'h20400000, 32'h08300000}, 8'h00); // {MOVI R4,0;    ST R3,[R0]}
+        rx({32'hC8000000, 32'h08400001}, 8'h00); // {RET;          ST R4,[R0+1]}
+
+        // ── CPU DMEM: Input data (words 16..19) ─────────────
+        //   Per-bank: 10, 20, 30, 40 (before CPU pre-processing)
+        rx(cmd(4'h2, 12'h010, 16'd2, 32'h0), 8'h00);
+        rx({32'h00000014, 32'h0000000A}, 8'h00); // {word17=20, word16=10}
+        rx({32'h00000028, 32'h0000001E}, 8'h00); // {word19=40, word18=30}
+
+        // ── CPU DMEM: Zero readback targets ──────────────────
+        rx(cmd(4'h2, 12'h018, 16'd2, 32'h0), 8'h00); // words 24..27
+        rx(64'h0, 8'h00); rx(64'h0, 8'h00);
+        rx(cmd(4'h2, 12'h020, 16'd2, 32'h0), 8'h00); // words 32..35
+        rx(64'h0, 8'h00); rx(64'h0, 8'h00);
+
+        // ── Commands ─────────────────────────────────────────
+        rx(cmd(4'h3, 12'h000, 16'd0, 32'h0), 8'h00); // CPU_START
+        rx(cmd(4'h4, 12'h020, 16'd2, 32'h0), 8'h00); // READBACK addr=32, count=2
+        rx(cmd(4'h5, 12'h000, 16'd0, 32'h0), 8'h00); // SEND_PKT
+        rx_end;
+
+        wait_and_capture(20000); // extra cycles for 2 GPU kernels
+        trace_en = 0;
+
+        // ── Checkpoint dumps: hierarchical memory read ───────
+        $display("");
+        $display("  ==== T22 Post-Execution Memory Dump ====");
+
+        // GPU IMEM (verify DMA D_IMEM loaded correctly)
+        $display("  GPU IMEM K1 [0..7]:");
+        $display("    [0]=%08h [1]=%08h [2]=%08h [3]=%08h",
+            u_soc.u_gpu_imem.mem[0], u_soc.u_gpu_imem.mem[1],
+            u_soc.u_gpu_imem.mem[2], u_soc.u_gpu_imem.mem[3]);
+        $display("    [4]=%08h [5]=%08h [6]=%08h [7]=%08h",
+            u_soc.u_gpu_imem.mem[4], u_soc.u_gpu_imem.mem[5],
+            u_soc.u_gpu_imem.mem[6], u_soc.u_gpu_imem.mem[7]);
+        $display("  GPU IMEM K2 [8..15]:");
+        $display("    [8]=%08h [9]=%08h [10]=%08h [11]=%08h",
+            u_soc.u_gpu_imem.mem[8], u_soc.u_gpu_imem.mem[9],
+            u_soc.u_gpu_imem.mem[10], u_soc.u_gpu_imem.mem[11]);
+        $display("    [12]=%08h [13]=%08h [14]=%08h [15]=%08h",
+            u_soc.u_gpu_imem.mem[12], u_soc.u_gpu_imem.mem[13],
+            u_soc.u_gpu_imem.mem[14], u_soc.u_gpu_imem.mem[15]);
+
+        // CPU DMEM checkpoints (word addresses)
+        $display("  CPU DMEM[16..19] (after pre+5):");
+        $display("    [16]=%08h [17]=%08h [18]=%08h [19]=%08h",
+            u_soc.u_cpu_dmem.mem[16], u_soc.u_cpu_dmem.mem[17],
+            u_soc.u_cpu_dmem.mem[18], u_soc.u_cpu_dmem.mem[19]);
+
+        $display("  CPU DMEM[24..27] (after D_PACK):");
+        $display("    [24]=%08h [25]=%08h [26]=%08h [27]=%08h",
+            u_soc.u_cpu_dmem.mem[24], u_soc.u_cpu_dmem.mem[25],
+            u_soc.u_cpu_dmem.mem[26], u_soc.u_cpu_dmem.mem[27]);
+
+        $display("  CPU DMEM[32..35] (final output after post+7):");
+        $display("    [32]=%08h [33]=%08h [34]=%08h [35]=%08h",
+            u_soc.u_cpu_dmem.mem[32], u_soc.u_cpu_dmem.mem[33],
+            u_soc.u_cpu_dmem.mem[34], u_soc.u_cpu_dmem.mem[35]);
+
+        // GPU DMEM bank 0 (final state after both kernels)
+        $display("  GPU DMEM bank0 [0..3]: %04h %04h %04h %04h",
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[0],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[1],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[2],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[3]);
+        $display("  GPU DMEM bank1 [0..3]: %04h %04h %04h %04h",
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[0],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[1],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[2],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[3]);
+        $display("  GPU DMEM bank2 [0..3]: %04h %04h %04h %04h",
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[0],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[1],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[2],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[3]);
+        $display("  GPU DMEM bank3 [0..3]: %04h %04h %04h %04h",
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[0],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[1],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[2],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[3]);
+
+        // GPU/DMA status (using soc output wires)
+        $display("  GPU state: active=%b done=%b rst_gated=%b",
+            u_soc.gpu_active_r, u_soc.gpu_kernel_done_w, u_soc.gpu_rst_gated);
+        $display("  CP10 outputs: entry_pc=%08h mask=%04b start=%b reset_n=%b",
+            u_soc.gpu_entry_pc_w, u_soc.gpu_thread_mask_w,
+            u_soc.gpu_kernel_start_w, u_soc.gpu_reset_n_w);
+        $display("  DMA: busy=%b src=%08h dst=%08h len=%0d",
+            u_soc.dma_busy, u_soc.dma_src_addr, u_soc.dma_dst_addr,
+            u_soc.dma_xfer_len);
+        $display("  ==== End Dump ====");
+        $display("");
+
+        // Expected: [47, 67, 87, 107]
+        // TX[0] = {CPU[33]=67, CPU[32]=47} = {0x43, 0x2F}
+        // TX[1] = {CPU[35]=107, CPU[34]=87} = {0x6B, 0x57}
+        checkN(tx_cnt, 2, "T22 TX count");
+        check64(tx_data[0], {32'h00000043, 32'h0000002F}, "T22 full: bank1=67, bank0=47");
+        check64(tx_data[1], {32'h0000006B, 32'h00000057}, "T22 full: bank3=107, bank2=87");
+        check8(tx_ctrl[0], 8'h04, "T22 ctrl");
+        settle;
+    end
+
+    // ════════════════════════════════════════════════════════════
+    //  CVT Diagnostic Suite (T23-T25)
+    // ════════════════════════════════════════════════════════════
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 23: CVT round-trip with DIFFERENT rD/rA (should pass)
+    //
+    //  GPU: MOVI R1,15; CVT.i2f R2,R1; CVT.f2i R3,R2; ST R3,[0]
+    //  Preload canary 0xBEEF to DMEM[0] via D_UNPACK.
+    //  If CVT works: ST overwrites → DMEM[0]=15, D_PACK={0,15}=0xF
+    //  If CVT broken: canary survives → D_PACK={0,0xBEEF}
+    //
+    //  CVT.i2f R2,R1: {00101,1,00,0010,0001,16'h0} = 0x2C210000
+    //  CVT.f2i R3,R2: {00101,0,00,0011,0010,16'h0} = 0x28320000
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 23: CVT round-trip (different regs) ---");
+        cycle_cnt = 0;
+
+        send_gpu_arm(8'h04, 8'd1, 8'd0, 8'd1);
+        send_gpu_imem(
+            {32'h2010000F, 32'h20000000}, // [1]MOVI R1,15;    [0]MOVI R0,0
+            {32'h28320000, 32'h2C210000}, // [3]CVT.f2i R3,R2; [2]CVT.i2f R2,R1
+            {32'h20400000, 32'h08300000}, // [5]MOVI R4,0;     [4]ST R3,[R0+0]
+            {32'hC8000000, 32'h08400001}, // [7]RET;            [6]ST R4,[R0+1]
+            64'h0, 64'h0, 64'h0, 64'h0
+        );
+
+        // Canary preload: 0xBEEF to DMEM[0] per bank
+        rx(cmd(4'h2, 12'h010, 16'd2, 32'h0), 8'h00);
+        rx({32'h0000BEEF, 32'h0000BEEF}, 8'h00); // bank0, bank1
+        rx({32'h0000BEEF, 32'h0000BEEF}, 8'h00); // bank2, bank3
+
+        send_gpu_tail(2);
+        wait_and_capture(MAX_CYCLES);
+
+        // Round-trip: 15 → bf16(15.0) → int(15) = 15 = 0x000F
+        checkN(tx_cnt, 2, "T23 TX count");
+        check64(tx_data[0], {32'h0000000F, 32'h0000000F}, "T23 CVT round-trip=15");
+        check64(tx_data[1], {32'h0000000F, 32'h0000000F}, "T23 all banks");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 24: CVT self-referencing rD==rA (deadlock diagnostic)
+    //
+    //  GPU: MOVI R1,15; CVT.i2f R1,R1; CVT.f2i R1,R1; ST R1,[0]
+    //  Same canary preload.
+    //  If works: DMEM[0]=15, D_PACK=0x0000000F
+    //  If deadlock: GPU hangs at CVT, ST never fires,
+    //    DMEM[0]=0xBEEF (canary), D_PACK=0x0000BEEF
+    //
+    //  CVT.i2f R1,R1: 0x2C110000 (rD==rA)
+    //  CVT.f2i R1,R1: 0x28110000 (rD==rA)
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 24: CVT self-ref rD==rA (deadlock test) ---");
+        cycle_cnt = 0;
+        trace_en = 1; // trace GPU pipeline to see stall
+
+        send_gpu_arm(8'h04, 8'd1, 8'd0, 8'd1);
+        send_gpu_imem(
+            {32'h2010000F, 32'h20000000}, // [1]MOVI R1,15;     [0]MOVI R0,0
+            {32'h28110000, 32'h2C110000}, // [3]CVT.f2i R1,R1;  [2]CVT.i2f R1,R1 ←deadlock?
+            {32'h20200000, 32'h08100000}, // [5]MOVI R2,0;      [4]ST R1,[R0+0]
+            {32'hC8000000, 32'h08200001}, // [7]RET;             [6]ST R2,[R0+1]
+            64'h0, 64'h0, 64'h0, 64'h0
+        );
+
+        // Canary preload
+        rx(cmd(4'h2, 12'h010, 16'd2, 32'h0), 8'h00);
+        rx({32'h0000BEEF, 32'h0000BEEF}, 8'h00);
+        rx({32'h0000BEEF, 32'h0000BEEF}, 8'h00);
+
+        send_gpu_tail(2);
+        wait_and_capture(MAX_CYCLES);
+        trace_en = 0;
+
+        // Dump GPU DMEM to diagnose
+        $display("  T24 GPU DMEM bank0[0..1]: %04h %04h",
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[0],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[1]);
+        $display("  T24 gpu_active=%b done=%b",
+            u_soc.gpu_active_r, u_soc.gpu_kernel_done_w);
+
+        checkN(tx_cnt, 2, "T24 TX count");
+        // Optimistic: self-ref CVT works → 15
+        // If deadlock: will show 0xBEEF (canary)
+        check64(tx_data[0], {32'h0000000F, 32'h0000000F}, "T24 CVT self-ref=15 (or 0xBEEF if deadlock)");
+        check64(tx_data[1], {32'h0000000F, 32'h0000000F}, "T24 all banks");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 25: Full Heterogeneous Pipeline WITH CVT
+    //
+    //  Same as T22 but GPU kernels use CVT for type conversion:
+    //    K1: LD→CVT.i2f→MUL.f(×2.0)→CVT.f2i→ST
+    //    K2: LD→CVT.i2f→ADD.f(+10.0)→CVT.f2i→ST
+    //  Uses different rD/rA for CVT (avoids potential deadlock).
+    //
+    //  Input:  [10, 20, 30, 40]
+    //  Pre +5: [15, 25, 35, 45]
+    //  K1 CVT×2: [30, 50, 70, 90]
+    //  K2 CVT+10: [40, 60, 80, 100]
+    //  Post+7: [47, 67, 87, 107]
+    //
+    //  K1 IMEM[0..7]:
+    //    [0] MOVI R0,0      [1] LD R1,[R0]
+    //    [2] CVT.i2f R2,R1  [3] MOVI R3,0x4000 (2.0)
+    //    [4] MUL.f R4,R2,R3 [5] CVT.f2i R5,R4
+    //    [6] ST R5,[R0]     [7] RET
+    //
+    //  K2 IMEM[8..15]:
+    //    [8]  MOVI R0,0      [9]  LD R1,[R0]
+    //    [10] CVT.i2f R2,R1  [11] MOVI R3,0x4120 (10.0)
+    //    [12] ADD.f R4,R2,R3 [13] CVT.f2i R5,R4
+    //    [14] ST R5,[R0]     [15] RET
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 25: Full heterogeneous with CVT ---");
+        cycle_cnt = 0;
+
+        // ── ARM IMEM (same structure as T22) ─────────────────
+        rx(cmd(4'h1, 12'h000, 16'd61, 32'h0), 8'h04);
+
+        // Phase 1: CPU pre-process (add 5 to DMEM[16..19])
+        rx({32'hE5901000, 32'hE3A00040}, 8'h00); // [0]MOV R0,#64; [1]LDR R1,[R0]
+        rx({32'hE5801000, 32'hE2811005}, 8'h00); // [2]ADD R1,R1,#5; [3]STR R1,[R0]
+        rx({32'hE2811005, 32'hE5901004}, 8'h00); // [4]LDR R1,[R0,#4]; [5]ADD
+        rx({32'hE5901008, 32'hE5801004}, 8'h00); // [6]STR [R0,#4]; [7]LDR [R0,#8]
+        rx({32'hE5801008, 32'hE2811005}, 8'h00); // [8]ADD; [9]STR [R0,#8]
+        rx({32'hE2811005, 32'hE590100C}, 8'h00); // [10]LDR [R0,#12]; [11]ADD
+        rx({ARM_NOP, 32'hE580100C}, 8'h00);      // [12]STR [R0,#12]; [13]NOP
+
+        // Phase 2: DMA D_IMEM (CPU[0..15] → GPU IMEM, 16 words)
+        rx({32'hEE000A10, 32'hE3A00000}, 8'h00); // [14]MOV R0,#0; [15]MCR CR0
+        rx({32'hE3A01010, 32'hEE010A10}, 8'h00); // [16]MCR CR1; [17]MOV R1,#16
+        rx({32'hE3A02005, 32'hEE021A10}, 8'h00); // [18]MCR CR2; [19]MOV R2,#5
+        rx({ARM_NOP, 32'hEE032A10}, 8'h00);      // [20]MCR CR3→DMA; [21]NOP
+        send_nop_pairs(5);                        // [22..31]
+
+        // Phase 3: DMA D_UNPACK (CPU[16..19] → GPU DMEM, burst_all)
+        rx({32'hEE000A10, 32'hE3A00010}, 8'h00); // [32]MOV R0,#16; [33]MCR CR0
+        rx({32'hEE011A10, 32'hE3A01000}, 8'h00); // [34]MOV R1,#0; [35]MCR CR1
+        rx({32'hEE022A10, 32'hE3A02001}, 8'h00); // [36]MOV R2,#1; [37]MCR CR2
+        rx({32'hEE033A10, 32'hE3A03041}, 8'h00); // [38]MOV R3,#65; [39]MCR CR3→DMA
+        send_nop_pairs(4);                        // [40..47]
+
+        // Phase 4: GPU launch K1 (entry_pc=0)
+        rx({32'hEE040A10, 32'hE3A00000}, 8'h00); // [48]MOV R0,#0; [49]MCR CR4
+        rx({32'hEE071A10, 32'hE3A0100F}, 8'h00); // [50]MOV R1,#15; [51]MCR CR7
+        rx({32'hEE052A10, 32'hE3A02001}, 8'h00); // [52]MOV R2,#1; [53]MCR CR5→launch
+        send_nop_pairs(7);                        // [54..67]
+
+        // Phase 5: GPU launch K2 (entry_pc=8)
+        rx({32'hEE040A10, 32'hE3A00008}, 8'h00); // [68]MOV R0,#8; [69]MCR CR4
+        rx({32'hEE071A10, 32'hE3A0100F}, 8'h00); // [70]MOV R1,#15; [71]MCR CR7
+        rx({32'hEE052A10, 32'hE3A02001}, 8'h00); // [72]MOV R2,#1; [73]MCR CR5→launch
+        send_nop_pairs(7);                        // [74..87]
+
+        // Phase 6: DMA D_PACK (GPU → CPU[24..27], burst_all)
+        rx({32'hEE000A10, 32'hE3A00000}, 8'h00); // [88]MOV R0,#0; [89]MCR CR0
+        rx({32'hEE011A10, 32'hE3A01018}, 8'h00); // [90]MOV R1,#24; [91]MCR CR1
+        rx({32'hEE022A10, 32'hE3A02001}, 8'h00); // [92]MOV R2,#1; [93]MCR CR2
+        rx({32'hEE033A10, 32'hE3A03043}, 8'h00); // [94]MOV R3,#67; [95]MCR CR3→DMA
+        send_nop_pairs(5);                        // [96..105]
+
+        // Phase 7: CPU post-process (load DMEM[24..27], add 7, store DMEM[32..35])
+        rx({32'hE3A02080, 32'hE3A00060}, 8'h00); // [106]MOV R0,#96; [107]MOV R2,#128
+        rx({32'hE2811007, 32'hE5901000}, 8'h00); // [108]LDR R1,[R0]; [109]ADD R1,R1,#7
+        rx({32'hE5901004, 32'hE5821000}, 8'h00); // [110]STR R1,[R2]; [111]LDR R1,[R0,#4]
+        rx({32'hE5821004, 32'hE2811007}, 8'h00); // [112]ADD; [113]STR [R2,#4]
+        rx({32'hE2811007, 32'hE5901008}, 8'h00); // [114]LDR [R0,#8]; [115]ADD
+        rx({32'hE590100C, 32'hE5821008}, 8'h00); // [116]STR [R2,#8]; [117]LDR [R0,#12]
+        rx({32'hE582100C, 32'hE2811007}, 8'h00); // [118]ADD; [119]STR [R2,#12]
+        rx({ARM_NOP, ARM_HALT}, 8'h00);           // [120]B .; [121]NOP
+
+        // ── CPU DMEM: GPU K1 CVT program (words 0..7) ───────
+        //   [0] MOVI R0,0       [1] LD R1,[R0]
+        //   [2] CVT.i2f R2,R1   [3] MOVI R3,0x4000 (2.0)
+        //   [4] MUL.f R4,R2,R3  [5] CVT.f2i R5,R4
+        //   [6] ST R5,[R0]      [7] RET
+        rx(cmd(4'h2, 12'h000, 16'd4, 32'h0), 8'h00);
+        rx({32'h10100000, 32'h20000000}, 8'h00); // {LD; MOVI R0,0}
+        rx({32'h20304000, 32'h2C210000}, 8'h00); // {MOVI R3,2.0; CVT.i2f R2,R1}
+        rx({32'h28540000, 32'h44423000}, 8'h00); // {CVT.f2i R5,R4; MUL.f R4,R2,R3}
+        rx({32'hC8000000, 32'h08500000}, 8'h00); // {RET; ST R5,[R0]}
+
+        // ── CPU DMEM: GPU K2 CVT program (words 8..15) ──────
+        //   [8]  MOVI R0,0       [9]  LD R1,[R0]
+        //   [10] CVT.i2f R2,R1   [11] MOVI R3,0x4120 (10.0)
+        //   [12] ADD.f R4,R2,R3  [13] CVT.f2i R5,R4
+        //   [14] ST R5,[R0]      [15] RET
+        rx(cmd(4'h2, 12'h008, 16'd4, 32'h0), 8'h00);
+        rx({32'h10100000, 32'h20000000}, 8'h00); // {LD; MOVI R0,0}
+        rx({32'h20304120, 32'h2C210000}, 8'h00); // {MOVI R3,10.0; CVT.i2f R2,R1}
+        rx({32'h28540000, 32'h34423000}, 8'h00); // {CVT.f2i R5,R4; ADD.f R4,R2,R3}
+        rx({32'hC8000000, 32'h08500000}, 8'h00); // {RET; ST R5,[R0]}
+
+        // ── CPU DMEM: Input data (words 16..19) ─────────────
+        rx(cmd(4'h2, 12'h010, 16'd2, 32'h0), 8'h00);
+        rx({32'h00000014, 32'h0000000A}, 8'h00); // {word17=20, word16=10}
+        rx({32'h00000028, 32'h0000001E}, 8'h00); // {word19=40, word18=30}
+
+        // ── Zero readback targets ────────────────────────────
+        rx(cmd(4'h2, 12'h018, 16'd2, 32'h0), 8'h00); // words 24..27
+        rx(64'h0, 8'h00); rx(64'h0, 8'h00);
+        rx(cmd(4'h2, 12'h020, 16'd2, 32'h0), 8'h00); // words 32..35
+        rx(64'h0, 8'h00); rx(64'h0, 8'h00);
+
+        // ── Commands ─────────────────────────────────────────
+        rx(cmd(4'h3, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx(cmd(4'h4, 12'h020, 16'd2, 32'h0), 8'h00);
+        rx(cmd(4'h5, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx_end;
+
+        wait_and_capture(20000);
+
+        checkN(tx_cnt, 2, "T25 TX count");
+        check64(tx_data[0], {32'h00000043, 32'h0000002F}, "T25 CVT full: bank1=67, bank0=47");
+        check64(tx_data[1], {32'h0000006B, 32'h00000057}, "T25 CVT full: bank3=107, bank2=87");
+        check8(tx_ctrl[0], 8'h04, "T25 ctrl");
         settle;
     end
 
