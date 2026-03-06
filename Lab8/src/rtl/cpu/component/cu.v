@@ -1,17 +1,8 @@
 /* file: cu.v
  Description: Control unit module for the Arm pipeline CPU design
  Author: Jeremy Cai
- Date: Feb. 23, 2026
- Version: 1.1
- Changes from 1.0:
-   - Rotated immediate fix: imm_dp no longer computes the rotation
-     combinationally.  The raw 8-bit immediate (zero-extended) is
-     output as imm32, and the rotation amount is routed to the barrel
-     shifter control signals (shift_type = ROR, shift_amount = rot_amount).
-     The EX1 barrel shifter performs the rotation from registered inputs,
-     eliminating the ~9ns combinational path that violated 8ns timing.
-   - This also corrects the shifter_carry_out for MOVS/ANDS/etc with
-     rotated immediates (previously always cin; now correct per ARM spec).
+ Date: Mar. 4, 2026
+ Version: 1.2
  */
 
 `ifndef CU_V
@@ -45,6 +36,8 @@ module cu (
     output wire t_msr_imm, // Move to PSR instruction with immediate operand
     output wire t_swi, // Software interrupt instruction
     output wire t_undef, // Undefined instruction
+    output wire t_mcr, // Coprocessor register write (MCR)
+    output wire t_mrc, // Coprocessor register read  (MRC)
 
     // Register file addresses
     output wire [3:0] rn_addr, // Rn register address for reading
@@ -114,6 +107,10 @@ module cu (
     output wire swap_byte, // Byte/word control signal for SWP instruction: 1 for byte swap (SWPB), 0 for word swap (SWP)
     output wire swi_en, // Enable signal for software interrupt instruction (SWI)
 
+    // Coprocessor control signals
+    output wire cp_wen, // MCR: write ARM Rd → CP.CRn (gated by cond_met & cp_num match)
+    output wire cp_ren, // MRC: read CP.CRn → ARM Rd (gated by cond_met & cp_num match)
+
     //Register usage flags for hazard detection and forwarding unit
     output wire use_rn,
     output wire use_rd,
@@ -141,6 +138,14 @@ wire [7:0] f_imm8 = instr[7:0]; // Immediate value field for data processing imm
 wire [3:0] f_rot = instr[11:8]; // Rotate field for data processing immediate instructions (the actual rotate amount is this field multiplied by 2)
 wire [11:0] f_off12 = instr[11:0]; // Offset value field for single data transfer instructions (the actual immediate value is this field after processing the I bit for immediate offset or register offset)
 wire [23:0] f_off24 = instr[23:0]; // Offset value field for branch instructions (the actual immediate value is this field sign-extended and multiplied by 4)
+
+// Coprocessor field extraction (reuses existing wires)
+// cp_num = f_rs = instr[11:8]  — coprocessor number
+// CRn    = f_rn = instr[19:16] — coprocessor register select
+// Rd     = f_rd = instr[15:12] — ARM source (MCR) / dest (MRC)
+// opc1   = instr[23:21]        — ignored (single-encoding CP10)
+// opc2   = instr[7:5]          — ignored
+// CRm    = f_rm = instr[3:0]   — ignored
 
 // Connect register address to differnt fields
 assign rn_addr = f_rn;
@@ -204,11 +209,24 @@ wire dec_bdt = o100;
 wire dec_br  = o101;
 wire dec_swi = o111 & instr[24];
 
+// Coprocessor Register Transfer (MCR / MRC)
+// Encoding: cond 1110 opc1[3] CRn[4] Rd[4] cp#[4] opc2[3] 1 CRm[4]
+//   instr[27:24] = 4'b1110  →  o111 & ~instr[24]
+//   instr[4]     = 1        →  f_bit4 (distinguishes from CDP where bit4=0)
+//   instr[20]    = 0 (MCR)  →  ~f_l
+//   instr[20]    = 1 (MRC)  →   f_l
+//   cp_num = instr[11:8] = f_rs — must match CP10 (4'b1010)
+wire cp_num_match = (f_rs == 4'b1010);
+wire dec_cp_base = o111 & ~instr[24] & f_bit4 & cp_num_match;
+wire dec_mcr = dec_cp_base & ~f_l;
+wire dec_mrc = dec_cp_base &  f_l;
+
 // Undefined instruction identification
 wire dec_valid = dec_dp_reg  | dec_dp_imm  | dec_mul    | dec_mull   |
                     dec_swp   | dec_bx    | dec_hdt_rego | dec_hdt_immo |
                     dec_sdt_immo | dec_sdt_rego | dec_bdt  | dec_br     |
-                    dec_mrs   | dec_msr_reg | dec_msr_imm  | dec_swi;
+                    dec_mrs   | dec_msr_reg | dec_msr_imm  | dec_swi   |
+                    dec_mcr   | dec_mrc;
 
 wire dec_undef = ~dec_valid;
 
@@ -229,6 +247,8 @@ assign t_msr_reg = dec_msr_reg;
 assign t_msr_imm = dec_msr_imm;
 assign t_swi     = dec_swi;
 assign t_undef   = dec_undef;
+assign t_mcr     = dec_mcr;
+assign t_mrc     = dec_mrc;
 
 // Step 3: Identify convenience groups
 wire is_dp = dec_dp_reg | dec_dp_imm;
@@ -238,7 +258,7 @@ wire is_load = f_l;
 wire dp_test = (f_opcode[3:2] == 2'b10);
 
 // Step 4: Immediate value generation
-wire [4:0] rot_amount = {f_rot, 1'b0};
+wire [4:0] rot_amount = {f_rot, 1'b0}; // ISE fix: concatenation avoids 4-bit truncation
 wire [31:0] imm8_ext = {24'b0, f_imm8}; // Zero-extend the 8-bit immediate value to 32 bits
 wire [31:0] imm_sdt = {20'b0, f_off12};
 wire [31:0] imm_hdt = {24'b0, f_rs, f_rm}; 
@@ -283,21 +303,6 @@ assign alu_src_b = dec_dp_imm | dec_msr_imm | dec_sdt_immo | dec_hdt_immo; // Us
 assign cpsr_wen = cond_met & ((is_dp | dec_mul | dec_mull) & f_s);
 
 // Step 6: Generate barrel shifter control signals
-/* v1.1 FIX: For dp_imm / msr_imm with non-zero rotation, route the
- * rotation through the EX1 barrel shifter instead of computing it
- * combinationally in imm_dp.
- *
- * Priority: sh_active (dp_reg, sdt_rego) > imm_rot_active (dp_imm, msr_imm)
- * These are mutually exclusive instruction types, so no conflict.
- *
- * When imm_rot_active:
- *   shift_type   = ROR  (rotate right)
- *   shift_amount = rot_amount = {f_rot, 1'b0}  (0-30 in steps of 2)
- *   shift_src    = 0  (immediate shift amount, not register)
- *
- * cpu_mt.v EX1 must feed imm32 (instead of Rm) into the barrel shifter
- * when alu_src_b=1.  See cpu_mt.v v2.6 changes.
- */
 wire sh_active = dec_dp_reg | dec_sdt_rego;
 wire imm_rot_active = (dec_dp_imm | dec_msr_imm) & (rot_amount != 5'd0);
 
@@ -337,12 +342,12 @@ assign addr_wb  = ~instr[24] | instr[21]; // post-ix or W
 
 // Step 9: Write-back source select signal generation
 always @(*) begin
-    if ((is_sdt | is_hdt) & is_load)
-                                        wb_sel = 3'b001;  // memory data
-    else if (dec_br & instr[24])     wb_sel = 3'b010;  // BL return addr
-    else if (dec_mrs)                wb_sel = 3'b011;  // PSR value
-    else if (dec_mul | dec_mull)     wb_sel = 3'b100;  // multiplier
-    else                             wb_sel = 3'b000;  // ALU result
+    if ((is_sdt | is_hdt) & is_load) wb_sel = `WB_MEM;   // 3'b001 memory data
+    else if (dec_br & instr[24])     wb_sel = `WB_LINK;   // 3'b010 BL return addr
+    else if (dec_mrs)                wb_sel = `WB_PSR;    // 3'b011 PSR value
+    else if (dec_mul | dec_mull)     wb_sel = 3'b100;      // multiplier
+    else if (dec_mrc)                wb_sel = `WB_CP;      // 3'b101 coprocessor read
+    else                             wb_sel = `WB_ALU;     // 3'b000 ALU result
 end
 
 // Step 10: Register write signal generation (Also see BDTU unit for multi-cycle instruction register write control)
@@ -350,12 +355,14 @@ assign wr_addr1 = dec_mul ? f_rn  :    // MUL/MLA dest
                  (dec_br & instr[24]) ? 4'd14 :    // BL -> R14
                  f_rd;
 // --- Primary write enable ---
+// MRC writes coprocessor read data to ARM Rd
 wire raw_we1 = (is_dp & ~dp_test)            | // DP (non-test)
                 ((is_sdt | is_hdt) & is_load) | // LDR / LDRH / …
                 dec_mul                        | // MUL / MLA
                 dec_mull                       | // MULL / MLAL
                 dec_mrs                        | // MRS
-                (dec_br & instr[24]); // BL (link)
+                (dec_br & instr[24])           | // BL (link)
+                dec_mrc;                         // MRC → Rd
 assign wr_en1 = cond_met & raw_we1;
 
 assign wr_addr2 = f_rn;
@@ -391,7 +398,16 @@ assign bdt_wb = instr[21]; // W bit
 assign swap_byte = instr[22]; // 1 = SWPB
 assign swi_en = cond_met & dec_swi;
 
-// Step 16: Register usage flag generation for hazard detection and forwarding unit
+// Step 16: Coprocessor control signal generation
+// cp_wen/cp_ren are condition-gated and cp_num-matched.
+// CRn (= f_rn = rn_addr) is already an output — cpu_mt pipes it
+// through the existing rn_addr pipeline registers to EX2.
+// MCR source data is ARM Rd, read via RF port 4 (rd_addr).
+assign cp_wen = cond_met & dec_mcr;
+assign cp_ren = cond_met & dec_mrc;
+
+// Step 17: Register usage flag generation for hazard detection and forwarding unit
+// MCR reads Rd as the data source (ARM Rd → CP10.CRn)
 assign use_rn = is_dp | is_sdt | is_hdt | dec_swp | dec_bdt |
                 (dec_mull & instr[21]);              // MLAL acc RdHi
 
@@ -403,9 +419,10 @@ assign use_rs = (dec_dp_reg & f_bit4) | dec_mul | dec_mull;
 
 assign use_rd = ((is_sdt | is_hdt) & ~is_load)  |  // STR data
                 (dec_mul  & instr[21])            |  // MLA accumulate
-                (dec_mull & instr[21]);              // MLAL acc RdLo
+                (dec_mull & instr[21])            |  // MLAL acc RdLo
+                dec_mcr;                              // MCR source
 
-// Step 17: Multi-cycle instruction indication
+// Step 18: Multi-cycle instruction indication
 assign is_multi_cycle = cond_met & ((dec_bdt & |bdt_list) | dec_swp);
 
 endmodule

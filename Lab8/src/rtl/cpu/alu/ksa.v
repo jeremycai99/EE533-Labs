@@ -4,6 +4,9 @@
  Author: Jeremy Cai
  Date: Feb. 8, 2026
  Version: 1.0
+ Revision History:
+    - Feb. 8, 2026 v1.0: 64 bit adder for 64 bit data
+    - Mar. 5, 2026 v1.1: Reduce to 32 bit for low resource usage
  */
 
 `ifndef KSA_V
@@ -12,14 +15,14 @@
 `include "define.v"
 
 module ksa (
-    input wire [63:0] operand_a,
-    input wire [63:0] operand_b,
+    input wire [31:0] operand_a,
+    input wire [31:0] operand_b,
     input wire cin,
-    output wire [63:0] sum,
+    output wire [31:0] sum,
     output wire cout
 );
 
-localparam N = 65;
+localparam N = 33; // 32 data bits + 1 carry-in position
 
 wire [N-1:0] g0, p0;
 wire [N-1:0] g1, p1;
@@ -27,8 +30,6 @@ wire [N-1:0] g2, p2;
 wire [N-1:0] g3, p3;
 wire [N-1:0] g4, p4;
 wire [N-1:0] g5, p5;
-wire [N-1:0] g6, p6;
-wire [N-1:0] g7, p7;
 
 // Initial Generate and Propagate
 assign g0[0] = cin;
@@ -43,7 +44,7 @@ generate
     end
 endgenerate
 
-// Stage 1
+// Stage 1 (span 1)
 genvar i1;
 generate
     for (i1 = 0; i1 < N; i1 = i1 + 1) begin : gen_stage1
@@ -57,7 +58,7 @@ generate
     end
 endgenerate
 
-// Stage 2
+// Stage 2 (span 2)
 genvar i2;
 generate
     for (i2 = 0; i2 < N; i2 = i2 + 1) begin : gen_stage2
@@ -71,7 +72,7 @@ generate
     end
 endgenerate
 
-// Stage 3
+// Stage 3 (span 4)
 genvar i3;
 generate
     for (i3 = 0; i3 < N; i3 = i3 + 1) begin : gen_stage3
@@ -85,7 +86,7 @@ generate
     end
 endgenerate
 
-// Stage 4
+// Stage 4 (span 8)
 genvar i4;
 generate
     for (i4 = 0; i4 < N; i4 = i4 + 1) begin : gen_stage4
@@ -99,7 +100,7 @@ generate
     end
 endgenerate
 
-// Stage 5
+// Stage 5 (span 16)
 genvar i5;
 generate
     for (i5 = 0; i5 < N; i5 = i5 + 1) begin : gen_stage5
@@ -113,43 +114,15 @@ generate
     end
 endgenerate
 
-// Stage 6
-genvar i6;
-generate
-    for (i6 = 0; i6 < N; i6 = i6 + 1) begin : gen_stage6
-        if (i6 < 32) begin : gen_s6_pass
-            assign g6[i6] = g5[i6];
-            assign p6[i6] = p5[i6];
-        end else begin : gen_s6_merge
-            assign g6[i6] = g5[i6] | (p5[i6] & g5[i6-32]);
-            assign p6[i6] = p5[i6] & p5[i6-32];
-        end
-    end
-endgenerate
-
-// Stage 7
-genvar i7;
-generate
-    for (i7 = 0; i7 < N; i7 = i7 + 1) begin : gen_stage7
-        if (i7 < 64) begin : gen_s7_pass
-            assign g7[i7] = g6[i7];
-            assign p7[i7] = p6[i7];
-        end else begin : gen_s7_merge
-            assign g7[i7] = g6[i7] | (p6[i7] & g6[i7-64]);
-            assign p7[i7] = p6[i7] & p6[i7-64];
-        end
-    end
-endgenerate
-
 // Final sum
 genvar k;
 generate
-    for (k = 0; k < 64; k = k + 1) begin : gen_sum
-        assign sum[k] = p0[k+1] ^ g7[k];
+    for (k = 0; k < 32; k = k + 1) begin : gen_sum
+        assign sum[k] = p0[k+1] ^ g5[k];
     end
 endgenerate
 
-assign cout = g7[64];
+assign cout = g5[32];
 
 endmodule
 

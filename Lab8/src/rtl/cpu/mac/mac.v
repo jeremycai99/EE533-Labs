@@ -2,63 +2,97 @@
  Description: Dummy Multiply-Accumulate (MAC) unit for ARM multiply instructions.
               Supports MUL, MLA, UMULL, SMULL/SMLAL, UMLAL.
  Author: Jeremy Cai
- Date: Feb. 18, 2026
- Version: 1.0
+ Date: Mar. 5, 2026
+ Version: 2.0
+    Revision History:
+    - 1.0: Initial implementation with basic multiply and accumulate logic.
+    - 2.0: Updated to match ARM behavior more closely, including flag generation and control signals.
  */
-
- // DO NOT USE FOR SYNTHESIS!
-
+ 
 `ifndef MAC_V
 `define MAC_V
 
 `include "define.v"
+`include "test_int32mult.v"
+`include "addsub.v"
 
 module mac (
     // Operand inputs
-    input  wire [`REG_DATA_WIDTH-1:0] rm, // Multiplicand (Rm field)
-    input  wire [`REG_DATA_WIDTH-1:0] rs, // Multiplier   (Rs field)
-    input  wire [`REG_DATA_WIDTH-1:0] rn_acc, // Accumulate value for MLA  (Rn field / RdHi for long)
-    input  wire [`REG_DATA_WIDTH-1:0] rdlo_acc, // Accumulate low for SMLAL/UMLAL (Rd field = RdLo)
+    input wire [`REG_DATA_WIDTH-1:0] rm,        // Multiplicand (Rm field)
+    input wire [`REG_DATA_WIDTH-1:0] rs,        // Multiplier   (Rs field)
+    input wire [`REG_DATA_WIDTH-1:0] rn_acc,    // MLA: Rn accumulate / Long: RdHi accumulate
+    input wire [`REG_DATA_WIDTH-1:0] rdlo_acc,  // Long: RdLo accumulate (UMLAL/SMLAL)
 
     // Control inputs from CU (latched in ID/EX)
-    input  wire mul_en, // Multiply enable
-    input  wire mul_long, // 1 = 64-bit long multiply (UMULL/SMULL/UMLAL/SMLAL)
-    input  wire mul_signed, // 1 = signed multiply (SMULL/SMLAL), 0 = unsigned
-    input  wire mul_accumulate, // 1 = multiply-accumulate variant (MLA/UMLAL/SMLAL)
+    input wire mul_en,
+    input wire mul_long,        // 1 = 64-bit long multiply
+    input wire mul_signed,      // 1 = signed (SMULL/SMLAL)
+    input wire mul_accumulate,  // 1 = accumulate variant (MLA/UMLAL/SMLAL)
 
     // Result outputs
-    output wire [`REG_DATA_WIDTH-1:0] result_lo, // Lower 32 bits  (MUL/MLA result, or RdLo for long)
-    output wire [`REG_DATA_WIDTH-1:0] result_hi, // Upper 32 bits  (RdHi for long multiply; 0 for short)
-    output wire [3:0]  mac_flags // {N, Z, C(0), V(0)} — MUL/MULL flag outputs
+    output wire [`REG_DATA_WIDTH-1:0] result_lo, // MUL/MLA result, or RdLo for long
+    output wire [`REG_DATA_WIDTH-1:0] result_hi, // RdHi for long multiply; 0 for short
+    output wire [3:0] mac_flags                  // {N, Z, C(0), V(0)}
 );
 
-// Core Multiply
-// Signed 64-bit product (covers both signed and unsigned via mux)
-wire signed [2*`REG_DATA_WIDTH-1:0] s_product = $signed(rm) * $signed(rs);
-wire        [2*`REG_DATA_WIDTH-1:0] u_product = rm * rs;
+// ================================================================
+// Stage 1: 32×32 → 64-bit multiply
+// ================================================================
+wire [63:0] product;
 
-wire [2*`REG_DATA_WIDTH-1:0] product = mul_signed ? s_product : u_product;
+test_int32mult u_mult (
+    .operand_a(rm),
+    .operand_b(rs),
+    .is_signed(mul_signed),
+    .product(product)
+);
 
-// Accumulate
-// Short multiply accumulate: result = Rm * Rs + Rn
-wire [`REG_DATA_WIDTH-1:0] short_acc = product + rn_acc;
+// ================================================================
+// Stage 2: 64-bit accumulate via two chained 32-bit addsub units
+// ================================================================
 
-// Long multiply accumulate: result = Rm * Rs + {RdHi, RdLo}
-wire [2*`REG_DATA_WIDTH-1:0] long_acc_val = {rn_acc, rdlo_acc};
-wire [2*`REG_DATA_WIDTH-1:0] long_acc     = product + long_acc_val;
+// Low accumulate operand: MLA uses rn_acc, long uses rdlo_acc
+wire [`REG_DATA_WIDTH-1:0] acc_lo_b = mul_long ? rdlo_acc : rn_acc;
 
-// Result Mux
-wire [2*`REG_DATA_WIDTH-1:0] long_result  = mul_accumulate ? long_acc  : product;
-wire [`REG_DATA_WIDTH-1:0] short_result = mul_accumulate ? short_acc : product;
+wire [`REG_DATA_WIDTH-1:0] acc_lo_result;
+wire acc_lo_carry;
 
-assign result_lo = mul_long ? long_result[`REG_DATA_WIDTH-1:0]  : short_result;
-assign result_hi = mul_long ? long_result[2*`REG_DATA_WIDTH-1:`REG_DATA_WIDTH] : {`REG_DATA_WIDTH{1'b0}};
+addsub u_acc_lo (
+    .operand_a(product[31:0]),
+    .operand_b(acc_lo_b),
+    .sub(1'b0),
+    .carry_in(1'b0),
+    .result(acc_lo_result),
+    .overflow(),              // unused — ARM MUL V flag is unpredictable
+    .carry_out(acc_lo_carry)
+);
 
-// Flag Generation
-// ARM MUL/MULL sets N and Z; C and V are UNPREDICTABLE (we set to 0)
-// wire [`REG_DATA_WIDTH-1:0] flag_check = mul_long ? long_result[2*`REG_DATA_WIDTH-1:`REG_DATA_WIDTH] : short_result;
-wire        n_flag = mul_long ? long_result[2*`REG_DATA_WIDTH-1] : short_result[`REG_DATA_WIDTH-1];
-wire        z_flag = mul_long ? (long_result == {2*`REG_DATA_WIDTH{1'b0}}) : (short_result == {`REG_DATA_WIDTH{1'b0}});
+// High accumulate: product[63:32] + rn_acc + carry from low
+wire [`REG_DATA_WIDTH-1:0] acc_hi_result;
+
+addsub u_acc_hi (
+    .operand_a(product[63:32]),
+    .operand_b(rn_acc),
+    .sub(1'b0),
+    .carry_in(acc_lo_carry),
+    .result(acc_hi_result),
+    .overflow(),
+    .carry_out()
+);
+
+// ================================================================
+// Result mux
+// ================================================================
+assign result_lo = mul_accumulate ? acc_lo_result : product[31:0];
+assign result_hi = mul_long ? (mul_accumulate ? acc_hi_result : product[63:32])
+                            : {`REG_DATA_WIDTH{1'b0}};
+
+// ================================================================
+// Flag generation
+// ARM MUL/MULL: N and Z are meaningful; C and V are unpredictable (0)
+// ================================================================
+wire n_flag = mul_long ? result_hi[`REG_DATA_WIDTH-1] : result_lo[`REG_DATA_WIDTH-1];
+wire z_flag = mul_long ? ({result_hi, result_lo} == 64'd0) : (result_lo == {`REG_DATA_WIDTH{1'b0}});
 
 assign mac_flags = mul_en ? {n_flag, z_flag, 1'b0, 1'b0} : 4'b0;
 

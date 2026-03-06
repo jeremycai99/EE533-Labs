@@ -8,6 +8,7 @@
  Revision history:
     - 1.0: Initial version with basic addition and subtraction using Kogge-Stone Adder (Feb. 10, 2026)
     - 1.1: Updated version with more flag detection and carry_in handling (Feb. 17, 2026)
+    - 1.2: Update the data width (64 -> 32) feeding to ksa
  */
 
 `ifndef ADDSUB_V
@@ -26,32 +27,22 @@ module addsub (
     output wire carry_out                       // Carry out for addition (not used for subtraction)
 );
 
-wire [63:0] operand_a_ext; // Extended first operand for addition/subtraction
-wire [63:0] operand_b_ext; // Extended second operand for addition/subtraction
+// Modify operand_b for subtraction (one's complement; carry_in completes two's complement)
+wire [`DATA_WIDTH-1:0] operand_b_mod = sub ? ~operand_b : operand_b;
 
-assign operand_a_ext = {{(64-`DATA_WIDTH){operand_a[`DATA_WIDTH-1]}}, operand_a};
-assign operand_b_ext = {{(64-`DATA_WIDTH){operand_b[`DATA_WIDTH-1]}}, operand_b};
-
-wire [63:0] operand_b_ext_mod; // Modified second operand for subtraction
-
-// Modify operand_b for subtraction (two's complement)
-assign operand_b_ext_mod = sub ? ~operand_b_ext : operand_b_ext;
-
-wire [63:0] sum_ext; // Extended sum output from KSA
-
-// Instantiate the Kogge-Stone Adder
+// Instantiate the 32-bit Kogge-Stone Adder
 ksa u_ksa (
-    .operand_a(operand_a_ext),
-    .operand_b(operand_b_ext_mod),
-    .cin(carry_in), // Carry input is directly passed to KSA, which will handle it correctly for both addition and subtraction
-    .sum(sum_ext),
-    .cout(carry_out) //For alu C flag
+    .operand_a(operand_a),
+    .operand_b(operand_b_mod),
+    .cin(carry_in),
+    .sum(result),
+    .cout(carry_out)
 );
 
-assign result = sum_ext[`DATA_WIDTH-1:0]; // Truncate the result to the defined data width
 // Overflow detection for addition and subtraction
-assign overflow = (sub) ? ((operand_a[`DATA_WIDTH-1] != operand_b[`DATA_WIDTH-1]) && (result[`DATA_WIDTH-1] != operand_a[`DATA_WIDTH-1])) : // Subtraction overflow
-                          ((operand_a[`DATA_WIDTH-1] == operand_b[`DATA_WIDTH-1]) && (result[`DATA_WIDTH-1] != operand_a[`DATA_WIDTH-1])); // Addition overflow
+assign overflow = (sub) ? ((operand_a[`DATA_WIDTH-1] != operand_b[`DATA_WIDTH-1]) && (result[`DATA_WIDTH-1] != operand_a[`DATA_WIDTH-1])) :
+                          ((operand_a[`DATA_WIDTH-1] == operand_b[`DATA_WIDTH-1]) && (result[`DATA_WIDTH-1] != operand_a[`DATA_WIDTH-1]));
+
 endmodule
 
 `endif //ADDSUB_V
