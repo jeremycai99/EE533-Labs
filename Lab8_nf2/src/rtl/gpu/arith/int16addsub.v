@@ -2,14 +2,17 @@
  Description: This file implements the addition and subtraction operations for 16-bit integers using the Han-Carlson Adder (HCA).
  We don't take care of carry-out
  Author: Jeremy Cai
- Date: Feb. 25, 2026
- Version: 1.0
+ Date: Mar. 6, 2026
+ Version: 1.1
  Revision history:
     - Feb. 25, 2026: Initial implementation of addition and subtraction for 16-bit integers using the Han-Carlson Adder (HCA).
+    - Mar. 6, 2026: Updated to replace HCA with operator inference for better performance and resource utilization.
  */
 
 `ifndef INT16ADDSUB_V
 `define INT16ADDSUB_V
+
+`include "gpu_define.v"
 
 module int16addsub (
     input  wire [15:0] a,
@@ -18,16 +21,8 @@ module int16addsub (
     output wire [15:0] result
 );
 
-    wire [15:0] b_mod = sub ? ~b : b; // If subtraction, take two's complement of b
-    wire cout; // Carry out from the HCA, not used in this design. Keep floating.
-
-    int16hca u_int16hca (
-        .a(a),
-        .b(b_mod),
-        .cin(sub), // For subtraction, we need to add 1 (two's complement), so cin is set to sub
-        .sum(result),
-        .cout(cout)
-    );
+    wire [15:0] b_mod = sub ? ~b : b;
+    assign result = a + b_mod + {15'd0, sub};
 
 endmodule
 

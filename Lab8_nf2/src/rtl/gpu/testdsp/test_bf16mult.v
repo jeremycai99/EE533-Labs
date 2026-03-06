@@ -1,9 +1,9 @@
 /* file: test_bf16mult.v
- * Description: Behavioral model of Xilinx bf16mult IP for iverilog simulation.
- * Matches IP interface: clk, a[15:0], b[15:0], result[15:0]
- * Latency: 1 clock cycle
- * Author: Jeremy Cai
- * Date: Mar. 5, 2026
+ Description: Behavioral model of Xilinx bf16mult IP for iverilog simulation.
+ Matches IP interface: clk, a[15:0], b[15:0], result[15:0]
+ Latency: 1 clock cycle
+ Author: Jeremy Cai
+ Date: Mar. 5, 2026
  */
 
 module test_bf16mult (
