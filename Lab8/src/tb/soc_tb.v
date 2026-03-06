@@ -87,11 +87,7 @@ reg         out_rdy;
 soc u_soc (
     .clk(clk), .rst_n(rst_n),
     .in_data(in_data), .in_ctrl(in_ctrl), .in_wr(in_wr), .in_rdy(in_rdy),
-    .out_data(out_data), .out_ctrl(out_ctrl), .out_wr(out_wr), .out_rdy(out_rdy),
-    .reg_req_in(1'b0), .reg_ack_in(1'b0), .reg_rd_wr_L_in(1'b0),
-    .reg_addr_in(32'd0), .reg_data_in(32'd0), .reg_src_in(2'd0),
-    .reg_req_out(), .reg_ack_out(), .reg_rd_wr_L_out(),
-    .reg_addr_out(), .reg_data_out(), .reg_src_out()
+    .out_data(out_data), .out_ctrl(out_ctrl), .out_wr(out_wr), .out_rdy(out_rdy)
 );
 
 // ═══════════════════════════════════════════════════════════════════

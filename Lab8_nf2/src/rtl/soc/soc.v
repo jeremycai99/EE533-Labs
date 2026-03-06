@@ -1,4 +1,4 @@
-/* file: soc_wrapper.v
+/* file: soc.v
  Description: SoC top-level wrapper — v8 FGMT architecture.
    4-thread barrel ARM + 4-thread SIMT GPU + pkt_proc + DMA + conv FIFO.
    pkt_proc is the sole FIFO master. No CP0 — CPU never touches FIFO.
@@ -8,8 +8,8 @@
  Version: 1.0
 */
 
-`ifndef SOC_WRAPPER_V
-`define SOC_WRAPPER_V
+`ifndef SOC_V
+`define SOC_V
 
 `include "define.v"
 `include "gpu_define.v"
@@ -38,32 +38,8 @@ module soc (
     output wire [63:0] out_data,
     output wire [7:0] out_ctrl,
     output wire out_wr,
-    input wire out_rdy,
-
-    // Register daisy chain (pass-through)
-    input wire reg_req_in,
-    input wire reg_ack_in,
-    input wire reg_rd_wr_L_in,
-    input wire [31:0] reg_addr_in,
-    input wire [31:0] reg_data_in,
-    input wire [1:0] reg_src_in,
-    output wire reg_req_out,
-    output wire reg_ack_out,
-    output wire reg_rd_wr_L_out,
-    output wire [31:0] reg_addr_out,
-    output wire [31:0] reg_data_out,
-    output wire [1:0] reg_src_out
+    input wire out_rdy
 );
-
-// ================================================================
-//   REGISTER DAISY CHAIN — pass-through
-// ================================================================
-assign reg_req_out = reg_req_in;
-assign reg_ack_out = reg_ack_in;
-assign reg_rd_wr_L_out = reg_rd_wr_L_in;
-assign reg_addr_out = reg_addr_in;
-assign reg_data_out = reg_data_in;
-assign reg_src_out = reg_src_in;
 
 // ================================================================
 //   INTERNAL WIRES — pkt_proc <-> conv_fifo
@@ -438,4 +414,4 @@ sm_core u_sm_core (
 
 endmodule
 
-`endif // SOC_WRAPPER_V
+`endif // SOC_V
