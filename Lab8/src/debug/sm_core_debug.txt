@@ -1,6 +1,6 @@
 VCD info: dumpfile sm_core_tb.vcd opened for output.
 ============================================
-  SM Core Testbench v1.2 â€” Starting
+  SM Core Testbench v1.4 â€” Starting
 ============================================
 
 --- K1: Basic ALU (MOVI + ADD) ---
@@ -779,7 +779,6 @@ VCD info: dumpfile sm_core_tb.vcd opened for output.
 [PASS] T306: K35 R6=reconv all  SP1.R6 = 0xdddd
 [PASS] T307: K35 R6=reconv all  SP2.R6 = 0xdddd
 [PASS] T308: K35 R6=reconv all  SP3.R6 = 0xdddd
-  K35 scoreboard pending: [0]=0000 [1]=0000 [2]=0000 [3]=0000
 
 --- K36: SIMT divergent DMEM store ---
   Taken: ST 0xAAAA, Fall: ST 0xBBBB to DMEM[200+TID]
@@ -973,13 +972,6 @@ VCD info: dumpfile sm_core_tb.vcd opened for output.
 [PASS] T318: K37 SP1 DMEM=31  SP1.DMEM[301] = 0x001f
 [PASS] T319: K37 SP2 DMEM=31  SP2.DMEM[302] = 0x001f
 [PASS] T320: K37 SP3 DMEM=121  SP3.DMEM[303] = 0x0079
-  K37 post-exec RF dump:
-  RF dump       R0     R1     R2     R3     R4     R5     R6     R7   
-       SP0:   0000  0003  0007  0000  0000  001f  0000  0000 
-       SP1:   0001  0003  0007  0000  0000  001f  0000  0000 
-       SP2:   0002  0003  0007  0000  0000  001f  0000  0000 
-       SP3:   0003  0003  0007  0000  0000  0079  0000  0000 
-  K37 scoreboard pending: [0]=0000 [1]=0000 [2]=0000 [3]=0000
 
 --- K38: SET instruction unit test ---
   Program listing:
@@ -1014,11 +1006,1859 @@ VCD info: dumpfile sm_core_tb.vcd opened for output.
 [PASS] T331: K38 SET P1=1 Sÿÿÿâÿ’R1  SP2.R5 = 0xaaaa
 [PASS] T332: K38 SET P1=1 Sÿÿÿâÿ’R1  SP3.R5 = 0xaaaa
 
+--- K39: MOVI+ST sanity baseline ---
+  Program listing:
+    [ 0] 2010000f  MOVI    R1, 15 (0x000f)
+    [ 1] 20200000  MOVI    R2, 0 (0x0000)
+    [ 2] 08120000  ST      R1, [R2 + 0]
+    [ 3] c8000000  RET
+[PASS] T333: K39 R1=15  SP0.R1 = 0x000f
+[PASS] T334: K39 R1=15  SP1.R1 = 0x000f
+[PASS] T335: K39 R1=15  SP2.R1 = 0x000f
+[PASS] T336: K39 R1=15  SP3.R1 = 0x000f
+[PASS] T337: K39 DMEM[0]=15  SP0.DMEM[0] = 0x000f
+[PASS] T338: K39 DMEM[0]=15  SP1.DMEM[0] = 0x000f
+[PASS] T339: K39 DMEM[0]=15  SP2.DMEM[0] = 0x000f
+[PASS] T340: K39 DMEM[0]=15  SP3.DMEM[0] = 0x000f
+
+--- K40: CVT.i2f basic (no stall, diff regs) ---
+  bf16(15.0) = 0x4170
+  Program listing:
+    [ 0] 2010000f  MOVI    R1, 15 (0x000f)
+    [ 1] 00000000  NOP
+    [ 2] 00000000  NOP
+    [ 3] 00000000  NOP
+    [ 4] 00000000  NOP
+    [ 5] 00000000  NOP
+    [ 6] 00000000  NOP
+    [ 7] 00000000  NOP
+    [ 8] 00000000  NOP
+    [ 9] 2c210000  CVT.i2f  R2, R1
+    [10] 00000000  NOP
+    [11] 00000000  NOP
+    [12] 00000000  NOP
+    [13] 00000000  NOP
+    [14] 00000000  NOP
+    [15] 00000000  NOP
+    [16] 00000000  NOP
+    [17] 00000000  NOP
+    [18] 20300000  MOVI    R3, 0 (0x0000)
+    [19] 08230000  ST      R2, [R3 + 0]
+    [20] c8000000  RET
+  [C000] PC=0 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=0
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C001] PC=0 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=0
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C002] PC=1 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=04 rD=1
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C003] PC=2 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=04 rD=1
+         RR: v=0 op=04 rD=1 we=1 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C004] PC=3 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=04 rD=1 we=1 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=04 dt=0 rD=1 launched=0 | opA=0000 opB=000f | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=000f
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C005] PC=4 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=04 dt=0 rD=1 launched=0 | opA=0000 opB=000f | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=000f
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C006] PC=5 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=1 we=1 result=000f | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C007] PC=6 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=1 wb_rD=1
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=1 we=1 data=000f active=1
+         SP0 WB: w0_we=1 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C008] PC=7 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C009] PC=8 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C010] PC=9 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C011] PC=10 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C012] PC=11 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=05 rD=2
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C013] PC=12 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=05 rD=2 we=1 dt=1 | addr0=1 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=000f | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C014] PC=13 fv=1 | fstl=1 sp_stl=1 sb=0 exb=1|1|1|1 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=05 dt=1 rD=2 launched=0 | opA=000f opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=1 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=1
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C015] PC=13 fv=1 | fstl=1 sp_stl=1 sb=0 exb=1|1|1|1 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=05 dt=1 rD=2 launched=1 | opA=000f opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=01 done=0 busy=1 | cvt_result=0000 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=1
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C016] PC=13 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=05 dt=1 rD=2 launched=1 | opA=000f opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=10 done=1 busy=0 | cvt_result=4170 | is_cvt=1 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=4170
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C017] PC=14 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=4170 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=2 we=1 result=4170 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C018] PC=15 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=1 wb_rD=2
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=4170 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=2 we=1 data=4170 active=1
+         SP0 WB: w0_we=1 w0_addr=2 w0_data=4170 | wb_data_final=4170
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C019] PC=16 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C020] PC=17 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C021] PC=18 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C022] PC=19 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C023] PC=20 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=04 rD=3
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C024] PC=21 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=2
+         RR: v=1 op=04 rD=3 we=1 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0008 [1]=0008 [2]=0008 [3]=0008 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C025] PC=21 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=2
+         RR: v=0 op=04 rD=3 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0008 [1]=0008 [2]=0008 [3]=0008 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=04 dt=0 rD=3 launched=0 | opA=0000 opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C026] PC=21 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=2
+         RR: v=0 op=04 rD=3 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0008 [1]=0008 [2]=0008 [3]=0008 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=04 dt=0 rD=3 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=1 rD=3 we=1 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C027] PC=21 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=2
+         RR: v=0 op=04 rD=3 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0008 [1]=0008 [2]=0008 [3]=0008 | wb_we=1 wb_rD=3
+         SP0 id_ex: v=0 op=04 dt=0 rD=3 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=3 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=3 we=1 data=0000 active=1
+         SP0 WB: w0_we=1 w0_addr=3 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C028] PC=22 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=19 rD=0
+         RR: v=1 op=01 rD=2 we=0 dt=0 | addr0=3 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=3
+         SP0 id_ex: v=0 op=04 dt=0 rD=3 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=3 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=3 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=3 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=3 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C029] PC=22 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=19 rD=0
+         RR: v=1 op=19 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=3
+         SP0 id_ex: v=1 op=01 dt=0 rD=2 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=0 rD=3 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=3 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=3 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C030] PC=22 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=19 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=3
+         SP0 id_ex: v=1 op=19 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=2 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=3 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=3 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+         >>> DMEM WRITE: we=1111 addr0=0 din0=4170 addr1=0 din1=4170
+
+  [C031] PC=22 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=2
+         SP0 id_ex: v=0 op=19 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=2 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=2 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C032] PC=22 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C033] PC=22 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C034] PC=22 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=1 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  RF dump       R0     R1     R2     R3     R4     R5   
+       SP0:   0000  000f  4170  0000  0000  0000 
+       SP1:   0000  000f  4170  0000  0000  0000 
+       SP2:   0000  000f  4170  0000  0000  0000 
+       SP3:   0000  000f  4170  0000  0000  0000 
+[PASS] T341: K40 R1=15 (unchanged)  SP0.R1 = 0x000f
+[PASS] T342: K40 R1=15 (unchanged)  SP1.R1 = 0x000f
+[PASS] T343: K40 R1=15 (unchanged)  SP2.R1 = 0x000f
+[PASS] T344: K40 R1=15 (unchanged)  SP3.R1 = 0x000f
+[PASS] T345: K40 R2=bf16(15)=0x4170  SP0.R2 = 0x4170
+[PASS] T346: K40 R2=bf16(15)=0x4170  SP1.R2 = 0x4170
+[PASS] T347: K40 R2=bf16(15)=0x4170  SP2.R2 = 0x4170
+[PASS] T348: K40 R2=bf16(15)=0x4170  SP3.R2 = 0x4170
+[PASS] T349: K40 DMEM[0]=0x4170  SP0.DMEM[0] = 0x4170
+[PASS] T350: K40 DMEM[0]=0x4170  SP1.DMEM[0] = 0x4170
+[PASS] T351: K40 DMEM[0]=0x4170  SP2.DMEM[0] = 0x4170
+[PASS] T352: K40 DMEM[0]=0x4170  SP3.DMEM[0] = 0x4170
+
+--- K41: CVT.f2i basic (no stall, diff regs) ---
+  Program listing:
+    [ 0] 20104170  MOVI    R1, 16752 (0x4170)
+    [ 1] 00000000  NOP
+    [ 2] 00000000  NOP
+    [ 3] 00000000  NOP
+    [ 4] 00000000  NOP
+    [ 5] 00000000  NOP
+    [ 6] 00000000  NOP
+    [ 7] 00000000  NOP
+    [ 8] 00000000  NOP
+    [ 9] 28210000  CVT.f2i  R2, R1
+    [10] 00000000  NOP
+    [11] 00000000  NOP
+    [12] 00000000  NOP
+    [13] 00000000  NOP
+    [14] 00000000  NOP
+    [15] 00000000  NOP
+    [16] 00000000  NOP
+    [17] 00000000  NOP
+    [18] 20300000  MOVI    R3, 0 (0x0000)
+    [19] 08230000  ST      R2, [R3 + 0]
+    [20] c8000000  RET
+  [C000] PC=0 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=0
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C001] PC=0 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=0
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C002] PC=1 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=04 rD=1
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C003] PC=2 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=04 rD=1
+         RR: v=0 op=04 rD=1 we=1 dt=0 | addr0=0 addr1=4
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C004] PC=3 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=04 rD=1 we=1 dt=0 | addr0=0 addr1=4
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=04 dt=0 rD=1 launched=0 | opA=0000 opB=4170 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=4170
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C005] PC=4 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=04 dt=0 rD=1 launched=0 | opA=0000 opB=4170 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=4170
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C006] PC=5 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=1 we=1 result=4170 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C007] PC=6 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=1 wb_rD=1
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=1 we=1 data=4170 active=1
+         SP0 WB: w0_we=1 w0_addr=1 w0_data=4170 | wb_data_final=4170
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C008] PC=7 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C009] PC=8 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C010] PC=9 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C011] PC=10 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C012] PC=11 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=05 rD=2
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C013] PC=12 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=05 rD=2 we=1 dt=0 | addr0=1 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=4170 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C014] PC=13 fv=1 | fstl=1 sp_stl=1 sb=0 exb=1|1|1|1 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=05 dt=0 rD=2 launched=0 | opA=4170 opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=1 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=1
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C015] PC=13 fv=1 | fstl=1 sp_stl=1 sb=0 exb=1|1|1|1 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=05 dt=0 rD=2 launched=1 | opA=4170 opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=01 done=0 busy=1 | cvt_result=0000 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=1
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C016] PC=13 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=05 dt=0 rD=2 launched=1 | opA=4170 opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=10 done=1 busy=0 | cvt_result=000f | is_cvt=1 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=000f
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C017] PC=14 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=000f | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=2 we=1 result=000f | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C018] PC=15 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=1 wb_rD=2
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=000f | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=2 we=1 data=000f active=1
+         SP0 WB: w0_we=1 w0_addr=2 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C019] PC=16 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C020] PC=17 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C021] PC=18 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C022] PC=19 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=00 rD=0
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C023] PC=20 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=04 rD=3
+         RR: v=1 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C024] PC=21 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=2
+         RR: v=1 op=04 rD=3 we=1 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0008 [1]=0008 [2]=0008 [3]=0008 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C025] PC=21 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=2
+         RR: v=0 op=04 rD=3 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0008 [1]=0008 [2]=0008 [3]=0008 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=04 dt=0 rD=3 launched=0 | opA=0000 opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C026] PC=21 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=2
+         RR: v=0 op=04 rD=3 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0008 [1]=0008 [2]=0008 [3]=0008 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=04 dt=0 rD=3 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=1 rD=3 we=1 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C027] PC=21 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=2
+         RR: v=0 op=04 rD=3 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0008 [1]=0008 [2]=0008 [3]=0008 | wb_we=1 wb_rD=3
+         SP0 id_ex: v=0 op=04 dt=0 rD=3 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=3 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=3 we=1 data=0000 active=1
+         SP0 WB: w0_we=1 w0_addr=3 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C028] PC=22 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=19 rD=0
+         RR: v=1 op=01 rD=2 we=0 dt=0 | addr0=3 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=3
+         SP0 id_ex: v=0 op=04 dt=0 rD=3 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=3 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=3 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=3 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=3 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C029] PC=22 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=19 rD=0
+         RR: v=1 op=19 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=3
+         SP0 id_ex: v=1 op=01 dt=0 rD=2 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=0 rD=3 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=3 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=3 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C030] PC=22 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=19 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=3
+         SP0 id_ex: v=1 op=19 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=2 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=3 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=3 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+         >>> DMEM WRITE: we=1111 addr0=0 din0=000f addr1=0 din1=000f
+
+  [C031] PC=22 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=2
+         SP0 id_ex: v=0 op=19 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=2 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=2 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C032] PC=22 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C033] PC=22 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C034] PC=22 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=1 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  RF dump       R0     R1     R2     R3     R4     R5   
+       SP0:   0000  4170  000f  0000  0000  0000 
+       SP1:   0000  4170  000f  0000  0000  0000 
+       SP2:   0000  4170  000f  0000  0000  0000 
+       SP3:   0000  4170  000f  0000  0000  0000 
+[PASS] T353: K41 R1=0x4170 (unchanged)  SP0.R1 = 0x4170
+[PASS] T354: K41 R1=0x4170 (unchanged)  SP1.R1 = 0x4170
+[PASS] T355: K41 R1=0x4170 (unchanged)  SP2.R1 = 0x4170
+[PASS] T356: K41 R1=0x4170 (unchanged)  SP3.R1 = 0x4170
+[PASS] T357: K41 R2=f2i(15.0)=15  SP0.R2 = 0x000f
+[PASS] T358: K41 R2=f2i(15.0)=15  SP1.R2 = 0x000f
+[PASS] T359: K41 R2=f2i(15.0)=15  SP2.R2 = 0x000f
+[PASS] T360: K41 R2=f2i(15.0)=15  SP3.R2 = 0x000f
+[PASS] T361: K41 DMEM[0]=15  SP0.DMEM[0] = 0x000f
+[PASS] T362: K41 DMEM[0]=15  SP1.DMEM[0] = 0x000f
+[PASS] T363: K41 DMEM[0]=15  SP2.DMEM[0] = 0x000f
+[PASS] T364: K41 DMEM[0]=15  SP3.DMEM[0] = 0x000f
+
+--- K42: CVT round-trip (diff regs, NOP padded) ---
+  Program listing:
+    [ 0] 2010000f  MOVI    R1, 15 (0x000f)
+    [ 1] 00000000  NOP
+    [ 2] 00000000  NOP
+    [ 3] 00000000  NOP
+    [ 4] 00000000  NOP
+    [ 5] 00000000  NOP
+    [ 6] 00000000  NOP
+    [ 7] 00000000  NOP
+    [ 8] 00000000  NOP
+    [ 9] 2c210000  CVT.i2f  R2, R1
+    [10] 00000000  NOP
+    [11] 00000000  NOP
+    [12] 00000000  NOP
+    [13] 00000000  NOP
+    [14] 00000000  NOP
+    [15] 00000000  NOP
+    [16] 00000000  NOP
+    [17] 00000000  NOP
+    [18] 28320000  CVT.f2i  R3, R2
+    [19] 00000000  NOP
+    [20] 00000000  NOP
+    [21] 00000000  NOP
+    [22] 00000000  NOP
+    [23] 00000000  NOP
+    [24] 00000000  NOP
+    [25] 00000000  NOP
+    [26] 00000000  NOP
+    [27] 20400000  MOVI    R4, 0 (0x0000)
+    [28] 08340000  ST      R3, [R4 + 0]
+    [29] c8000000  RET
+  RF dump       R0     R1     R2     R3     R4     R5   
+       SP0:   0000  000f  4170  000f  0000  0000 
+       SP1:   0000  000f  4170  000f  0000  0000 
+       SP2:   0000  000f  4170  000f  0000  0000 
+       SP3:   0000  000f  4170  000f  0000  0000 
+[PASS] T365: K42 R1=15  SP0.R1 = 0x000f
+[PASS] T366: K42 R1=15  SP1.R1 = 0x000f
+[PASS] T367: K42 R1=15  SP2.R1 = 0x000f
+[PASS] T368: K42 R1=15  SP3.R1 = 0x000f
+[PASS] T369: K42 R2=bf16(15)  SP0.R2 = 0x4170
+[PASS] T370: K42 R2=bf16(15)  SP1.R2 = 0x4170
+[PASS] T371: K42 R2=bf16(15)  SP2.R2 = 0x4170
+[PASS] T372: K42 R2=bf16(15)  SP3.R2 = 0x4170
+[PASS] T373: K42 R3=round-trip 15  SP0.R3 = 0x000f
+[PASS] T374: K42 R3=round-trip 15  SP1.R3 = 0x000f
+[PASS] T375: K42 R3=round-trip 15  SP2.R3 = 0x000f
+[PASS] T376: K42 R3=round-trip 15  SP3.R3 = 0x000f
+[PASS] T377: K42 DMEM[0]=15  SP0.DMEM[0] = 0x000f
+[PASS] T378: K42 DMEM[0]=15  SP1.DMEM[0] = 0x000f
+[PASS] T379: K42 DMEM[0]=15  SP2.DMEM[0] = 0x000f
+[PASS] T380: K42 DMEM[0]=15  SP3.DMEM[0] = 0x000f
+
+--- K43: CVT round-trip (diff regs, SB stalls) ---
+  Program listing:
+    [ 0] 2010000f  MOVI    R1, 15 (0x000f)
+    [ 1] 2c210000  CVT.i2f  R2, R1
+    [ 2] 28320000  CVT.f2i  R3, R2
+    [ 3] 20400000  MOVI    R4, 0 (0x0000)
+    [ 4] 08340000  ST      R3, [R4 + 0]
+    [ 5] c8000000  RET
+  [C000] PC=0 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=0
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C001] PC=0 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=0
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C002] PC=1 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=04 rD=1
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C003] PC=2 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=04 rD=1
+         RR: v=0 op=04 rD=1 we=1 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C004] PC=3 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=2
+         RR: v=1 op=04 rD=1 we=1 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=04 dt=0 rD=1 launched=0 | opA=0000 opB=000f | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=000f
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C005] PC=3 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=2
+         RR: v=0 op=04 rD=1 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=04 dt=0 rD=1 launched=0 | opA=0000 opB=000f | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=000f
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C006] PC=3 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=2
+         RR: v=0 op=04 rD=1 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=04 dt=0 rD=1 launched=0 | opA=0000 opB=000f | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=1 rD=1 we=1 result=000f | ex_result_muxed=000f
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C007] PC=3 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=2
+         RR: v=0 op=04 rD=1 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=1 wb_rD=1
+         SP0 id_ex: v=0 op=04 dt=0 rD=1 launched=0 | opA=0000 opB=000f | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=1 we=0 result=000f | ex_result_muxed=000f
+         SP0 MEM/WB: v=1 rD=1 we=1 data=000f active=1
+         SP0 WB: w0_we=1 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C008] PC=4 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=3
+         RR: v=1 op=05 rD=2 we=1 dt=1 | addr0=1 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=0 op=04 dt=0 rD=1 launched=0 | opA=0000 opB=000f | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=1 we=0 result=000f | ex_result_muxed=000f
+         SP0 MEM/WB: v=0 rD=1 we=0 data=000f active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=000f | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C009] PC=4 fv=1 | fstl=1 sp_stl=1 sb=1 exb=1|1|1|1 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=3
+         RR: v=0 op=05 rD=2 we=0 dt=1 | addr0=1 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=1 op=05 dt=1 rD=2 launched=0 | opA=000f opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=1 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=0 rD=1 we=0 result=000f | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=1 we=0 data=000f active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=000f | stall=1
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C010] PC=4 fv=1 | fstl=1 sp_stl=1 sb=1 exb=1|1|1|1 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=3
+         RR: v=0 op=05 rD=2 we=0 dt=1 | addr0=1 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=1 op=05 dt=1 rD=2 launched=1 | opA=000f opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=01 done=0 busy=1 | cvt_result=0000 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=0 rD=1 we=0 result=000f | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=1 we=0 data=000f active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=000f | stall=1
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C011] PC=4 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=3
+         RR: v=0 op=05 rD=2 we=0 dt=1 | addr0=1 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=1 op=05 dt=1 rD=2 launched=1 | opA=000f opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=10 done=1 busy=0 | cvt_result=4170 | is_cvt=1 ex_valid=1
+         SP0 EX/MEM: v=0 rD=1 we=0 result=000f | ex_result_muxed=4170
+         SP0 MEM/WB: v=0 rD=1 we=0 data=000f active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=000f | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C012] PC=4 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=3
+         RR: v=0 op=05 rD=2 we=0 dt=1 | addr0=1 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=0 op=05 dt=1 rD=2 launched=0 | opA=000f opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=4170 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=1 rD=2 we=1 result=4170 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=1 we=0 data=000f active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=000f | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C013] PC=4 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=3
+         RR: v=0 op=05 rD=2 we=0 dt=1 | addr0=1 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=1 wb_rD=2
+         SP0 id_ex: v=0 op=05 dt=1 rD=2 launched=0 | opA=000f opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=4170 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=0 rD=2 we=0 result=4170 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=2 we=1 data=4170 active=1
+         SP0 WB: w0_we=1 w0_addr=2 w0_data=4170 | wb_data_final=4170
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=000f | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C014] PC=5 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=04 rD=4
+         RR: v=1 op=05 rD=3 we=1 dt=0 | addr0=2 addr1=0
+         SB: pend[0]=0008 [1]=0008 [2]=0008 [3]=0008 | wb_we=0 wb_rD=2
+         SP0 id_ex: v=0 op=05 dt=1 rD=2 launched=0 | opA=000f opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=4170 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=0 rD=2 we=0 result=4170 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=2 we=0 data=4170 active=1
+         SP0 WB: w0_we=0 w0_addr=2 w0_data=4170 | wb_data_final=4170
+         SP0 RF_RD: ppl_r0_addr=2 ppl_r0_data=4170 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C015] PC=6 fv=1 | fstl=1 sp_stl=1 sb=1 exb=1|1|1|1 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=3
+         RR: v=1 op=04 rD=4 we=1 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0018 [1]=0018 [2]=0018 [3]=0018 | wb_we=0 wb_rD=2
+         SP0 id_ex: v=1 op=05 dt=0 rD=3 launched=0 | opA=4170 opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=1 pipe=00 done=0 busy=0 | cvt_result=4170 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=0 rD=2 we=0 result=4170 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=2 we=0 data=4170 active=1
+         SP0 WB: w0_we=0 w0_addr=2 w0_data=4170 | wb_data_final=4170
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=1
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C016] PC=6 fv=1 | fstl=1 sp_stl=1 sb=1 exb=1|1|1|1 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=3
+         RR: v=1 op=04 rD=4 we=1 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0018 [1]=0018 [2]=0018 [3]=0018 | wb_we=0 wb_rD=2
+         SP0 id_ex: v=1 op=05 dt=0 rD=3 launched=1 | opA=4170 opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=01 done=0 busy=1 | cvt_result=4170 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=0 rD=2 we=0 result=4170 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=2 we=0 data=4170 active=1
+         SP0 WB: w0_we=0 w0_addr=2 w0_data=4170 | wb_data_final=4170
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=1
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C017] PC=6 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=3
+         RR: v=1 op=04 rD=4 we=1 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0018 [1]=0018 [2]=0018 [3]=0018 | wb_we=0 wb_rD=2
+         SP0 id_ex: v=1 op=05 dt=0 rD=3 launched=1 | opA=4170 opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=10 done=1 busy=0 | cvt_result=000f | is_cvt=1 ex_valid=1
+         SP0 EX/MEM: v=0 rD=2 we=0 result=4170 | ex_result_muxed=000f
+         SP0 MEM/WB: v=0 rD=2 we=0 data=4170 active=1
+         SP0 WB: w0_we=0 w0_addr=2 w0_data=4170 | wb_data_final=4170
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C018] PC=6 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=3
+         RR: v=0 op=04 rD=4 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0018 [1]=0018 [2]=0018 [3]=0018 | wb_we=0 wb_rD=2
+         SP0 id_ex: v=1 op=04 dt=0 rD=4 launched=0 | opA=0000 opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=000f | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=3 we=1 result=000f | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=2 we=0 data=4170 active=1
+         SP0 WB: w0_we=0 w0_addr=2 w0_data=4170 | wb_data_final=4170
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C019] PC=6 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=3
+         RR: v=0 op=04 rD=4 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0018 [1]=0018 [2]=0018 [3]=0018 | wb_we=1 wb_rD=3
+         SP0 id_ex: v=0 op=04 dt=0 rD=4 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=000f | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=1 rD=4 we=1 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=3 we=1 data=000f active=1
+         SP0 WB: w0_we=1 w0_addr=3 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C020] PC=6 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=3
+         RR: v=0 op=04 rD=4 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0010 [1]=0010 [2]=0010 [3]=0010 | wb_we=1 wb_rD=4
+         SP0 id_ex: v=0 op=04 dt=0 rD=4 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=4 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=4 we=1 data=0000 active=1
+         SP0 WB: w0_we=1 w0_addr=4 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C021] PC=7 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=19 rD=0
+         RR: v=1 op=01 rD=3 we=0 dt=0 | addr0=4 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=4
+         SP0 id_ex: v=0 op=04 dt=0 rD=4 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=4 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=4 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=4 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=4 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C022] PC=7 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=19 rD=0
+         RR: v=1 op=19 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=4
+         SP0 id_ex: v=1 op=01 dt=0 rD=3 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=0 rD=4 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=4 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=4 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C023] PC=7 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=19 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=4
+         SP0 id_ex: v=1 op=19 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=3 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=4 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=4 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+         >>> DMEM WRITE: we=1111 addr0=0 din0=000f addr1=0 din1=000f
+
+  [C024] PC=7 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=3
+         SP0 id_ex: v=0 op=19 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=3 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=3 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C025] PC=7 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C026] PC=7 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C027] PC=7 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=1 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  RF dump       R0     R1     R2     R3     R4     R5   
+       SP0:   0000  000f  4170  000f  0000  0000 
+       SP1:   0000  000f  4170  000f  0000  0000 
+       SP2:   0000  000f  4170  000f  0000  0000 
+       SP3:   0000  000f  4170  000f  0000  0000 
+[PASS] T381: K43 R1=15  SP0.R1 = 0x000f
+[PASS] T382: K43 R1=15  SP1.R1 = 0x000f
+[PASS] T383: K43 R1=15  SP2.R1 = 0x000f
+[PASS] T384: K43 R1=15  SP3.R1 = 0x000f
+[PASS] T385: K43 R2=bf16(15)  SP0.R2 = 0x4170
+[PASS] T386: K43 R2=bf16(15)  SP1.R2 = 0x4170
+[PASS] T387: K43 R2=bf16(15)  SP2.R2 = 0x4170
+[PASS] T388: K43 R2=bf16(15)  SP3.R2 = 0x4170
+[PASS] T389: K43 R3=round-trip 15  SP0.R3 = 0x000f
+[PASS] T390: K43 R3=round-trip 15  SP1.R3 = 0x000f
+[PASS] T391: K43 R3=round-trip 15  SP2.R3 = 0x000f
+[PASS] T392: K43 R3=round-trip 15  SP3.R3 = 0x000f
+[PASS] T393: K43 DMEM[0]=15  SP0.DMEM[0] = 0x000f
+[PASS] T394: K43 DMEM[0]=15  SP1.DMEM[0] = 0x000f
+[PASS] T395: K43 DMEM[0]=15  SP2.DMEM[0] = 0x000f
+[PASS] T396: K43 DMEM[0]=15  SP3.DMEM[0] = 0x000f
+
+--- K44: CVT self-ref rD==rA (NOP padded) ---
+  Program listing:
+    [ 0] 2010000f  MOVI    R1, 15 (0x000f)
+    [ 1] 00000000  NOP
+    [ 2] 00000000  NOP
+    [ 3] 00000000  NOP
+    [ 4] 00000000  NOP
+    [ 5] 00000000  NOP
+    [ 6] 00000000  NOP
+    [ 7] 00000000  NOP
+    [ 8] 00000000  NOP
+    [ 9] 2c110000  CVT.i2f  R1, R1
+    [10] 00000000  NOP
+    [11] 00000000  NOP
+    [12] 00000000  NOP
+    [13] 00000000  NOP
+    [14] 00000000  NOP
+    [15] 00000000  NOP
+    [16] 00000000  NOP
+    [17] 00000000  NOP
+    [18] 20500000  MOVI    R5, 0 (0x0000)
+    [19] 08150000  ST      R1, [R5 + 0]
+    [20] 00000000  NOP
+    [21] 00000000  NOP
+    [22] 00000000  NOP
+    [23] 00000000  NOP
+    [24] 28110000  CVT.f2i  R1, R1
+    [25] 00000000  NOP
+    [26] 00000000  NOP
+    [27] 00000000  NOP
+    [28] 00000000  NOP
+    [29] 00000000  NOP
+    [30] 00000000  NOP
+    [31] 00000000  NOP
+    [32] 00000000  NOP
+    [33] 08150001  ST      R1, [R5 + 1]
+    [34] c8000000  RET
+  RF dump       R0     R1     R2     R3     R4     R5   
+       SP0:   0000  000f  0000  0000  0000  0000 
+       SP1:   0000  000f  0000  0000  0000  0000 
+       SP2:   0000  000f  0000  0000  0000  0000 
+       SP3:   0000  000f  0000  0000  0000  0000 
+[PASS] T397: K44 R1=15 (round-trip)  SP0.R1 = 0x000f
+[PASS] T398: K44 R1=15 (round-trip)  SP1.R1 = 0x000f
+[PASS] T399: K44 R1=15 (round-trip)  SP2.R1 = 0x000f
+[PASS] T400: K44 R1=15 (round-trip)  SP3.R1 = 0x000f
+[PASS] T401: K44 DMEM[0]=bf16(15)=0x4170  SP0.DMEM[0] = 0x4170
+[PASS] T402: K44 DMEM[0]=bf16(15)=0x4170  SP1.DMEM[0] = 0x4170
+[PASS] T403: K44 DMEM[0]=bf16(15)=0x4170  SP2.DMEM[0] = 0x4170
+[PASS] T404: K44 DMEM[0]=bf16(15)=0x4170  SP3.DMEM[0] = 0x4170
+[PASS] T405: K44 DMEM[1]=15  SP0.DMEM[1] = 0x000f
+[PASS] T406: K44 DMEM[1]=15  SP1.DMEM[1] = 0x000f
+[PASS] T407: K44 DMEM[1]=15  SP2.DMEM[1] = 0x000f
+[PASS] T408: K44 DMEM[1]=15  SP3.DMEM[1] = 0x000f
+
+--- K45: CVT self-ref rD==rA (SB stalls) ---
+  Program listing:
+    [ 0] 20000000  MOVI    R0, 0 (0x0000)
+    [ 1] 2010000f  MOVI    R1, 15 (0x000f)
+    [ 2] 2c110000  CVT.i2f  R1, R1
+    [ 3] 28110000  CVT.f2i  R1, R1
+    [ 4] 08100000  ST      R1, [R0 + 0]
+    [ 5] 20200000  MOVI    R2, 0 (0x0000)
+    [ 6] 08200001  ST      R2, [R0 + 1]
+    [ 7] c8000000  RET
+  [C000] PC=0 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=0
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C001] PC=0 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=0
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C002] PC=1 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=04 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C003] PC=2 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=04 rD=0
+         RR: v=0 op=04 rD=0 we=1 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C004] PC=3 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=04 rD=1
+         RR: v=1 op=04 rD=0 we=1 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0001 [1]=0001 [2]=0001 [3]=0001 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=04 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C005] PC=4 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=1
+         RR: v=1 op=04 rD=1 we=1 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0003 [1]=0003 [2]=0003 [3]=0003 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=04 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C006] PC=4 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=1
+         RR: v=0 op=04 rD=1 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0003 [1]=0003 [2]=0003 [3]=0003 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=1 op=04 dt=0 rD=1 launched=0 | opA=0000 opB=000f | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=0 we=1 result=0000 | ex_result_muxed=000f
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=0
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C007] PC=4 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=1
+         RR: v=0 op=04 rD=1 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0003 [1]=0003 [2]=0003 [3]=0003 | wb_we=1 wb_rD=0
+         SP0 id_ex: v=0 op=04 dt=0 rD=1 launched=0 | opA=0000 opB=000f | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=1 rD=1 we=1 result=000f | ex_result_muxed=000f
+         SP0 MEM/WB: v=1 rD=0 we=1 data=0000 active=1
+         SP0 WB: w0_we=1 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C008] PC=4 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=1
+         RR: v=0 op=04 rD=1 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=1 wb_rD=1
+         SP0 id_ex: v=0 op=04 dt=0 rD=1 launched=0 | opA=0000 opB=000f | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=1 we=0 result=000f | ex_result_muxed=000f
+         SP0 MEM/WB: v=1 rD=1 we=1 data=000f active=1
+         SP0 WB: w0_we=1 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C009] PC=5 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=1
+         RR: v=1 op=05 rD=1 we=1 dt=1 | addr0=1 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=0 op=04 dt=0 rD=1 launched=0 | opA=0000 opB=000f | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=1 we=0 result=000f | ex_result_muxed=000f
+         SP0 MEM/WB: v=0 rD=1 we=0 data=000f active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=000f | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C010] PC=5 fv=1 | fstl=1 sp_stl=1 sb=1 exb=1|1|1|1 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=1
+         RR: v=0 op=05 rD=1 we=0 dt=1 | addr0=1 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=1 op=05 dt=1 rD=1 launched=0 | opA=000f opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=1 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=0 rD=1 we=0 result=000f | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=1 we=0 data=000f active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=000f | stall=1
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C011] PC=5 fv=1 | fstl=1 sp_stl=1 sb=1 exb=1|1|1|1 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=1
+         RR: v=0 op=05 rD=1 we=0 dt=1 | addr0=1 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=1 op=05 dt=1 rD=1 launched=1 | opA=000f opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=01 done=0 busy=1 | cvt_result=0000 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=0 rD=1 we=0 result=000f | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=1 we=0 data=000f active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=000f | stall=1
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C012] PC=5 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=1
+         RR: v=0 op=05 rD=1 we=0 dt=1 | addr0=1 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=1 op=05 dt=1 rD=1 launched=1 | opA=000f opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=10 done=1 busy=0 | cvt_result=4170 | is_cvt=1 ex_valid=1
+         SP0 EX/MEM: v=0 rD=1 we=0 result=000f | ex_result_muxed=4170
+         SP0 MEM/WB: v=0 rD=1 we=0 data=000f active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=000f | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C013] PC=5 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=1
+         RR: v=0 op=05 rD=1 we=0 dt=1 | addr0=1 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=0 op=05 dt=1 rD=1 launched=0 | opA=000f opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=4170 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=1 rD=1 we=1 result=4170 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=1 we=0 data=000f active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=000f | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C014] PC=5 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=05 rD=1
+         RR: v=0 op=05 rD=1 we=0 dt=1 | addr0=1 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=1 wb_rD=1
+         SP0 id_ex: v=0 op=05 dt=1 rD=1 launched=0 | opA=000f opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=4170 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=0 rD=1 we=0 result=4170 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=1 we=1 data=4170 active=1
+         SP0 WB: w0_we=1 w0_addr=1 w0_data=4170 | wb_data_final=4170
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=000f | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C015] PC=6 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=1
+         RR: v=1 op=05 rD=1 we=1 dt=0 | addr0=1 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=0 op=05 dt=1 rD=1 launched=0 | opA=000f opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=4170 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=0 rD=1 we=0 result=4170 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=1 we=0 data=4170 active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=4170 | wb_data_final=4170
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=4170 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C016] PC=6 fv=1 | fstl=1 sp_stl=1 sb=1 exb=1|1|1|1 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=1
+         RR: v=0 op=05 rD=1 we=0 dt=0 | addr0=1 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=1 op=05 dt=0 rD=1 launched=0 | opA=4170 opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=1 pipe=00 done=0 busy=0 | cvt_result=4170 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=0 rD=1 we=0 result=4170 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=1 we=0 data=4170 active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=4170 | wb_data_final=4170
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=4170 | stall=1
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C017] PC=6 fv=1 | fstl=1 sp_stl=1 sb=1 exb=1|1|1|1 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=1
+         RR: v=0 op=05 rD=1 we=0 dt=0 | addr0=1 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=1 op=05 dt=0 rD=1 launched=1 | opA=4170 opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=01 done=0 busy=1 | cvt_result=4170 | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=0 rD=1 we=0 result=4170 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=1 we=0 data=4170 active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=4170 | wb_data_final=4170
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=4170 | stall=1
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C018] PC=6 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=1
+         RR: v=0 op=05 rD=1 we=0 dt=0 | addr0=1 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=1 op=05 dt=0 rD=1 launched=1 | opA=4170 opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=10 done=1 busy=0 | cvt_result=000f | is_cvt=1 ex_valid=1
+         SP0 EX/MEM: v=0 rD=1 we=0 result=4170 | ex_result_muxed=000f
+         SP0 MEM/WB: v=0 rD=1 we=0 data=4170 active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=4170 | wb_data_final=4170
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=4170 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C019] PC=6 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=1
+         RR: v=0 op=05 rD=1 we=0 dt=0 | addr0=1 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=0 op=05 dt=0 rD=1 launched=0 | opA=4170 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=000f | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=1 rD=1 we=1 result=000f | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=1 we=0 data=4170 active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=4170 | wb_data_final=4170
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=4170 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C020] PC=6 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=1
+         RR: v=0 op=05 rD=1 we=0 dt=0 | addr0=1 addr1=0
+         SB: pend[0]=0002 [1]=0002 [2]=0002 [3]=0002 | wb_we=1 wb_rD=1
+         SP0 id_ex: v=0 op=05 dt=0 rD=1 launched=0 | opA=4170 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=000f | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=0 rD=1 we=0 result=000f | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=1 we=1 data=000f active=1
+         SP0 WB: w0_we=1 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=1 ppl_r0_data=4170 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C021] PC=7 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=04 rD=2
+         RR: v=1 op=01 rD=1 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=0 op=05 dt=0 rD=1 launched=0 | opA=4170 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=000f | is_cvt=1 ex_valid=0
+         SP0 EX/MEM: v=0 rD=1 we=0 result=000f | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=1 we=0 data=000f active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C022] PC=8 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=2
+         RR: v=1 op=04 rD=2 we=1 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=1 op=01 dt=0 rD=1 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=000f | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=0 rD=1 we=0 result=000f | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=1 we=0 data=000f active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C023] PC=8 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=2
+         RR: v=0 op=04 rD=2 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=1 op=04 dt=0 rD=2 launched=0 | opA=0000 opB=0000 | rf_we=1 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=000f | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=1 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=1 we=0 data=000f active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=000f | wb_data_final=000f
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+         >>> DMEM WRITE: we=1111 addr0=0 din0=000f addr1=0 din1=000f
+
+  [C024] PC=8 fv=1 | fstl=1 sp_stl=0 sb=1 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=2
+         RR: v=0 op=04 rD=2 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=0 wb_rD=1
+         SP0 id_ex: v=0 op=04 dt=0 rD=2 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=1 rD=2 we=1 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=1 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=1 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C025] PC=8 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=0 | amask=1111 done=0 | de_v=1 de_op=01 rD=2
+         RR: v=0 op=04 rD=2 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0004 [1]=0004 [2]=0004 [3]=0004 | wb_we=1 wb_rD=2
+         SP0 id_ex: v=0 op=04 dt=0 rD=2 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=2 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=2 we=1 data=0000 active=1
+         SP0 WB: w0_we=1 w0_addr=2 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C026] PC=9 fv=1 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=1 de_op=19 rD=0
+         RR: v=1 op=01 rD=2 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=2
+         SP0 id_ex: v=0 op=04 dt=0 rD=2 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=2 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=2 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=2 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C027] PC=9 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=19 rD=0
+         RR: v=1 op=19 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=2
+         SP0 id_ex: v=1 op=01 dt=0 rD=2 launched=0 | opA=0000 opB=0001 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=0 rD=2 we=0 result=0000 | ex_result_muxed=0001
+         SP0 MEM/WB: v=0 rD=2 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=2 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C028] PC=9 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=19 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=2
+         SP0 id_ex: v=1 op=19 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=1
+         SP0 EX/MEM: v=1 rD=2 we=0 result=0001 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=2 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=2 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=1 alu_v_out=1 fpu_v_in=0 fpu_v_out=0 | set_v=0
+         >>> DMEM WRITE: we=1111 addr0=1 din0=0000 addr1=1 din1=0000
+
+  [C029] PC=9 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=2
+         SP0 id_ex: v=0 op=19 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=1 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=2 we=0 data=0001 active=1
+         SP0 WB: w0_we=0 w0_addr=2 w0_data=0001 | wb_data_final=0001
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C030] PC=9 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=1 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C031] PC=9 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=0 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  [C032] PC=9 fv=0 | fstl=0 sp_stl=0 sb=0 exb=0|0|0|0 drn=1 | amask=1111 done=1 | de_v=0 de_op=00 rD=0
+         RR: v=0 op=00 rD=0 we=0 dt=0 | addr0=0 addr1=0
+         SB: pend[0]=0000 [1]=0000 [2]=0000 [3]=0000 | wb_we=0 wb_rD=0
+         SP0 id_ex: v=0 op=00 dt=0 rD=0 launched=0 | opA=0000 opB=0000 | rf_we=0 active=1
+         SP0 CVT: valid_in=0 pipe=00 done=0 busy=0 | cvt_result=0000 | is_cvt=0 ex_valid=0
+         SP0 EX/MEM: v=0 rD=0 we=0 result=0000 | ex_result_muxed=0000
+         SP0 MEM/WB: v=0 rD=0 we=0 data=0000 active=1
+         SP0 WB: w0_we=0 w0_addr=0 w0_data=0000 | wb_data_final=0000
+         SP0 RF_RD: ppl_r0_addr=0 ppl_r0_data=0000 | stall=0
+         SP0 ALU/FPU: alu_v_in=0 alu_v_out=0 fpu_v_in=0 fpu_v_out=0 | set_v=0
+
+  RF dump       R0     R1     R2     R3     R4     R5   
+       SP0:   0000  000f  0000  0000  0000  0000 
+       SP1:   0000  000f  0000  0000  0000  0000 
+       SP2:   0000  000f  0000  0000  0000  0000 
+       SP3:   0000  000f  0000  0000  0000  0000 
+[PASS] T409: K45 R1=15 (self-ref round-trip)  SP0.R1 = 0x000f
+[PASS] T410: K45 R1=15 (self-ref round-trip)  SP1.R1 = 0x000f
+[PASS] T411: K45 R1=15 (self-ref round-trip)  SP2.R1 = 0x000f
+[PASS] T412: K45 R1=15 (self-ref round-trip)  SP3.R1 = 0x000f
+[PASS] T413: K45 DMEM[0]=15  SP0.DMEM[0] = 0x000f
+[PASS] T414: K45 DMEM[0]=15  SP1.DMEM[0] = 0x000f
+[PASS] T415: K45 DMEM[0]=15  SP2.DMEM[0] = 0x000f
+[PASS] T416: K45 DMEM[0]=15  SP3.DMEM[0] = 0x000f
+[PASS] T417: K45 DMEM[1]=0  SP0.DMEM[1] = 0x0000
+[PASS] T418: K45 DMEM[1]=0  SP1.DMEM[1] = 0x0000
+[PASS] T419: K45 DMEM[1]=0  SP2.DMEM[1] = 0x0000
+[PASS] T420: K45 DMEM[1]=0  SP3.DMEM[1] = 0x0000
+
+--- K46: CVT.i2f known values sweep ---
+  Program listing:
+    [ 0] 20100000  MOVI    R1, 0 (0x0000)
+    [ 1] 20200001  MOVI    R2, 1 (0x0001)
+    [ 2] 20300002  MOVI    R3, 2 (0x0002)
+    [ 3] 2040000f  MOVI    R4, 15 (0x000f)
+    [ 4] 20500064  MOVI    R5, 100 (0x0064)
+    [ 5] 00000000  NOP
+    [ 6] 00000000  NOP
+    [ 7] 00000000  NOP
+    [ 8] 00000000  NOP
+    [ 9] 00000000  NOP
+    [10] 00000000  NOP
+    [11] 00000000  NOP
+    [12] 00000000  NOP
+    [13] 2c610000  CVT.i2f  R6, R1
+    [14] 2c720000  CVT.i2f  R7, R2
+    [15] 2c830000  CVT.i2f  R8, R3
+    [16] 2c940000  CVT.i2f  R9, R4
+    [17] 2ca50000  CVT.i2f  R10, R5
+    [18] 00000000  NOP
+    [19] 00000000  NOP
+    [20] 00000000  NOP
+    [21] 00000000  NOP
+    [22] 00000000  NOP
+    [23] 00000000  NOP
+    [24] 00000000  NOP
+    [25] 00000000  NOP
+    [26] 00000000  NOP
+    [27] 00000000  NOP
+    [28] 00000000  NOP
+    [29] 00000000  NOP
+    [30] 08610000  ST      R6, [R1 + 0]
+    [31] 08710001  ST      R7, [R1 + 1]
+    [32] 08810002  ST      R8, [R1 + 2]
+    [33] 08910003  ST      R9, [R1 + 3]
+    [34] 08a10004  ST      R10, [R1 + 4]
+    [35] c8000000  RET
+  RF dump       R1     R2     R3     R4     R5     R6     R7     R8     R9     R10  
+       SP0:   0000  0001  0002  000f  0064  0000  3f80  4000  4170  42c8 
+       SP1:   0000  0001  0002  000f  0064  0000  3f80  4000  4170  42c8 
+       SP2:   0000  0001  0002  000f  0064  0000  3f80  4000  4170  42c8 
+       SP3:   0000  0001  0002  000f  0064  0000  3f80  4000  4170  42c8 
+[PASS] T421: K46 cvt(0)=0x0000  SP0.R6 = 0x0000
+[PASS] T422: K46 cvt(0)=0x0000  SP1.R6 = 0x0000
+[PASS] T423: K46 cvt(0)=0x0000  SP2.R6 = 0x0000
+[PASS] T424: K46 cvt(0)=0x0000  SP3.R6 = 0x0000
+[PASS] T425: K46 cvt(1)=0x3F80  SP0.R7 = 0x3f80
+[PASS] T426: K46 cvt(1)=0x3F80  SP1.R7 = 0x3f80
+[PASS] T427: K46 cvt(1)=0x3F80  SP2.R7 = 0x3f80
+[PASS] T428: K46 cvt(1)=0x3F80  SP3.R7 = 0x3f80
+[PASS] T429: K46 cvt(2)=0x4000  SP0.R8 = 0x4000
+[PASS] T430: K46 cvt(2)=0x4000  SP1.R8 = 0x4000
+[PASS] T431: K46 cvt(2)=0x4000  SP2.R8 = 0x4000
+[PASS] T432: K46 cvt(2)=0x4000  SP3.R8 = 0x4000
+[PASS] T433: K46 cvt(15)=0x4170  SP0.R9 = 0x4170
+[PASS] T434: K46 cvt(15)=0x4170  SP1.R9 = 0x4170
+[PASS] T435: K46 cvt(15)=0x4170  SP2.R9 = 0x4170
+[PASS] T436: K46 cvt(15)=0x4170  SP3.R9 = 0x4170
+[PASS] T437: K46 cvt(100)=0x42C8  SP0.R10 = 0x42c8
+[PASS] T438: K46 cvt(100)=0x42C8  SP1.R10 = 0x42c8
+[PASS] T439: K46 cvt(100)=0x42C8  SP2.R10 = 0x42c8
+[PASS] T440: K46 cvt(100)=0x42C8  SP3.R10 = 0x42c8
+[PASS] T441: K46 DMEM[0] cvt(0)  SP0.DMEM[0] = 0x0000
+[PASS] T442: K46 DMEM[0] cvt(0)  SP1.DMEM[0] = 0x0000
+[PASS] T443: K46 DMEM[0] cvt(0)  SP2.DMEM[0] = 0x0000
+[PASS] T444: K46 DMEM[0] cvt(0)  SP3.DMEM[0] = 0x0000
+[PASS] T445: K46 DMEM[1] cvt(1)  SP0.DMEM[1] = 0x3f80
+[PASS] T446: K46 DMEM[1] cvt(1)  SP1.DMEM[1] = 0x3f80
+[PASS] T447: K46 DMEM[1] cvt(1)  SP2.DMEM[1] = 0x3f80
+[PASS] T448: K46 DMEM[1] cvt(1)  SP3.DMEM[1] = 0x3f80
+[PASS] T449: K46 DMEM[2] cvt(2)  SP0.DMEM[2] = 0x4000
+[PASS] T450: K46 DMEM[2] cvt(2)  SP1.DMEM[2] = 0x4000
+[PASS] T451: K46 DMEM[2] cvt(2)  SP2.DMEM[2] = 0x4000
+[PASS] T452: K46 DMEM[2] cvt(2)  SP3.DMEM[2] = 0x4000
+[PASS] T453: K46 DMEM[3] cvt(15)  SP0.DMEM[3] = 0x4170
+[PASS] T454: K46 DMEM[3] cvt(15)  SP1.DMEM[3] = 0x4170
+[PASS] T455: K46 DMEM[3] cvt(15)  SP2.DMEM[3] = 0x4170
+[PASS] T456: K46 DMEM[3] cvt(15)  SP3.DMEM[3] = 0x4170
+[PASS] T457: K46 DMEM[4] cvt(100)  SP0.DMEM[4] = 0x42c8
+[PASS] T458: K46 DMEM[4] cvt(100)  SP1.DMEM[4] = 0x42c8
+[PASS] T459: K46 DMEM[4] cvt(100)  SP2.DMEM[4] = 0x42c8
+[PASS] T460: K46 DMEM[4] cvt(100)  SP3.DMEM[4] = 0x42c8
+
+--- K47: CVT.i2f + ADD.f cross-check ---
+  Program listing:
+    [ 0] 2010000f  MOVI    R1, 15 (0x000f)
+    [ 1] 00000000  NOP
+    [ 2] 00000000  NOP
+    [ 3] 00000000  NOP
+    [ 4] 00000000  NOP
+    [ 5] 00000000  NOP
+    [ 6] 00000000  NOP
+    [ 7] 00000000  NOP
+    [ 8] 00000000  NOP
+    [ 9] 2c210000  CVT.i2f  R2, R1
+    [10] 00000000  NOP
+    [11] 00000000  NOP
+    [12] 00000000  NOP
+    [13] 00000000  NOP
+    [14] 00000000  NOP
+    [15] 00000000  NOP
+    [16] 00000000  NOP
+    [17] 00000000  NOP
+    [18] 34322000  ADD.f   R3, R2, R2
+    [19] 00000000  NOP
+    [20] 00000000  NOP
+    [21] 00000000  NOP
+    [22] 00000000  NOP
+    [23] 00000000  NOP
+    [24] 00000000  NOP
+    [25] 20400000  MOVI    R4, 0 (0x0000)
+    [26] 08240000  ST      R2, [R4 + 0]
+    [27] 08340001  ST      R3, [R4 + 1]
+    [28] c8000000  RET
+  RF dump       R0     R1     R2     R3     R4     R5   
+       SP0:   0000  000f  4170  41f0  0000  0000 
+       SP1:   0000  000f  4170  41f0  0000  0000 
+       SP2:   0000  000f  4170  41f0  0000  0000 
+       SP3:   0000  000f  4170  41f0  0000  0000 
+[PASS] T461: K47 R2=bf16(15)=0x4170  SP0.R2 = 0x4170
+[PASS] T462: K47 R2=bf16(15)=0x4170  SP1.R2 = 0x4170
+[PASS] T463: K47 R2=bf16(15)=0x4170  SP2.R2 = 0x4170
+[PASS] T464: K47 R2=bf16(15)=0x4170  SP3.R2 = 0x4170
+[PASS] T465: K47 R3=bf16(30)=0x41F0  SP0.R3 = 0x41f0
+[PASS] T466: K47 R3=bf16(30)=0x41F0  SP1.R3 = 0x41f0
+[PASS] T467: K47 R3=bf16(30)=0x41F0  SP2.R3 = 0x41f0
+[PASS] T468: K47 R3=bf16(30)=0x41F0  SP3.R3 = 0x41f0
+[PASS] T469: K47 DMEM[0]=0x4170  SP0.DMEM[0] = 0x4170
+[PASS] T470: K47 DMEM[0]=0x4170  SP1.DMEM[0] = 0x4170
+[PASS] T471: K47 DMEM[0]=0x4170  SP2.DMEM[0] = 0x4170
+[PASS] T472: K47 DMEM[0]=0x4170  SP3.DMEM[0] = 0x4170
+[PASS] T473: K47 DMEM[1]=0x41F0  SP0.DMEM[1] = 0x41f0
+[PASS] T474: K47 DMEM[1]=0x41F0  SP1.DMEM[1] = 0x41f0
+[PASS] T475: K47 DMEM[1]=0x41F0  SP2.DMEM[1] = 0x41f0
+[PASS] T476: K47 DMEM[1]=0x41F0  SP3.DMEM[1] = 0x41f0
+
 ============================================
-  SM Core Testbench v1.3 â€” Summary
-  PASSED: 332
+  SM Core Testbench v1.4 â€” Summary
+  PASSED: 476
   FAILED: 0
-  TOTAL:  332
+  TOTAL:  476
 ============================================
 >>> ALL TESTS PASSED <<<
-../tb/sm_core_tb.v:1523: $finish called at 17108000 (1ps)
+../tb/sm_core_tb.v:1922: $finish called at 21770000 (1ps)
