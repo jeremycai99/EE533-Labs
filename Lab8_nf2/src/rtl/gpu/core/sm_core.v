@@ -5,14 +5,15 @@ Author: Jeremy Cai
 Date: Mar. 5, 2026
 Version: 1.4
 Revision history:
-- Feb. 27, 2026: Initial implementation of the CUDA-like SM core.
-- Mar. 4, 2026: v1.0 — Add SIMT stack and PBRA handling logic. Add convergence redirect support
-    in fetch unit and SIMT stack.
-- Mar. 4, 2026: v1.1 — Bug fixes
-- Mar. 4, 2026: v1.2 — SoC integration: add thread_mask[3:0] input port (from CP10 CR7).
-    Kernel launch uses thread_mask instead of hardcoded 4'b1111 for active_mask init.
-- Mar. 5, 2026: v1.3 — Remove debug_rf_addr/debug_rf_data ports and debug override mux.
-- Mar. 5, 2026: v1.4 — Fix CVT deadlock
+    - Feb. 27, 2026: Initial implementation of the CUDA-like SM core.
+    - Mar. 4, 2026: v1.0 — Add SIMT stack and PBRA handling logic. Add convergence redirect support
+        in fetch unit and SIMT stack.
+    - Mar. 4, 2026: v1.1 — Bug fixes
+    - Mar. 4, 2026: v1.2 — SoC integration: add thread_mask[3:0] input port (from CP10 CR7).
+        Kernel launch uses thread_mask instead of hardcoded 4'b1111 for active_mask init.
+    - Mar. 5, 2026: v1.3 — Remove debug_rf_addr/debug_rf_data ports and debug override mux.
+    - Mar. 5, 2026: v1.4 — Fix CVT deadlock
+    - Mar. 6, 2026: v1.5 — gpr_regfile 4R1W distributed RAM support.
  */
 
 `ifndef SM_CORE_V
@@ -120,9 +121,11 @@ module sm_core (
 
     wire tc_rf_override;
     wire [3:0] tc_rf_r0, tc_rf_r1, tc_rf_r2, tc_rf_r3;
-    wire [3:0] tc_w1_addr, tc_w2_addr, tc_w3_addr;
-    wire [4*16-1:0] tc_w1_data, tc_w2_data, tc_w3_data;
-    wire [3:0] tc_w1_we, tc_w2_we, tc_w3_we;
+
+    // v1.5: TC scatter — single write channel (serialized in tc_top v1.2)
+    wire [3:0] tc_w_addr;
+    wire [4*16-1:0] tc_w_data;
+    wire [3:0] tc_w_we;
 
     wire [4*16-1:0] flat_ovr_rf_r0 = {sp_ovr_rf_r0_data[3], sp_ovr_rf_r0_data[2],
                                        sp_ovr_rf_r0_data[1], sp_ovr_rf_r0_data[0]};
@@ -253,9 +256,6 @@ module sm_core (
             de_rf_r2_addr <= 4'd0; de_rf_r3_addr <= 4'd0;
             de_pc <= {`GPU_PC_WIDTH{1'b0}};
         end else if (kernel_start) begin
-            // v1.3: flush decode on kernel launch to clear stale instructions.
-            // Without this, a stalled CVT in decode (with front_stall=1 from
-            // scoreboard) survives kernel_start and blocks new kernel execution.
             de_valid <= 1'b0; de_rf_we <= 1'b0; de_pred_we <= 1'b0;
         end else if (de_flush) begin
             de_valid <= 1'b0; de_rf_we <= 1'b0; de_pred_we <= 1'b0;
@@ -370,7 +370,7 @@ module sm_core (
     assign pipeline_drained = ~sb_any_pending & ~any_ex_busy;
 
     // ================================================================
-    // Tensor Core Top
+    // Tensor Core Top (v1.2 — single scatter write channel)
     // ================================================================
     wire tc_trigger = de_valid & de_is_wmma_mma & ~tc_busy & ~burst_busy
                     & pipeline_drained;
@@ -386,9 +386,8 @@ module sm_core (
         .rf_addr_override(tc_rf_override),
         .rf_r0_addr(tc_rf_r0), .rf_r1_addr(tc_rf_r1),
         .rf_r2_addr(tc_rf_r2), .rf_r3_addr(tc_rf_r3),
-        .scat_w1_addr(tc_w1_addr), .scat_w1_data(tc_w1_data), .scat_w1_we(tc_w1_we),
-        .scat_w2_addr(tc_w2_addr), .scat_w2_data(tc_w2_data), .scat_w2_we(tc_w2_we),
-        .scat_w3_addr(tc_w3_addr), .scat_w3_data(tc_w3_data), .scat_w3_we(tc_w3_we)
+        // v1.2: single scatter write port
+        .scat_w_addr(tc_w_addr), .scat_w_data(tc_w_data), .scat_w_we(tc_w_we)
     );
 
     // ================================================================
@@ -521,6 +520,14 @@ module sm_core (
     end
 
     // ================================================================
+    // RF Override Select — shared read port mux (v1.5)
+    //   ovr_sel=1 when TC or BU needs the RF read ports.
+    //   Pipeline is stalled/drained during these phases, so sharing
+    //   the physical read ports is safe.
+    // ================================================================
+    wire ovr_sel = tc_rf_override | bu_rf_override_r;
+
+    // ================================================================
     // Convergence Checker
     // ================================================================
     wire at_reconv = ~stack_empty & fu_running
@@ -589,7 +596,6 @@ module sm_core (
             rr_rf_r2_addr <= 4'd0; rr_rf_r3_addr <= 4'd0;
             rr_active_mask <= 4'b0000;
         end else if (kernel_start) begin
-            // Flush RR on kernel launch
             rr_valid <= 1'b0; rr_rf_we <= 1'b0; rr_pred_we <= 1'b0;
         end else if (!sp_stall) begin
             if (!front_stall) begin
@@ -609,40 +615,31 @@ module sm_core (
     end
 
     // ================================================================
-    // External RF Write Mux (TC scatter / burst load)
+    // External RF Write Mux — single channel (v1.5)
+    //   TC scatter (1W serialized) and BU load (1W) are mutually
+    //   exclusive. BU has priority (defensive — shouldn't matter).
     // ================================================================
-    reg [3:0] ext_w1_addr [0:3];
-    reg [15:0] ext_w1_data [0:3];
-    reg ext_w1_we [0:3];
-    reg [3:0] ext_w2_addr [0:3];
-    reg [15:0] ext_w2_data [0:3];
-    reg ext_w2_we [0:3];
-    reg [3:0] ext_w3_addr [0:3];
-    reg [15:0] ext_w3_data [0:3];
-    reg ext_w3_we [0:3];
+    reg [3:0] ext_w_addr [0:3];
+    reg [15:0] ext_w_data [0:3];
+    reg ext_w_we [0:3];
 
     integer wi;
     always @(*) begin
         for (wi = 0; wi < 4; wi = wi + 1) begin
-            ext_w1_addr[wi] = tc_w1_addr;
-            ext_w1_data[wi] = tc_w1_data[wi*16 +: 16];
-            ext_w1_we[wi] = tc_w1_we[wi];
-            ext_w2_addr[wi] = tc_w2_addr;
-            ext_w2_data[wi] = tc_w2_data[wi*16 +: 16];
-            ext_w2_we[wi] = tc_w2_we[wi];
-            ext_w3_addr[wi] = tc_w3_addr;
-            ext_w3_data[wi] = tc_w3_data[wi*16 +: 16];
-            ext_w3_we[wi] = tc_w3_we[wi];
             if (bu_w1_we) begin
-                ext_w1_addr[wi] = bu_w1_addr;
-                ext_w1_data[wi] = dmem_douta[wi*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH];
-                ext_w1_we[wi] = 1'b1;
+                ext_w_addr[wi] = bu_w1_addr;
+                ext_w_data[wi] = dmem_douta[wi*`GPU_DMEM_DATA_WIDTH +: `GPU_DMEM_DATA_WIDTH];
+                ext_w_we[wi] = 1'b1;
+            end else begin
+                ext_w_addr[wi] = tc_w_addr;
+                ext_w_data[wi] = tc_w_data[wi*16 +: 16];
+                ext_w_we[wi] = tc_w_we[wi];
             end
         end
     end
 
     // ================================================================
-    // 4x SP Core
+    // 4x SP Core (v1.5 — single ext write port, ovr_sel)
     // ================================================================
     genvar t;
     generate
@@ -656,6 +653,7 @@ module sm_core (
                 .ovr_rf_r2_addr(ovr_rf_r2_addr_mux), .ovr_rf_r3_addr(ovr_rf_r3_addr_mux),
                 .ovr_rf_r0_data(sp_ovr_rf_r0_data[t]), .ovr_rf_r1_data(sp_ovr_rf_r1_data[t]),
                 .ovr_rf_r2_data(sp_ovr_rf_r2_data[t]), .ovr_rf_r3_data(sp_ovr_rf_r3_data[t]),
+                .ovr_sel(ovr_sel),
                 .pred_rd_sel(sp_pred_rd_sel_mux), .pred_rd_val(sp_pred_rd_val[t]),
                 .id_opcode(rr_opcode), .id_dt(rr_dt), .id_cmp_mode(rr_cmp_mode),
                 .id_rf_we(rr_rf_we), .id_pred_we(rr_pred_we),
@@ -667,9 +665,10 @@ module sm_core (
                 .ex_mem_valid_out(sp_ex_mem_valid[t]),
                 .ex_busy(sp_ex_busy[t]),
                 .mem_rdata(dmem_dout_a[t]),
-                .wb_ext_w1_addr(ext_w1_addr[t]), .wb_ext_w1_data(ext_w1_data[t]), .wb_ext_w1_we(ext_w1_we[t]),
-                .wb_ext_w2_addr(ext_w2_addr[t]), .wb_ext_w2_data(ext_w2_data[t]), .wb_ext_w2_we(ext_w2_we[t]),
-                .wb_ext_w3_addr(ext_w3_addr[t]), .wb_ext_w3_data(ext_w3_data[t]), .wb_ext_w3_we(ext_w3_we[t]),
+                // v1.5: single external write port
+                .wb_ext_w_addr(ext_w_addr[t]),
+                .wb_ext_w_data(ext_w_data[t]),
+                .wb_ext_w_we(ext_w_we[t]),
                 .mem_is_load(sp_mem_is_load[t]), .mem_is_store(sp_mem_is_store[t]),
                 .wb_rD_addr(sp_wb_rD_addr[t]), .wb_rf_we(sp_wb_rf_we[t]),
                 .wb_active(sp_wb_active[t]), .wb_valid(sp_wb_valid[t])

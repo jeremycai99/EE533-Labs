@@ -6,13 +6,7 @@
  Revision history:
     - Feb. 28, 2026: v1.0 — Initial implementation.
     - Mar. 02, 2026: v1.1 — Register rf_addr_override and rf_r*_addr
-      to break tc_state(FF) → rf_addr_override(comb) → bypass mux
-      critical path (-7.5ns slack).  Address setup occurs one cycle
-      before gather capture — same total cycle count.
-      TC_IDLE(trigger): register override=1, addr=rA_base+offsets
-      TC_GATHER_A:      RF stable, capture a_hold, set addr=rB
-      TC_GATHER_B:      RF stable, capture b_hold, set addr=rC
-      TC_GATHER_C:      RF stable, capture c_hold, clear override
+    - Mar. 06, 2026: v1.2 — Serialize scatter from 3-write×2-cycle to 1-write×4-cycle.
 */
 
 `ifndef TC_TOP_V
@@ -50,16 +44,11 @@ module tc_top (
     output reg [3:0] rf_r2_addr,
     output reg [3:0] rf_r3_addr,
 
-    // Scatter write ports (shared addr, per-SP data/we)
-    output reg [3:0] scat_w1_addr,
-    output reg [4*16-1:0] scat_w1_data,
-    output reg [3:0] scat_w1_we,
-    output reg [3:0] scat_w2_addr,
-    output reg [4*16-1:0] scat_w2_data,
-    output reg [3:0] scat_w2_we,
-    output reg [3:0] scat_w3_addr,
-    output reg [4*16-1:0] scat_w3_data,
-    output reg [3:0] scat_w3_we
+    // Scatter write port — single channel (v1.2)
+    // Shared addr across all SPs; per-SP data and write-enable
+    output reg [3:0] scat_w_addr,
+    output reg [4*16-1:0] scat_w_data,
+    output reg [3:0] scat_w_we
 );
 
     // ================================================================
@@ -71,10 +60,15 @@ module tc_top (
                      TC_GATHER_C = 3'd3,
                      TC_COMPUTE  = 3'd4,
                      TC_SCATTER0 = 3'd5,
-                     TC_SCATTER1 = 3'd6;
+                     TC_SCATTER1 = 3'd6,
+                     TC_SCATTER2 = 3'd7;
+
+    // TC_SCATTER3 uses the 3-bit overflow (3'd0 would alias TC_IDLE),
+    // so we use a separate 1-bit flag for the final scatter beat.
+    reg scatter3;
 
     reg [2:0] state;
-    assign busy = (state != TC_IDLE);
+    assign busy = (state != TC_IDLE) | scatter3;
 
     // Latched register base addresses
     reg [3:0] rA_base, rB_base, rC_base, rD_base;
@@ -103,22 +97,27 @@ module tc_top (
     );
 
     // ================================================================
-    // FSM + Registered RF Override (v1.1)
+    // Latch matrix_d when tensor_core produces valid output.
+    // This holds the result stable across all 4 scatter cycles.
     // ================================================================
-    // rf_addr_override and rf_r*_addr are now registered outputs.
-    // Address setup happens in the cycle BEFORE the gather capture,
-    // giving the RF read a full cycle to settle:
-    //   TC_IDLE(trigger): register addr = rA+offsets → RF reads rA
-    //   TC_GATHER_A:      capture a_hold, register addr = rB+offsets
-    //   TC_GATHER_B:      capture b_hold, register addr = rC+offsets
-    //   TC_GATHER_C:      capture c_hold, clear override
-    // Same total cycle count as v1.0 (no extra setup states needed).
+    reg [255:0] d_hold;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            d_hold <= 256'd0;
+        else if (tc_valid_out)
+            d_hold <= matrix_d;
+    end
 
+    // ================================================================
+    // FSM + Registered RF Override (v1.1, unchanged)
+    // Scatter serialized to 4 beats (v1.2)
+    // ================================================================
     integer gi;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state <= TC_IDLE;
+            scatter3 <= 1'b0;
             rA_base <= 4'd0;
             rB_base <= 4'd0;
             rC_base <= 4'd0;
@@ -134,9 +133,10 @@ module tc_top (
             rf_r3_addr <= 4'd0;
         end else begin
             compute_start <= 1'b0;
+            scatter3 <= 1'b0;
             case (state)
                 TC_IDLE: begin
-                    if (trigger) begin
+                    if (trigger & ~scatter3) begin
                         rA_base <= dec_rA_addr;
                         rB_base <= dec_rB_addr;
                         rC_base <= dec_rC_addr;
@@ -198,41 +198,56 @@ module tc_top (
                         state <= TC_SCATTER0;
                 end
                 TC_SCATTER0: state <= TC_SCATTER1;
-                TC_SCATTER1: state <= TC_IDLE;
+                TC_SCATTER1: state <= TC_SCATTER2;
+                TC_SCATTER2: begin
+                    // Next cycle is the final scatter beat.
+                    // State returns to TC_IDLE, but scatter3 keeps busy=1
+                    // for one more cycle so the write completes.
+                    scatter3 <= 1'b1;
+                    state <= TC_IDLE;
+                end
                 default: state <= TC_IDLE;
             endcase
         end
     end
 
     // ================================================================
-    // Scatter output (combinational — unchanged from v1.0)
+    // Scatter output — serialized 1-write-per-cycle (v1.2)
+    //
+    // Reads from d_hold (latched on tc_valid_out, stable across all
+    // scatter beats). Each beat writes one column of the 4×4 result.
+    //
+    // Beat mapping (same data layout as v1.0/v1.1):
+    //   SCATTER0: rD+0, col 0 — row i data at d_hold[i*64 + 0*16 +: 16]
+    //   SCATTER1: rD+1, col 1 — row i data at d_hold[i*64 + 1*16 +: 16]
+    //   SCATTER2: rD+2, col 2 — row i data at d_hold[i*64 + 2*16 +: 16]
+    //   scatter3: rD+3, col 3 — row i data at d_hold[i*64 + 3*16 +: 16]
     // ================================================================
-    integer si;
-
     always @(*) begin
-        scat_w1_addr = 4'd0; scat_w1_data = 64'd0; scat_w1_we = 4'd0;
-        scat_w2_addr = 4'd0; scat_w2_data = 64'd0; scat_w2_we = 4'd0;
-        scat_w3_addr = 4'd0; scat_w3_data = 64'd0; scat_w3_we = 4'd0;
+        scat_w_addr = 4'd0;
+        scat_w_data = 64'd0;
+        scat_w_we = 4'd0;
 
         if (state == TC_SCATTER0) begin
-            scat_w1_addr = rD_base;
-            scat_w2_addr = rD_base + 4'd1;
-            scat_w3_addr = rD_base + 4'd2;
-            scat_w1_we = 4'b1111;
-            scat_w2_we = 4'b1111;
-            scat_w3_we = 4'b1111;
-            // col 0 → W1, col 1 → W2, col 2 → W3
-            scat_w1_data = {matrix_d[3*64+0*16 +: 16], matrix_d[2*64+0*16 +: 16],
-                            matrix_d[1*64+0*16 +: 16], matrix_d[0*64+0*16 +: 16]};
-            scat_w2_data = {matrix_d[3*64+1*16 +: 16], matrix_d[2*64+1*16 +: 16],
-                            matrix_d[1*64+1*16 +: 16], matrix_d[0*64+1*16 +: 16]};
-            scat_w3_data = {matrix_d[3*64+2*16 +: 16], matrix_d[2*64+2*16 +: 16],
-                            matrix_d[1*64+2*16 +: 16], matrix_d[0*64+2*16 +: 16]};
+            scat_w_addr = rD_base;
+            scat_w_we = 4'b1111;
+            scat_w_data = {d_hold[3*64+0*16 +: 16], d_hold[2*64+0*16 +: 16],
+                           d_hold[1*64+0*16 +: 16], d_hold[0*64+0*16 +: 16]};
         end else if (state == TC_SCATTER1) begin
-            scat_w1_addr = rD_base + 4'd3;
-            scat_w1_we = 4'b1111;
-            scat_w1_data = {matrix_d[3*64+3*16 +: 16], matrix_d[2*64+3*16 +: 16],
-                            matrix_d[1*64+3*16 +: 16], matrix_d[0*64+3*16 +: 16]};
+            scat_w_addr = rD_base + 4'd1;
+            scat_w_we = 4'b1111;
+            scat_w_data = {d_hold[3*64+1*16 +: 16], d_hold[2*64+1*16 +: 16],
+                           d_hold[1*64+1*16 +: 16], d_hold[0*64+1*16 +: 16]};
+        end else if (state == TC_SCATTER2) begin
+            scat_w_addr = rD_base + 4'd2;
+            scat_w_we = 4'b1111;
+            scat_w_data = {d_hold[3*64+2*16 +: 16], d_hold[2*64+2*16 +: 16],
+                           d_hold[1*64+2*16 +: 16], d_hold[0*64+2*16 +: 16]};
+        end else if (scatter3) begin
+            scat_w_addr = rD_base + 4'd3;
+            scat_w_we = 4'b1111;
+            scat_w_data = {d_hold[3*64+3*16 +: 16], d_hold[2*64+3*16 +: 16],
+                           d_hold[1*64+3*16 +: 16], d_hold[0*64+3*16 +: 16]};
         end
     end
 

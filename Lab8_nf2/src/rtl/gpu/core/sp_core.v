@@ -4,8 +4,8 @@
     tensor core for tensor operations for 4 x 4 matrix multiplication and accumulation. This process is a multi-cycle
     operation.
  Author: Jeremy Cai
- Date: Feb. 28, 2026
- Version: 1.4
+ Date: Mar. 6, 2026
+ Version: 1.5
  Revision history:
     - Feb. 28, 2026: Initial implementation of the CUDA-like SP core pipeline.
     - Mar. 01, 2026: v1.1 — Remove ~stall from WB write enables to fix timing.
@@ -13,6 +13,9 @@
     - Mar. 04, 2026: v1.3 — Fix OP_SET predicate write path.
     - Mar. 05, 2026: v1.4 — Fix CVT deadlock: MEM/WB always drains regardless
       of front_stall.
+    - Mar. 06, 2026: v1.5 — gpr_regfile 4R1W for distributed RAM inference.
+      3 ext write ports collapsed to 1. Read ports shared via ovr_sel.
+      Pipeline timing unchanged.
 */
 
 `ifndef SP_CORE_V
@@ -41,7 +44,7 @@ module sp_core #(
     input wire [3:0] ppl_rf_r2_addr,
     input wire [3:0] ppl_rf_r3_addr,
 
-    // Override RF Read (for TC gather / BU data / debug)
+    // Override RF Read (for TC gather / BU data)
     input wire [3:0] ovr_rf_r0_addr,
     input wire [3:0] ovr_rf_r1_addr,
     input wire [3:0] ovr_rf_r2_addr,
@@ -50,6 +53,9 @@ module sp_core #(
     output wire [15:0] ovr_rf_r1_data,
     output wire [15:0] ovr_rf_r2_data,
     output wire [15:0] ovr_rf_r3_data,
+
+    // Override select: 0 = pipeline reads, 1 = override reads (v1.5)
+    input wire ovr_sel,
 
     // ID Stage: Predicate Read
     input wire [1:0] pred_rd_sel,
@@ -78,16 +84,12 @@ module sp_core #(
     // MEM -> SP: memory read data from SM
     input wire [15:0] mem_rdata,
 
-    // WB: WMMA Scatter — external W1-W3 ports from SM
-    input wire [3:0] wb_ext_w1_addr,
-    input wire [15:0] wb_ext_w1_data,
-    input wire wb_ext_w1_we,
-    input wire [3:0] wb_ext_w2_addr,
-    input wire [15:0] wb_ext_w2_data,
-    input wire wb_ext_w2_we,
-    input wire [3:0] wb_ext_w3_addr,
-    input wire [15:0] wb_ext_w3_data,
-    input wire wb_ext_w3_we,
+    // WB: External write port — single channel (v1.5)
+    //     Carries TC scatter or BU load writes (mutually exclusive
+    //     with pipeline WB — external writes only during drain).
+    input wire [3:0] wb_ext_w_addr,
+    input wire [15:0] wb_ext_w_data,
+    input wire wb_ext_w_we,
 
     // MEM -> SM: BRAM control (active during MEM stage)
     output wire mem_is_load,
@@ -112,33 +114,49 @@ module sp_core #(
     wire pred_wr_data;
     wire is_ldst = (id_opcode == `OP_LD) || (id_opcode == `OP_ST);
 
-    // Internal pipeline read data (from pipeline read ports)
-    wire [15:0] ppl_rf_r0_data;
-    wire [15:0] ppl_rf_r1_data;
-    wire [15:0] ppl_rf_r2_data;
-    wire [15:0] ppl_rf_r3_data;
+    // ====================================================================
+    // GPR Register File — 16x16b, 4R1W distributed RAM (v2.0)
+    //
+    // Read data outputs are shared between pipeline and override
+    // consumers.  ovr_sel controls which address set drives the reads.
+    // Mutual exclusion: pipeline captures data when ovr_sel=0 (stall=0),
+    // TC/BU captures data when ovr_sel=1 (pipeline stalled/drained).
+    // ====================================================================
+    wire [15:0] rf_read_data1, rf_read_data2, rf_read_data3, rf_read_data4;
 
-    // ====================================================================
-    // GPR Register File — 16x16b, 8R4W (dual read ports, v1.1)
-    // ====================================================================
+    // Merged write port: pipeline WB vs external (mutually exclusive)
+    wire rf_wen = w0_we | wb_ext_w_we;
+    wire [3:0] rf_waddr = w0_we ? w0_addr : wb_ext_w_addr;
+    wire [15:0] rf_wdata = w0_we ? w0_data : wb_ext_w_data;
+
     gpr_regfile u_gpr_rf (
         .clk(clk), .rst_n(rst_n),
-        // Pipeline read ports
-        .read_addr1(ppl_rf_r0_addr), .read_data1(ppl_rf_r0_data),
-        .read_addr2(ppl_rf_r1_addr), .read_data2(ppl_rf_r1_data),
-        .read_addr3(ppl_rf_r2_addr), .read_data3(ppl_rf_r2_data),
-        .read_addr4(ppl_rf_r3_addr), .read_data4(ppl_rf_r3_data),
-        // Override read ports
-        .ovr_read_addr1(ovr_rf_r0_addr), .ovr_read_data1(ovr_rf_r0_data),
-        .ovr_read_addr2(ovr_rf_r1_addr), .ovr_read_data2(ovr_rf_r1_data),
-        .ovr_read_addr3(ovr_rf_r2_addr), .ovr_read_data3(ovr_rf_r2_data),
-        .ovr_read_addr4(ovr_rf_r3_addr), .ovr_read_data4(ovr_rf_r3_data),
-        // Write ports
-        .write_addr1(w0_addr), .write_data1(w0_data), .write_en1(w0_we),
-        .write_addr2(wb_ext_w1_addr), .write_data2(wb_ext_w1_data), .write_en2(wb_ext_w1_we),
-        .write_addr3(wb_ext_w2_addr), .write_data3(wb_ext_w2_data), .write_en3(wb_ext_w2_we),
-        .write_addr4(wb_ext_w3_addr), .write_data4(wb_ext_w3_data), .write_en4(wb_ext_w3_we)
+        // Pipeline read addresses
+        .read_addr1(ppl_rf_r0_addr), .read_addr2(ppl_rf_r1_addr),
+        .read_addr3(ppl_rf_r2_addr), .read_addr4(ppl_rf_r3_addr),
+        // Override read addresses
+        .ovr_read_addr1(ovr_rf_r0_addr), .ovr_read_addr2(ovr_rf_r1_addr),
+        .ovr_read_addr3(ovr_rf_r2_addr), .ovr_read_addr4(ovr_rf_r3_addr),
+        // Override select
+        .ovr_sel(ovr_sel),
+        // Read data (shared output)
+        .read_data1(rf_read_data1), .read_data2(rf_read_data2),
+        .read_data3(rf_read_data3), .read_data4(rf_read_data4),
+        // Single write port
+        .write_addr(rf_waddr), .write_data(rf_wdata), .write_en(rf_wen)
     );
+
+    // Pipeline read data — valid when ovr_sel=0 (normal pipeline)
+    wire [15:0] ppl_rf_r0_data = rf_read_data1;
+    wire [15:0] ppl_rf_r1_data = rf_read_data2;
+    wire [15:0] ppl_rf_r2_data = rf_read_data3;
+    wire [15:0] ppl_rf_r3_data = rf_read_data4;
+
+    // Override read data — valid when ovr_sel=1 (TC gather / BU)
+    assign ovr_rf_r0_data = rf_read_data1;
+    assign ovr_rf_r1_data = rf_read_data2;
+    assign ovr_rf_r2_data = rf_read_data3;
+    assign ovr_rf_r3_data = rf_read_data4;
 
     // ====================================================================
     // Predicate Register File — 4x1b, 1R1W
@@ -360,7 +378,7 @@ module sp_core #(
             ex_mem_valid <= 1'b1;
             ex_mem_result <= ex_result_muxed;
             ex_mem_store_data <= id_ex_opC;
-            ex_mem_cmp_out <= cmp_out_final; //was cmp_out_muxed
+            ex_mem_cmp_out <= cmp_out_final;
             ex_mem_rf_we <= id_ex_rf_we;
             ex_mem_pred_we <= id_ex_pred_we;
             ex_mem_rD_addr <= id_ex_rD_addr;
@@ -427,7 +445,7 @@ module sp_core #(
     // WB source mux (AFTER mem_wb) — BRAM bypass for loads
     wire [15:0] wb_data_final = (mem_wb_wb_src == 3'd1) ? mem_rdata : mem_wb_data;
 
-    // Scalar GPR writeback (W0)
+    // Scalar GPR writeback (W0) — pipeline WB
     assign w0_we = mem_wb_valid & mem_wb_rf_we & mem_wb_active;
     assign w0_addr = mem_wb_rD_addr;
     assign w0_data = wb_data_final;
@@ -435,7 +453,7 @@ module sp_core #(
     // Predicate RF writeback (SETP + SET)
     assign pred_wr_we = mem_wb_valid & mem_wb_pred_we & mem_wb_active;
     assign pred_wr_sel = mem_wb_pred_wr_sel;
-    assign pred_wr_data = mem_wb_cmp_out; // now carries set_val for OP_SET
+    assign pred_wr_data = mem_wb_cmp_out;
 
     // Scoreboard feedback to SM
     assign wb_rD_addr = mem_wb_rD_addr;

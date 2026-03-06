@@ -8,12 +8,13 @@
    - Scoreboard ensures dependent reads happen ≥1 cycle after producer WB write.
    - External writes (TC scatter, BU load) occur when pipeline is drained.
  Author: Jeremy Cai
- Date: Feb. 26, 2026
- Version: 1.1
+ Date: Mar. 6, 2026
+ Version: 2.0
  Revision history:
     - Feb. 26, 2026: v1.0 — 4R4W with forwarding.
     - Mar. 02, 2026: v1.1 — 8R4W, forwarding removed, dual read ports
       for timing isolation (pipeline vs TC/BU override).
+    - Mar. 6, 2026: v2.0 — 4R1W, dual-copy distributed RAM, read/write port merging.
 */
 
 `ifndef GPR_REGFILE_V
@@ -23,69 +24,73 @@
 
 module gpr_regfile (
     input wire clk,
-    input wire rst_n,
+    input wire rst_n,           // unused for storage; kept for interface compat
 
-    // Pipeline read ports (for sp_core id_ex capture)
+    // Pipeline read addresses (used when ovr_sel == 0)
     input wire [3:0] read_addr1,
     input wire [3:0] read_addr2,
     input wire [3:0] read_addr3,
     input wire [3:0] read_addr4,
+
+    // Override read addresses (used when ovr_sel == 1)
+    input wire [3:0] ovr_read_addr1,
+    input wire [3:0] ovr_read_addr2,
+    input wire [3:0] ovr_read_addr3,
+    input wire [3:0] ovr_read_addr4,
+
+    // Override select: 0 = pipeline reads, 1 = override reads
+    input wire ovr_sel,
+
+    // Read data outputs (reflects whichever address set is active)
     output wire [15:0] read_data1,
     output wire [15:0] read_data2,
     output wire [15:0] read_data3,
     output wire [15:0] read_data4,
 
-    // Override read ports (for TC gather / BU data / debug)
-    input wire [3:0] ovr_read_addr1,
-    input wire [3:0] ovr_read_addr2,
-    input wire [3:0] ovr_read_addr3,
-    input wire [3:0] ovr_read_addr4,
-    output wire [15:0] ovr_read_data1,
-    output wire [15:0] ovr_read_data2,
-    output wire [15:0] ovr_read_data3,
-    output wire [15:0] ovr_read_data4,
-
-    // Write ports (unchanged)
-    input wire [3:0] write_addr1,
-    input wire [3:0] write_addr2,
-    input wire [3:0] write_addr3,
-    input wire [3:0] write_addr4,
-    input wire [15:0] write_data1,
-    input wire [15:0] write_data2,
-    input wire [15:0] write_data3,
-    input wire [15:0] write_data4,
-    input wire write_en1,
-    input wire write_en2,
-    input wire write_en3,
-    input wire write_en4
+    // Single write port
+    input wire [3:0] write_addr,
+    input wire [15:0] write_data,
+    input wire write_en
 );
 
-    reg [16*16-1:0] gpr_regs; // 16 registers × 16 bits, packed flat
+    // ================================================================
+    //  Read address mux: pipeline vs override
+    // ================================================================
+    wire [3:0] ra1 = ovr_sel ? ovr_read_addr1 : read_addr1;
+    wire [3:0] ra2 = ovr_sel ? ovr_read_addr2 : read_addr2;
+    wire [3:0] ra3 = ovr_sel ? ovr_read_addr3 : read_addr3;
+    wire [3:0] ra4 = ovr_sel ? ovr_read_addr4 : read_addr4;
 
-    // Pipeline reads: pure async, no forwarding
-    assign read_data1 = gpr_regs[read_addr1*16 +: 16];
-    assign read_data2 = gpr_regs[read_addr2*16 +: 16];
-    assign read_data3 = gpr_regs[read_addr3*16 +: 16];
-    assign read_data4 = gpr_regs[read_addr4*16 +: 16];
+    // ================================================================
+    //  Storage: 2 copies of 16×16b unpacked arrays.
+    //  Each copy → 1 sync write + 2 async reads (RAM16X1D).
+    //  Copy 0 serves read ports 1 & 2.
+    //  Copy 1 serves read ports 3 & 4.
+    //
+    //  NO synchronous reset — essential for distributed RAM inference.
+    //  XST attribute ensures the tool doesn't promote to block RAM.
+    // ================================================================
 
-    // Override reads: pure async, no forwarding
-    assign ovr_read_data1 = gpr_regs[ovr_read_addr1*16 +: 16];
-    assign ovr_read_data2 = gpr_regs[ovr_read_addr2*16 +: 16];
-    assign ovr_read_data3 = gpr_regs[ovr_read_addr3*16 +: 16];
-    assign ovr_read_data4 = gpr_regs[ovr_read_addr4*16 +: 16];
+    (* ram_style = "distributed" *) reg [15:0] rf_copy0 [0:15];
+    (* ram_style = "distributed" *) reg [15:0] rf_copy1 [0:15];
 
-    // Synchronous write (priority: w1 > w2 > w3 > w4)
-    integer i;
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            gpr_regs <= {16*16{1'b0}};
-        end else begin
-            for (i = 0; i < 16; i = i + 1) begin
-                if (write_en4 && write_addr4 == i[3:0]) gpr_regs[i*16 +: 16] <= write_data4;
-                if (write_en3 && write_addr3 == i[3:0]) gpr_regs[i*16 +: 16] <= write_data3;
-                if (write_en2 && write_addr2 == i[3:0]) gpr_regs[i*16 +: 16] <= write_data2;
-                if (write_en1 && write_addr1 == i[3:0]) gpr_regs[i*16 +: 16] <= write_data1;
-            end
+    // ================================================================
+    //  Async read — maps to dist RAM read ports (SPO + DPO)
+    // ================================================================
+    assign read_data1 = rf_copy0[ra1];
+    assign read_data2 = rf_copy0[ra2];
+    assign read_data3 = rf_copy1[ra3];
+    assign read_data4 = rf_copy1[ra4];
+
+    // ================================================================
+    //  Synchronous write — single port, mirrored to both copies.
+    //  No reset: dist RAM contents undefined at power-up; kernel
+    //  software must initialize registers before use.
+    // ================================================================
+    always @(posedge clk) begin
+        if (write_en) begin
+            rf_copy0[write_addr] <= write_data;
+            rf_copy1[write_addr] <= write_data;
         end
     end
 

@@ -3,10 +3,11 @@
  Fully unrolled, no partial register writes — XST-safe.
  Author: Jeremy Cai
  Date: Feb. 26, 2026
- Version: 1.1
+ Version: 1.2
  Revision history:
-    - Feb. 26, 2026: Initial implementation of tensor core for BF16 format.
-    - Mar. 01, 2026: Rewritten for ISE XST synthesis compatibility.
+    - Feb. 26, 2026 v1.0: Initial implementation of tensor core for BF16 format.
+    - Mar. 01, 2026 v1.1: Rewritten for ISE XST synthesis compatibility.
+    - Mar. 6, 2026 v1.2: Remove redundant A_reg/B_reg/C_reg (768 FFs).
 */
 
 `ifndef TENSOR_CORE_V
@@ -18,9 +19,9 @@
 module tensor_core (
     input wire clk,
     input wire rst_n,
-    input wire [4*4*16-1:0] matrix_a,
-    input wire [4*4*16-1:0] matrix_b,
-    input wire [4*4*16-1:0] matrix_c,
+    input wire [4*4*16-1:0] matrix_a,   // stable while busy (tc_top a_hold)
+    input wire [4*4*16-1:0] matrix_b,   // stable while busy (tc_top b_hold)
+    input wire [4*4*16-1:0] matrix_c,   // stable while busy (tc_top c_hold)
     input wire valid_in,
     output wire [4*4*16-1:0] matrix_d,
     output reg valid_out
@@ -34,9 +35,6 @@ module tensor_core (
     reg [1:0] round;
     reg [2:0] phase;
     reg [2:0] drain_cnt;
-    reg [4*4*16-1:0] A_reg;
-    reg [4*4*16-1:0] B_reg;
-    reg [4*4*16-1:0] C_reg;
     reg sa_acc_load;
     reg [4*16-1:0] sa_a_in;
     reg [3:0] sa_a_valid;
@@ -46,7 +44,7 @@ module tensor_core (
         .clk(clk),
         .rst_n(rst_n),
         .acc_load(sa_acc_load),
-        .acc_in(C_reg),
+        .acc_in(matrix_c),          // direct from input — stable while busy
         .a_in(sa_a_in),
         .a_valid(sa_a_valid),
         .b_in(sa_b_in),
@@ -54,18 +52,18 @@ module tensor_core (
     );
 
     // ================================================================
-    // Mux logic for SA inputs — fully combinational, no partial writes
-    // Each row's a/b value selected by round, gated by phase
+    // Mux logic for SA inputs — read directly from matrix_a/b inputs
+    // (no internal copy needed; tc_top holds data stable in a_hold/b_hold)
     // ================================================================
 
     // Row 0: A[0][round], B[round][0]
     reg [15:0] row0_a, row0_b;
     always @(*) begin
         case (round)
-            2'd0: begin row0_a = A_reg[(0*4+0)*16 +: 16]; row0_b = B_reg[(0*4+0)*16 +: 16]; end
-            2'd1: begin row0_a = A_reg[(0*4+1)*16 +: 16]; row0_b = B_reg[(1*4+0)*16 +: 16]; end
-            2'd2: begin row0_a = A_reg[(0*4+2)*16 +: 16]; row0_b = B_reg[(2*4+0)*16 +: 16]; end
-            2'd3: begin row0_a = A_reg[(0*4+3)*16 +: 16]; row0_b = B_reg[(3*4+0)*16 +: 16]; end
+            2'd0: begin row0_a = matrix_a[(0*4+0)*16 +: 16]; row0_b = matrix_b[(0*4+0)*16 +: 16]; end
+            2'd1: begin row0_a = matrix_a[(0*4+1)*16 +: 16]; row0_b = matrix_b[(1*4+0)*16 +: 16]; end
+            2'd2: begin row0_a = matrix_a[(0*4+2)*16 +: 16]; row0_b = matrix_b[(2*4+0)*16 +: 16]; end
+            2'd3: begin row0_a = matrix_a[(0*4+3)*16 +: 16]; row0_b = matrix_b[(3*4+0)*16 +: 16]; end
         endcase
     end
 
@@ -73,10 +71,10 @@ module tensor_core (
     reg [15:0] row1_a, row1_b;
     always @(*) begin
         case (round)
-            2'd0: begin row1_a = A_reg[(1*4+0)*16 +: 16]; row1_b = B_reg[(0*4+1)*16 +: 16]; end
-            2'd1: begin row1_a = A_reg[(1*4+1)*16 +: 16]; row1_b = B_reg[(1*4+1)*16 +: 16]; end
-            2'd2: begin row1_a = A_reg[(1*4+2)*16 +: 16]; row1_b = B_reg[(2*4+1)*16 +: 16]; end
-            2'd3: begin row1_a = A_reg[(1*4+3)*16 +: 16]; row1_b = B_reg[(3*4+1)*16 +: 16]; end
+            2'd0: begin row1_a = matrix_a[(1*4+0)*16 +: 16]; row1_b = matrix_b[(0*4+1)*16 +: 16]; end
+            2'd1: begin row1_a = matrix_a[(1*4+1)*16 +: 16]; row1_b = matrix_b[(1*4+1)*16 +: 16]; end
+            2'd2: begin row1_a = matrix_a[(1*4+2)*16 +: 16]; row1_b = matrix_b[(2*4+1)*16 +: 16]; end
+            2'd3: begin row1_a = matrix_a[(1*4+3)*16 +: 16]; row1_b = matrix_b[(3*4+1)*16 +: 16]; end
         endcase
     end
 
@@ -84,10 +82,10 @@ module tensor_core (
     reg [15:0] row2_a, row2_b;
     always @(*) begin
         case (round)
-            2'd0: begin row2_a = A_reg[(2*4+0)*16 +: 16]; row2_b = B_reg[(0*4+2)*16 +: 16]; end
-            2'd1: begin row2_a = A_reg[(2*4+1)*16 +: 16]; row2_b = B_reg[(1*4+2)*16 +: 16]; end
-            2'd2: begin row2_a = A_reg[(2*4+2)*16 +: 16]; row2_b = B_reg[(2*4+2)*16 +: 16]; end
-            2'd3: begin row2_a = A_reg[(2*4+3)*16 +: 16]; row2_b = B_reg[(3*4+2)*16 +: 16]; end
+            2'd0: begin row2_a = matrix_a[(2*4+0)*16 +: 16]; row2_b = matrix_b[(0*4+2)*16 +: 16]; end
+            2'd1: begin row2_a = matrix_a[(2*4+1)*16 +: 16]; row2_b = matrix_b[(1*4+2)*16 +: 16]; end
+            2'd2: begin row2_a = matrix_a[(2*4+2)*16 +: 16]; row2_b = matrix_b[(2*4+2)*16 +: 16]; end
+            2'd3: begin row2_a = matrix_a[(2*4+3)*16 +: 16]; row2_b = matrix_b[(3*4+2)*16 +: 16]; end
         endcase
     end
 
@@ -95,10 +93,10 @@ module tensor_core (
     reg [15:0] row3_a, row3_b;
     always @(*) begin
         case (round)
-            2'd0: begin row3_a = A_reg[(3*4+0)*16 +: 16]; row3_b = B_reg[(0*4+3)*16 +: 16]; end
-            2'd1: begin row3_a = A_reg[(3*4+1)*16 +: 16]; row3_b = B_reg[(1*4+3)*16 +: 16]; end
-            2'd2: begin row3_a = A_reg[(3*4+2)*16 +: 16]; row3_b = B_reg[(2*4+3)*16 +: 16]; end
-            2'd3: begin row3_a = A_reg[(3*4+3)*16 +: 16]; row3_b = B_reg[(3*4+3)*16 +: 16]; end
+            2'd0: begin row3_a = matrix_a[(3*4+0)*16 +: 16]; row3_b = matrix_b[(0*4+3)*16 +: 16]; end
+            2'd1: begin row3_a = matrix_a[(3*4+1)*16 +: 16]; row3_b = matrix_b[(1*4+3)*16 +: 16]; end
+            2'd2: begin row3_a = matrix_a[(3*4+2)*16 +: 16]; row3_b = matrix_b[(2*4+3)*16 +: 16]; end
+            2'd3: begin row3_a = matrix_a[(3*4+3)*16 +: 16]; row3_b = matrix_b[(3*4+3)*16 +: 16]; end
         endcase
     end
 
@@ -122,7 +120,7 @@ module tensor_core (
     wire [3:0] feed_valid = {row3_active, row2_active, row1_active, row0_active};
 
     // ================================================================
-    // State machine — clean full-width assignments only
+    // State machine
     // ================================================================
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -131,9 +129,6 @@ module tensor_core (
             phase <= 3'd0;
             drain_cnt <= 3'd0;
             valid_out <= 1'b0;
-            A_reg <= {(4*4*16){1'b0}};
-            B_reg <= {(4*4*16){1'b0}};
-            C_reg <= {(4*4*16){1'b0}};
             sa_acc_load <= 1'b0;
             sa_a_valid <= 4'd0;
             sa_a_in <= 64'd0;
@@ -146,12 +141,8 @@ module tensor_core (
             sa_b_in <= 64'd0;
             case (state)
                 S_IDLE: begin
-                    if (valid_in) begin
-                        A_reg <= matrix_a;
-                        B_reg <= matrix_b;
-                        C_reg <= matrix_c;
+                    if (valid_in)
                         state <= S_LOAD;
-                    end
                 end
                 S_LOAD: begin
                     sa_acc_load <= 1'b1;
