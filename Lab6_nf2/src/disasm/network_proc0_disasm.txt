@@ -1,0 +1,57 @@
+
+network_proc0.elf:     file format elf32-littlearm
+
+
+Disassembly of section .text:
+
+00000000 <main>:
+   0:	e52db004 	push	{fp}		@ (str fp, [sp, #-4]!)
+   4:	e28db000 	add	fp, sp, #0
+   8:	e24dd014 	sub	sp, sp, #20
+   c:	e3a03c01 	mov	r3, #256	@ 0x100
+  10:	e50b3010 	str	r3, [fp, #-16]
+  14:	e51b3010 	ldr	r3, [fp, #-16]
+  18:	e5933004 	ldr	r3, [r3, #4]
+  1c:	e35300aa 	cmp	r3, #170	@ 0xaa
+  20:	0a000003 	beq	34 <main+0x34>
+  24:	e51b3010 	ldr	r3, [fp, #-16]
+  28:	e3e02000 	mvn	r2, #0
+  2c:	e5832010 	str	r2, [r3, #16]
+  30:	ea000021 	b	bc <main+0xbc>
+  34:	e51b3010 	ldr	r3, [fp, #-16]
+  38:	e5933008 	ldr	r3, [r3, #8]
+  3c:	e50b3014 	str	r3, [fp, #-20]	@ 0xffffffec
+  40:	e51b3010 	ldr	r3, [fp, #-16]
+  44:	e593200c 	ldr	r2, [r3, #12]
+  48:	e51b3010 	ldr	r3, [fp, #-16]
+  4c:	e5832008 	str	r2, [r3, #8]
+  50:	e51b3010 	ldr	r3, [fp, #-16]
+  54:	e51b2014 	ldr	r2, [fp, #-20]	@ 0xffffffec
+  58:	e583200c 	str	r2, [r3, #12]
+  5c:	e3a03000 	mov	r3, #0
+  60:	e50b3008 	str	r3, [fp, #-8]
+  64:	e3a03000 	mov	r3, #0
+  68:	e50b300c 	str	r3, [fp, #-12]
+  6c:	ea00000b 	b	a0 <main+0xa0>
+  70:	e51b2010 	ldr	r2, [fp, #-16]
+  74:	e51b300c 	ldr	r3, [fp, #-12]
+  78:	e2833004 	add	r3, r3, #4
+  7c:	e1a03103 	lsl	r3, r3, #2
+  80:	e0823003 	add	r3, r2, r3
+  84:	e5933004 	ldr	r3, [r3, #4]
+  88:	e51b2008 	ldr	r2, [fp, #-8]
+  8c:	e0823003 	add	r3, r2, r3
+  90:	e50b3008 	str	r3, [fp, #-8]
+  94:	e51b300c 	ldr	r3, [fp, #-12]
+  98:	e2833001 	add	r3, r3, #1
+  9c:	e50b300c 	str	r3, [fp, #-12]
+  a0:	e51b300c 	ldr	r3, [fp, #-12]
+  a4:	e3530003 	cmp	r3, #3
+  a8:	dafffff0 	ble	70 <main+0x70>
+  ac:	e51b3010 	ldr	r3, [fp, #-16]
+  b0:	e51b2008 	ldr	r2, [fp, #-8]
+  b4:	e5832010 	str	r2, [r3, #16]
+  b8:	e1a00000 	nop			@ (mov r0, r0)
+  bc:	e28bd000 	add	sp, fp, #0
+  c0:	e49db004 	pop	{fp}		@ (ldr fp, [sp], #4)
+  c4:	e12fff1e 	bx	lr
