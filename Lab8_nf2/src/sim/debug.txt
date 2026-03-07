@@ -3134,35 +3134,39 @@ VCD info: dumpfile sm_core_tb.vcd opened for output.
          SB: pend0=0000 pend1=0020 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=0010 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=2 tos_rpc=20 tos_ph=1
   [C032] PC=21 dec=00000000 NOP      fv=1 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=0011 stk_e=0 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0020 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=0010 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=1 tos_rpc=22 tos_ph=0
-  [C033] PC=22 dec=00000000 NOP      fv=1 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=0011 stk_e=0 conv=10 pbra=0 | done=0
+  [C033] PC=22 dec=00000000 NOP      fv=1 | fstl=1 sb=0 exb=0 drn=0 de_fl=0 | mask=0011 stk_e=0 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0020 pend2=0000 pend3=0000 | wb_we_any=1 wb_rD=5 wb_amsk=0010 | wb_we[3:0]=1111 | DE: v=1 pbra=0 rD=0 | stk_sp=1 tos_rpc=22 tos_ph=0
-  [C034] PC=9 dec=2060dddd MOVI     fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
+  [C034] PC=22 dec=00000000 NOP      fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=0011 stk_e=0 conv=10 pbra=0 | done=0
+         SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=0010 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=0 | stk_sp=1 tos_rpc=22 tos_ph=0
+  [C035] PC=9 dec=2060dddd MOVI     fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=0010 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=0 | stk_sp=1 tos_rpc=22 tos_ph=1
-  [C035] PC=10 dec=20503333 MOVI     fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
+  [C036] PC=9 dec=20503333 MOVI     fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=0010 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=6 | stk_sp=1 tos_rpc=22 tos_ph=1
-  [C036] PC=11 dec=b8000016 BRA      fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
-         SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=0010 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=5 | stk_sp=1 tos_rpc=22 tos_ph=1
-  [C037] PC=12 dec=aa102000 SETP     fv=1 | fstl=0 sb=0 exb=0 drn=0 de_fl=1 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
-         SB: pend0=0000 pend1=0000 pend2=0020 pend3=0020 | wb_we_any=0 wb_rD=0 wb_amsk=0011 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=0 | stk_sp=1 tos_rpc=22 tos_ph=1
-  [C038] PC=22 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=1100 stk_e=0 conv=01 pbra=0 | done=0
+  [C037] PC=10 dec=20503333 MOVI     fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
+         SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=0010 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=5 | stk_sp=1 tos_rpc=22 tos_ph=1
+  [C038] PC=11 dec=b8000016 BRA      fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
+         SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=0011 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=5 | stk_sp=1 tos_rpc=22 tos_ph=1
+  [C039] PC=12 dec=aa102000 SETP     fv=1 | fstl=0 sb=0 exb=0 drn=0 de_fl=1 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
+         SB: pend0=0000 pend1=0000 pend2=0020 pend3=0020 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=0 | stk_sp=1 tos_rpc=22 tos_ph=1
+  [C040] PC=22 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=1100 stk_e=0 conv=01 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0020 pend3=0020 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=1 tos_rpc=22 tos_ph=1
-  [C039] PC=23 dec=2060dddd MOVI     fv=1 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
+  [C041] PC=23 dec=2060dddd MOVI     fv=1 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0020 pend3=0020 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
-  [C040] PC=24 dec=c8000000 RET      fv=1 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
+  [C042] PC=24 dec=c8000000 RET      fv=1 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0020 pend3=0020 | wb_we_any=1 wb_rD=5 wb_amsk=1100 | wb_we[3:0]=1111 | DE: v=1 pbra=0 rD=6 | stk_sp=0 tos_rpc=x tos_ph=x
-  [C041] PC=25 dec=00000000 NOP      fv=1 | fstl=0 sb=0 exb=0 drn=0 de_fl=1 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
+  [C043] PC=25 dec=00000000 NOP      fv=1 | fstl=0 sb=0 exb=0 drn=0 de_fl=1 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
          SB: pend0=0040 pend1=0040 pend2=0040 pend3=0040 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
-  [C042] PC=25 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
-         SB: pend0=0040 pend1=0040 pend2=0040 pend3=0040 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
-  [C043] PC=25 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
-         SB: pend0=0040 pend1=0040 pend2=0040 pend3=0040 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
   [C044] PC=25 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
+         SB: pend0=0040 pend1=0040 pend2=0040 pend3=0040 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
+  [C045] PC=25 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
+         SB: pend0=0040 pend1=0040 pend2=0040 pend3=0040 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
+  [C046] PC=25 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
          SB: pend0=0040 pend1=0040 pend2=0040 pend3=0040 | wb_we_any=1 wb_rD=6 wb_amsk=1111 | wb_we[3:0]=1111 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
-  [C045] PC=25 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
+  [C047] PC=25 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=1111 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
-  [C046] PC=25 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
+  [C048] PC=25 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=1111 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
-  [C047] PC=25 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=1
+  [C049] PC=25 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=1
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=1111 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
   RF dump       R0     R1     R2     R3     R4     R5     R6     R7   
        SP0:   0000  0002  0001  0040  3f80  1111  dddd  0000 
@@ -3236,43 +3240,45 @@ VCD info: dumpfile sm_core_tb.vcd opened for output.
          SB: pend0=0020 pend1=0020 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=1111 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=5 | stk_sp=1 tos_rpc=13 tos_ph=0
   [C020] PC=13 dec=00000000 NOP      fv=1 | fstl=1 sb=1 exb=0 drn=0 de_fl=0 | mask=0011 stk_e=0 conv=00 pbra=0 | done=0
          SB: pend0=0020 pend1=0020 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=1111 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=5 | stk_sp=1 tos_rpc=13 tos_ph=0
-  [C021] PC=13 dec=00000000 NOP      fv=1 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=0011 stk_e=0 conv=10 pbra=0 | done=0
+  [C021] PC=13 dec=00000000 NOP      fv=1 | fstl=1 sb=0 exb=0 drn=0 de_fl=0 | mask=0011 stk_e=0 conv=00 pbra=0 | done=0
          SB: pend0=0020 pend1=0020 pend2=0000 pend3=0000 | wb_we_any=1 wb_rD=5 wb_amsk=0011 | wb_we[3:0]=1111 | DE: v=1 pbra=0 rD=5 | stk_sp=1 tos_rpc=13 tos_ph=0
-  [C022] PC=7 dec=c8000000 RET      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
+  [C022] PC=13 dec=00000000 NOP      fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=0011 stk_e=0 conv=10 pbra=0 | done=0
+         SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=5 wb_amsk=0011 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=5 | stk_sp=1 tos_rpc=13 tos_ph=0
+  [C023] PC=7 dec=c8000000 RET      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=5 wb_amsk=0011 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=0 | stk_sp=1 tos_rpc=13 tos_ph=1
-  [C023] PC=7 dec=2050bbbb MOVI     fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
+  [C024] PC=7 dec=2050bbbb MOVI     fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=5 wb_amsk=0011 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=1 tos_rpc=13 tos_ph=1
-  [C024] PC=8 dec=2050bbbb MOVI     fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
+  [C025] PC=8 dec=2050bbbb MOVI     fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=5 wb_amsk=0011 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=5 | stk_sp=1 tos_rpc=13 tos_ph=1
-  [C025] PC=9 dec=085000c8 ST       fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
+  [C026] PC=9 dec=085000c8 ST       fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=5 wb_amsk=0011 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=5 | stk_sp=1 tos_rpc=13 tos_ph=1
-  [C026] PC=10 dec=b800000d BRA      fv=1 | fstl=1 sb=1 exb=0 drn=0 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
-         SB: pend0=0000 pend1=0000 pend2=0020 pend3=0020 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=5 | stk_sp=1 tos_rpc=13 tos_ph=1
   [C027] PC=10 dec=b800000d BRA      fv=1 | fstl=1 sb=1 exb=0 drn=0 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0020 pend3=0020 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=5 | stk_sp=1 tos_rpc=13 tos_ph=1
   [C028] PC=10 dec=b800000d BRA      fv=1 | fstl=1 sb=1 exb=0 drn=0 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0020 pend3=0020 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=5 | stk_sp=1 tos_rpc=13 tos_ph=1
-  [C029] PC=10 dec=b800000d BRA      fv=1 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
+  [C029] PC=10 dec=b800000d BRA      fv=1 | fstl=1 sb=1 exb=0 drn=0 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
+         SB: pend0=0000 pend1=0000 pend2=0020 pend3=0020 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=5 | stk_sp=1 tos_rpc=13 tos_ph=1
+  [C030] PC=10 dec=b800000d BRA      fv=1 | fstl=0 sb=0 exb=0 drn=0 de_fl=0 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0020 pend3=0020 | wb_we_any=1 wb_rD=5 wb_amsk=1100 | wb_we[3:0]=1111 | DE: v=1 pbra=0 rD=5 | stk_sp=1 tos_rpc=13 tos_ph=1
-  [C030] PC=11 dec=2050aaaa MOVI     fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=1 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
+  [C031] PC=11 dec=2050aaaa MOVI     fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=1 | mask=1100 stk_e=0 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=5 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=0 | stk_sp=1 tos_rpc=13 tos_ph=1
-  [C031] PC=13 dec=085000c8 ST       fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=01 pbra=0 | done=0
+  [C032] PC=13 dec=085000c8 ST       fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1100 stk_e=0 conv=01 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=5 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=1 tos_rpc=13 tos_ph=1
-  [C032] PC=14 dec=c8000000 RET      fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
+  [C033] PC=14 dec=c8000000 RET      fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=5 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=5 | stk_sp=0 tos_rpc=x tos_ph=x
-  [C033] PC=15 dec=00000000 NOP      fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=1 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
+  [C034] PC=15 dec=00000000 NOP      fv=1 | fstl=0 sb=0 exb=0 drn=1 de_fl=1 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=5 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=1 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
-  [C034] PC=15 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
-         SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
   [C035] PC=15 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
   [C036] PC=15 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
   [C037] PC=15 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
-         SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=1111 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
+         SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=1100 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
   [C038] PC=15 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=1111 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
-  [C039] PC=15 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=1
+  [C039] PC=15 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=0
+         SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=1111 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
+  [C040] PC=15 dec=00000000 NOP      fv=0 | fstl=0 sb=0 exb=0 drn=1 de_fl=0 | mask=1111 stk_e=1 conv=00 pbra=0 | done=1
          SB: pend0=0000 pend1=0000 pend2=0000 pend3=0000 | wb_we_any=0 wb_rD=0 wb_amsk=1111 | wb_we[3:0]=0000 | DE: v=0 pbra=0 rD=0 | stk_sp=0 tos_rpc=x tos_ph=x
 [PASS] T309: K36 SP0 DMEM=taken  SP0.DMEM[200] = 0xaaaa
 [PASS] T310: K36 SP1 DMEM=taken  SP1.DMEM[201] = 0xaaaa
@@ -3818,4 +3824,4 @@ VCD info: dumpfile sm_core_tb.vcd opened for output.
   TOTAL:  476
 ============================================
 >>> ALL TESTS PASSED <<<
-../tb/sm_core_tb.v:1635: $finish called at 22270000 (1ps)
+../tb/sm_core_tb.v:1635: $finish called at 22300000 (1ps)

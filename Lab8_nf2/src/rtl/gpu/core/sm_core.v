@@ -3,7 +3,7 @@ Description: This file contains the implementation of the CUDA-like SM core, int
 decoder, scoreboard, SP cores, tensor core, and SIMT stack.
 Author: Jeremy Cai
 Date: Mar. 5, 2026
-Version: 1.4
+Version: 1.7
 Revision history:
     - Feb. 27, 2026: Initial implementation of the CUDA-like SM core.
     - Mar. 4, 2026: v1.0 — Add SIMT stack and PBRA handling logic. Add convergence redirect support
@@ -14,6 +14,9 @@ Revision history:
     - Mar. 5, 2026: v1.3 — Remove debug_rf_addr/debug_rf_data ports and debug override mux.
     - Mar. 5, 2026: v1.4 — Fix CVT deadlock
     - Mar. 6, 2026: v1.5 — gpr_regfile 4R1W distributed RAM support.
+    - Mar. 6, 2026: v1.6 — PBRA pipeline register: splits 15.6ns critical path
+    - Mar. 7, 2026: v1.7 — Add SIMT convergence redirect support in fetch unit and SIMT stack. Add conv_redirect
+        and conv_target_pc signals to fetch_unit, driven by SIMT stack on reconvergence.
  */
 
 `ifndef SM_CORE_V
@@ -31,17 +34,14 @@ module sm_core (
     input wire clk,
     input wire rst_n,
 
-    // IMEM BRAM port-A (read-only by GPU)
     output wire [`GPU_IMEM_ADDR_WIDTH-1:0] imem_addr,
     input wire [`GPU_IMEM_DATA_WIDTH-1:0] imem_rdata,
 
-    // Per-SP DMEM BRAM port-A (GPU read/write)
     output wire [4*`GPU_DMEM_ADDR_WIDTH-1:0] dmem_addra,
     output wire [4*`GPU_DMEM_DATA_WIDTH-1:0] dmem_dina,
     output wire [3:0] dmem_wea,
     input wire [4*`GPU_DMEM_DATA_WIDTH-1:0] dmem_douta,
 
-    // Kernel control
     input wire kernel_start,
     input wire [`GPU_PC_WIDTH-1:0] kernel_entry_pc,
     input wire [3:0] thread_mask,
@@ -114,6 +114,14 @@ module sm_core (
     wire front_stall;
     wire sp_stall;
 
+    // v1.7c: registered any_ex_busy for convergence path only.
+    // Breaks 12.5ns path: id_ex_opcode → ex_busy → any_ex_busy → conv → stack.
+    // 1-cycle delay is safe: conv_wait holds PC until conditions are met.
+    reg any_ex_busy_r;
+    always @(posedge clk or negedge rst_n)
+        if (!rst_n) any_ex_busy_r <= 1'b0;
+        else any_ex_busy_r <= any_ex_busy;
+
     // ================================================================
     // Active Mask
     // ================================================================
@@ -122,7 +130,6 @@ module sm_core (
     wire tc_rf_override;
     wire [3:0] tc_rf_r0, tc_rf_r1, tc_rf_r2, tc_rf_r3;
 
-    // v1.5: TC scatter — single write channel (serialized in tc_top v1.2)
     wire [3:0] tc_w_addr;
     wire [4*16-1:0] tc_w_data;
     wire [3:0] tc_w_we;
@@ -237,8 +244,10 @@ module sm_core (
     reg [3:0] de_rf_r0_addr, de_rf_r1_addr, de_rf_r2_addr, de_rf_r3_addr;
     reg [`GPU_PC_WIDTH-1:0] de_pc;
 
+    // v1.6: forward-declare pbra_commit for de_flush
     wire pbra_fire;
-    wire de_flush = branch_taken | ret_detected | pbra_fire;
+    reg pbra_commit;
+    wire de_flush = branch_taken | ret_detected | pbra_commit;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -299,14 +308,27 @@ module sm_core (
     wire de_wmma_any = de_is_wmma_mma | de_is_wmma_load | de_is_wmma_store;
 
     wire pipeline_drained;
+    wire pipeline_drained_r;  // forward-declared, assigned after pipeline_drained
+
     wire wmma_drain_wait = de_valid & de_wmma_any & ~pipeline_drained
                          & ~tc_busy & ~burst_busy;
-    wire pbra_drain_wait = de_valid & de_is_pbra & ~pipeline_drained;
+
+    // drain_waits use combinational pipeline_drained so they stay in sync
+    // with front_stall (which uses combinational any_ex_busy).
+    wire pbra_drain_wait = (de_valid & de_is_pbra & ~pipeline_drained)
+                         | pbra_fire;
 
     wire sb_stall_gated = sb_stall & de_valid;
 
+    // v1.7c: conv_wait forward-declared here, defined in Convergence Checker.
+    wire conv_wait;
+
+    // front_stall MUST use combinational any_ex_busy to stay in sync with
+    // sp_stall. Using any_ex_busy_r creates a 1-cycle window where
+    // front_stall=0 but sp_stall=1, causing DE→RR to overwrite an
+    // instruction stuck in RR.
     assign front_stall = sb_stall_gated | any_ex_busy | tc_busy | burst_busy
-                       | wmma_drain_wait | pbra_drain_wait;
+                       | wmma_drain_wait | pbra_drain_wait | conv_wait;
     assign sp_stall = any_ex_busy | tc_busy | burst_busy;
 
     wire de_is_ctrl_special = de_wmma_any | de_is_pbra;
@@ -316,7 +338,7 @@ module sm_core (
     // ================================================================
     // PBRA Handler
     // ================================================================
-    wire pbra_pred_override = de_valid & de_is_pbra & pipeline_drained;
+    wire pbra_pred_override = de_valid & de_is_pbra & pipeline_drained_r;
     reg [1:0] rr_pred_rd_sel;
     wire [1:0] sp_pred_rd_sel_mux = pbra_pred_override ? de_pred_rd_sel
                                                        : rr_pred_rd_sel;
@@ -328,19 +350,59 @@ module sm_core (
 
     wire pbra_divergent = (taken_mask != 4'd0) & (fall_mask != 4'd0);
 
-    assign pbra_fire = de_valid & de_is_pbra & pipeline_drained
-                     & ~tc_busy & ~burst_busy;
-    wire pbra_divergent_fire = pbra_fire & pbra_divergent;
+    // v1.6: guard pbra_fire with ~pbra_commit to prevent re-fire
+    // v1.7c: use pipeline_drained_r to break ex_busy→pbra_fire timing path
+    assign pbra_fire = de_valid & de_is_pbra & pipeline_drained_r
+                     & ~tc_busy & ~burst_busy & ~pbra_commit;
 
-    wire pbra_redirect = pbra_fire;
     wire [`GPU_PC_WIDTH-1:0] pbra_target = (taken_mask != 4'd0)
                                          ? de_pbra_target : de_pend_pc;
 
     // ================================================================
-    // Branch / redirect control
+    // v1.6: PBRA pipeline register — breaks 15.6ns critical path
+    //   Cycle N:   pbra_fire -> pred read -> divergence -> REGISTERED
+    //   Cycle N+1: pbra_commit -> SIMT push, mask update, redirect
     // ================================================================
-    assign branch_taken = (id_issue_ctrl & de_is_branch) | pbra_redirect;
-    assign branch_target = pbra_redirect ? pbra_target : de_branch_target;
+    reg pbra_divergent_r;
+    reg [3:0] taken_mask_r, fall_mask_r;
+    reg [`GPU_PC_WIDTH-1:0] pbra_target_r;
+    reg [`GPU_PC_WIDTH-1:0] pbra_reconv_pc_r, pbra_pend_pc_r;
+    reg [3:0] pbra_saved_mask_r;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            pbra_commit <= 1'b0;
+            pbra_divergent_r <= 1'b0;
+            taken_mask_r <= 4'd0;
+            fall_mask_r <= 4'd0;
+            pbra_target_r <= {`GPU_PC_WIDTH{1'b0}};
+            pbra_reconv_pc_r <= {`GPU_PC_WIDTH{1'b0}};
+            pbra_pend_pc_r <= {`GPU_PC_WIDTH{1'b0}};
+            pbra_saved_mask_r <= 4'd0;
+        end else if (kernel_start) begin
+            pbra_commit <= 1'b0;
+        end else if (pbra_fire & ~pbra_commit) begin
+            pbra_commit <= 1'b1;
+            pbra_divergent_r <= pbra_divergent;
+            taken_mask_r <= taken_mask;
+            fall_mask_r <= fall_mask;
+            pbra_target_r <= pbra_target;
+            pbra_reconv_pc_r <= de_reconv_pc;
+            pbra_pend_pc_r <= de_pend_pc;
+            pbra_saved_mask_r <= active_mask;
+        end else begin
+            pbra_commit <= 1'b0;
+        end
+    end
+
+    wire pbra_divergent_commit = pbra_commit & pbra_divergent_r;
+
+    // ================================================================
+    // Branch / redirect control
+    // v1.6: redirect on pbra_commit (cycle N+1), not pbra_fire
+    // ================================================================
+    assign branch_taken = (id_issue_ctrl & de_is_branch) | pbra_commit;
+    assign branch_target = pbra_commit ? pbra_target_r : de_branch_target;
     assign ret_detected = id_issue_ctrl & de_is_ret;
 
     wire sb_issue = id_can_issue & de_rf_we;
@@ -369,11 +431,18 @@ module sm_core (
 
     assign pipeline_drained = ~sb_any_pending & ~any_ex_busy;
 
+    // v1.7c: registered pipeline_drained for trigger/fire signals.
+    // Breaks the deep id_ex_opcode→fpu_busy→ex_busy→any_ex_busy path
+    // (6 levels, ~4.7ns) that leaks into pbra_fire, tc_trigger, etc.
+    // 1-cycle delay is safe: drain_wait stalls hold the frontend.
+    // Keep combinational pipeline_drained for drain_wait terms (feed front_stall→FF).
+    assign pipeline_drained_r = ~sb_any_pending & ~any_ex_busy_r;
+
     // ================================================================
-    // Tensor Core Top (v1.2 — single scatter write channel)
+    // Tensor Core Top (v1.2)
     // ================================================================
     wire tc_trigger = de_valid & de_is_wmma_mma & ~tc_busy & ~burst_busy
-                    & pipeline_drained;
+                    & pipeline_drained_r;
 
     tc_top u_tc_top (
         .clk(clk), .rst_n(rst_n),
@@ -386,7 +455,6 @@ module sm_core (
         .rf_addr_override(tc_rf_override),
         .rf_r0_addr(tc_rf_r0), .rf_r1_addr(tc_rf_r1),
         .rf_r2_addr(tc_rf_r2), .rf_r3_addr(tc_rf_r3),
-        // v1.2: single scatter write port
         .scat_w_addr(tc_w_addr), .scat_w_data(tc_w_data), .scat_w_we(tc_w_we)
     );
 
@@ -410,9 +478,9 @@ module sm_core (
     reg bu_is_store;
 
     wire bu_load_trigger = de_valid & de_is_wmma_load & ~tc_busy
-                         & ~burst_busy & pipeline_drained;
+                         & ~burst_busy & pipeline_drained_r;
     wire bu_store_trigger = de_valid & de_is_wmma_store & ~tc_busy
-                          & ~burst_busy & pipeline_drained;
+                          & ~burst_busy & pipeline_drained_r;
 
     reg bu_rf_override_r;
     reg [3:0] bu_rf_r0_r, bu_rf_r1_r, bu_rf_r2_r, bu_rf_r3_r;
@@ -519,29 +587,41 @@ module sm_core (
         end
     end
 
-    // ================================================================
-    // RF Override Select — shared read port mux (v1.5)
-    //   ovr_sel=1 when TC or BU needs the RF read ports.
-    //   Pipeline is stalled/drained during these phases, so sharing
-    //   the physical read ports is safe.
-    // ================================================================
     wire ovr_sel = tc_rf_override | bu_rf_override_r;
 
     // ================================================================
     // Convergence Checker
+    // v1.7c: Break conv→stack critical path using conv_can_fire,
+    //   conv_wait in front_stall, and registered any_ex_busy_r.
     // ================================================================
     wire at_reconv = ~stack_empty & fu_running
                    & (fu_pc_out == tos_reconv_pc);
-    wire conv_phase0_fire = at_reconv & ~tos_phase & ~front_stall;
-    wire conv_phase1_fire = at_reconv & tos_phase & ~front_stall;
+
+    // v1.7c: convergence uses pipeline_drained_r (defined near line 441).
+    // All trigger/fire signals use pipeline_drained_r to avoid the deep
+    // id_ex_opcode → ex_busy → any_ex_busy combinational path.
+
+    // ~de_is_pbra replaces ~pbra_fire to avoid combinational leak:
+    //   pbra_fire uses pipeline_drained_r (safe), but older versions
+    //   leaked through pipeline_drained (comb). Belt-and-suspenders.
+    wire conv_can_fire = ~any_ex_busy_r & ~tc_busy & ~burst_busy
+                       & ~de_is_pbra & ~pbra_commit
+                       & (~de_valid | pipeline_drained_r);
+
+    wire conv_phase0_fire = at_reconv & ~tos_phase & conv_can_fire;
+    wire conv_phase1_fire = at_reconv & tos_phase & conv_can_fire;
+
+    // Hold PC at reconv_pc when convergence detected but can't fire yet
+    assign conv_wait = at_reconv & ~conv_can_fire;
 
     assign conv_redirect = conv_phase0_fire;
     assign conv_target_pc = tos_pend_pc;
 
     // ================================================================
     // SIMT Stack
+    // v1.6: push uses registered pbra_commit data
     // ================================================================
-    assign simt_push = pbra_divergent_fire;
+    assign simt_push = pbra_divergent_commit;
     assign simt_pop = conv_phase1_fire;
     assign simt_modify = conv_phase0_fire;
 
@@ -549,8 +629,9 @@ module sm_core (
         .clk(clk), .rst_n(rst_n),
         .clear(kernel_start),
         .push(simt_push),
-        .push_reconv_pc(de_reconv_pc), .push_saved_mask(active_mask),
-        .push_pend_mask(fall_mask), .push_pend_pc(de_pend_pc),
+        // v1.6: registered push data from pbra pipeline stage
+        .push_reconv_pc(pbra_reconv_pc_r), .push_saved_mask(pbra_saved_mask_r),
+        .push_pend_mask(fall_mask_r), .push_pend_pc(pbra_pend_pc_r),
         .pop(simt_pop), .modify_tos(simt_modify),
         .tos_reconv_pc(tos_reconv_pc), .tos_saved_mask(tos_saved_mask),
         .tos_pend_mask(tos_pend_mask), .tos_pend_pc(tos_pend_pc),
@@ -560,13 +641,14 @@ module sm_core (
 
     // ================================================================
     // Active Mask Update
+    // v1.6: divergent mask update uses registered taken_mask_r
     // ================================================================
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) active_mask <= 4'b1111;
         else if (kernel_start) active_mask <= thread_mask;
         else if (conv_phase1_fire) active_mask <= tos_saved_mask;
         else if (conv_phase0_fire) active_mask <= tos_pend_mask;
-        else if (pbra_divergent_fire) active_mask <= taken_mask;
+        else if (pbra_divergent_commit) active_mask <= taken_mask_r;
     end
 
     // ================================================================
@@ -616,8 +698,6 @@ module sm_core (
 
     // ================================================================
     // External RF Write Mux — single channel (v1.5)
-    //   TC scatter (1W serialized) and BU load (1W) are mutually
-    //   exclusive. BU has priority (defensive — shouldn't matter).
     // ================================================================
     reg [3:0] ext_w_addr [0:3];
     reg [15:0] ext_w_data [0:3];
@@ -639,7 +719,7 @@ module sm_core (
     end
 
     // ================================================================
-    // 4x SP Core (v1.5 — single ext write port, ovr_sel)
+    // 4x SP Core (v1.5)
     // ================================================================
     genvar t;
     generate
@@ -665,7 +745,6 @@ module sm_core (
                 .ex_mem_valid_out(sp_ex_mem_valid[t]),
                 .ex_busy(sp_ex_busy[t]),
                 .mem_rdata(dmem_dout_a[t]),
-                // v1.5: single external write port
                 .wb_ext_w_addr(ext_w_addr[t]),
                 .wb_ext_w_data(ext_w_data[t]),
                 .wb_ext_w_we(ext_w_we[t]),

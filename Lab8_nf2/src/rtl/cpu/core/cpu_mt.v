@@ -8,6 +8,18 @@
  Author: Jeremy Cai
  Date: Feb. 23, 2026
  Revision History:
+    v3.1 (Mar. 7, 2026):
+      - Removed unused mul_en, mul_long, mul_signed, mul_accumulate signals from CU and pipeline registers.
+    v3.0 (Mar. 6, 2026):
+      - BRAM-based shared regfile: single instance for all 4 threads.
+         Address = {tid[1:0], reg[3:0]}, 64×32 entries.
+      - Eliminates per-thread regfile instances + RF read mux + BDTU mux.
+      - Write serializer (v2.9) retained in per-thread generate.
+    v2.9 (Mar. 6, 2026):
+      - Regfile 4R1W distributed RAM: 2-copy mirrored dist RAM,
+        dual writes (MLAL RdHi+RdLo, BDTU) serialized over 2 cycles.
+        dual_wr_stall added to stall_all — transparent, +1 cycle on
+        MLAL/BDTU dual-write only.
    v2.8 (Mar. 5, 2026):
      - Per-thread halt detection: B . (0xEAFFFFFE) detected at IF2,
        2-sighting stability filter, sticky halted[tid] bits.
@@ -28,7 +40,6 @@
 `include "regfile.v"
 `include "cu.v"
 `include "alu.v"
-`include "mac.v"
 `include "cond_eval.v"
 `include "bdtu.v"
 `include "barrel_shifter.v"
@@ -36,25 +47,20 @@
 module cpu_mt (
     input wire clk,
     input wire rst_n,
-    // Execution control (from pkt_proc)
     input wire cpu_start_i,
     input wire [`PC_WIDTH-1:0] entry_pc_i,
-    // Instruction memory interface
     input wire [`INSTR_WIDTH-1:0] i_mem_data_i,
     output wire [`PC_WIDTH-1:0] i_mem_addr_o,
-    // Data memory interface
     input wire [`DATA_WIDTH-1:0] d_mem_data_i,
     output wire [`CPU_DMEM_ADDR_WIDTH-1:0] d_mem_addr_o,
     output wire [`DATA_WIDTH-1:0] d_mem_data_o,
     output wire d_mem_wen_o,
     output wire [1:0] d_mem_size_o,
-    // Coprocessor interface (active at EX2 stage)
     output wire cp_wen_o,
     output wire cp_ren_o,
     output wire [3:0] cp_reg_o,
     output wire [31:0] cp_wr_data_o,
     input wire [31:0] cp_rd_data_i,
-
     output wire cpu_done
 );
 
@@ -66,9 +72,7 @@ wire bdtu_busy;
 wire branch_taken_ex2;
 wire [`PC_WIDTH-1:0] branch_target_ex2;
 
-/* v2.8: running flop — CPU stalled until cpu_start pulse */
 reg running;
-
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) running <= 1'b0;
     else if (cpu_start_i) running <= 1'b1;
@@ -76,31 +80,18 @@ end
 
 /* ================================================================
    PER-THREAD HALT DETECTION (v2.8)
-
-   B . (branch to self) = 0xEAFFFFFE, position-independent.
-   Detected at IF2 where BRAM output is available.
-   Require 2 consecutive sightings (8 cycles apart for same thread)
-   to filter squashed fetches.
-
-   Halted threads: PC frozen, pipeline slots become NOPs.
-   cpu_start clears all halt state for restart.
    ================================================================ */
 localparam [31:0] HALT_ENCODING = 32'hEAFF_FFFE;
 
 reg [3:0] halted;
 reg [3:0] halt_seen_once;
-
 reg [`PC_WIDTH-1:0] pc_thread [0:3];
 
-/* cpu_done: primary = all halted, fallback = all PCs at CPU_DONE_PC */
 wire pc_done = (pc_thread[0] == `CPU_DONE_PC) &&
                (pc_thread[1] == `CPU_DONE_PC) &&
                (pc_thread[2] == `CPU_DONE_PC) &&
                (pc_thread[3] == `CPU_DONE_PC);
 
-/* cpu_done gated by running: must not assert before cpu_start fires.
- * Without this gate, pc_done=1 on reset (all PCs at CPU_DONE_PC)
- * causes pkt_proc to exit P_CPU_RUN immediately. */
 assign cpu_done = running & ((&halted) | pc_done);
 
 /* ================================================================
@@ -120,20 +111,15 @@ wire [`PC_WIDTH-1:0] pc_if = pc_thread[tid_if];
 wire [`PC_WIDTH-1:0] pc_plus4_if = pc_if + 32'd4;
 assign i_mem_addr_o = pc_if;
 
-/* v2.8: PC update with halt freeze + cpu_start reload */
 integer k;
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         for (k = 0; k < 4; k = k + 1)
             pc_thread[k] <= `CPU_DONE_PC;
     end else if (cpu_start_i) begin
-        /* cpu_start: all threads start at the same entry_pc.
-         * Shared-code model: threads diverge via TID register,
-         * not via staggered PCs. */
         for (k = 0; k < 4; k = k + 1)
             pc_thread[k] <= entry_pc_i;
     end else if (!stall_all) begin
-        /* Normal PC update: skip halted threads */
         if (!halted[tid_if])
             pc_thread[tid_if] <= pc_plus4_if;
         if (branch_taken_ex2 && valid_ex2 && !halted[tid_ex2])
@@ -141,13 +127,6 @@ always @(posedge clk or negedge rst_n) begin
     end
 end
 
-/* v2.8b: Halt detection at IF2 (BRAM output valid here).
- * CRITICAL: Both set and clear gated on valid_if2.
- * In the 4T barrel, IF1 and EX2 are the same thread. When B .
- * hits EX2, the squashed IF1 fetch (at PC+4) produces a non-matching
- * BRAM output one cycle later. Without gating, that squashed fetch
- * clears halt_seen_once every redirect, preventing halted from
- * ever being set. */
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         halted <= 4'b0;
@@ -171,7 +150,6 @@ end
    IF1/IF2 PIPELINE REGISTER
    ================================================================ */
 wire squash_if1 = branch_taken_ex2 && valid_ex2;
-/* v2.8: invalidate halted thread fetches */
 wire suppress_if1 = halted[tid_if];
 reg [`PC_WIDTH-1:0] pc_plus4_if2;
 
@@ -188,7 +166,7 @@ always @(posedge clk or negedge rst_n) begin
 end
 
 /* ================================================================
-   IF2 — register instruction + pre-decode RF addresses
+   IF2 — pre-decode RF addresses from IMEM output
    ================================================================ */
 wire [3:0] rn_addr_pre = i_mem_data_i[19:16];
 wire [3:0] rd_addr_pre = i_mem_data_i[15:12];
@@ -255,7 +233,7 @@ wire mem_signed_id;
 wire addr_pre_idx_id, addr_up_id, addr_wb_id;
 wire [2:0] wb_sel_id;
 wire branch_en_id, branch_link_id, branch_exchange_id;
-wire mul_en_id, mul_long_id, mul_signed_id, mul_accumulate_id;
+wire mul_en_id, mul_long_id, mul_signed_id, mul_accumulate_id; // CU still decodes, unused
 wire psr_rd_id, psr_wr_id, psr_field_sel_id;
 wire [3:0] psr_mask_id;
 wire [15:0] bdt_list_id;
@@ -314,7 +292,33 @@ wire [`DATA_WIDTH-1:0] wb_wr_data1, wb_wr_data2;
 wire wb_wr_en1, wb_wr_en2;
 
 /* ================================================================
-   REGISTER FILES (4 instances, one per thread)
+   v3.0: SHARED REGISTER FILE (BRAM + dist RAM hybrid)
+   ================================================================ */
+wire [3:0] r3_reg_addr = bdtu_busy ? bdtu_rf_rd_addr : rs_addr_id;
+wire [1:0] r3_tid = bdtu_busy ? tid_mem : tid_id;
+
+wire [`DATA_WIDTH-1:0] rf_r1data, rf_r2data, rf_r3data, rf_r4data;
+wire rf_wen;
+wire [5:0] rf_waddr;
+wire [`DATA_WIDTH-1:0] rf_wdata;
+
+regfile u_rf (
+    .clk(clk),
+    .r1addr({tid_if2, rn_addr_pre}), .r1data(rf_r1data),
+    .r2addr({tid_if2, rm_addr_pre}), .r2data(rf_r2data),
+    .r4addr({tid_if2, rd_addr_pre}), .r4data(rf_r4data),
+    .r3addr({r3_tid, r3_reg_addr}), .r3data(rf_r3data),
+    .wr_en(rf_wen), .wr_addr(rf_waddr), .wr_data(rf_wdata)
+);
+
+wire [`DATA_WIDTH-1:0] rn_data_id = rf_r1data;
+wire [`DATA_WIDTH-1:0] rm_data_id = rf_r2data;
+wire [`DATA_WIDTH-1:0] r3_data_id = rf_r3data;
+wire [`DATA_WIDTH-1:0] r4_data_id = rf_r4data;
+wire [`DATA_WIDTH-1:0] bdtu_rf_rd_data = rf_r3data;
+
+/* ================================================================
+   v3.0: PER-THREAD WRITE SERIALIZER
    ================================================================ */
 genvar g;
 generate
@@ -329,6 +333,7 @@ generate
         wire [`DATA_WIDTH-1:0] wd1 = is_bdtu_target
             ? (bdtu_wr_en1 ? bdtu_wr_data1 : bdtu_wr_data2)
             : (wb_wr_en1 ? wb_wr_data1 : wb_wr_data2);
+
         wire [3:0] wa2 = is_bdtu_target
             ? ((bdtu_wr_en1 && bdtu_wr_en2) ? bdtu_wr_addr2 : wa1)
             : ((wb_wr_en1 && wb_wr_en2) ? wb_wr_addr2 : wa1);
@@ -336,66 +341,67 @@ generate
             ? ((bdtu_wr_en1 && bdtu_wr_en2) ? bdtu_wr_data2 : wd1)
             : ((wb_wr_en1 && wb_wr_en2) ? wb_wr_data2 : wd1);
 
-        reg wena_r;
-        reg [3:0] wa1_r, wa2_r;
-        reg [`DATA_WIDTH-1:0] wd1_r, wd2_r;
+        wire is_dual_wr = wena && (wa1 != wa2);
+
+        reg dual_pending;
+        reg [3:0] wa_hold;
+        reg [`DATA_WIDTH-1:0] wd_hold;
+        reg rf_wen_r;
+        reg [3:0] rf_waddr_r;
+        reg [`DATA_WIDTH-1:0] rf_wdata_r;
 
         always @(posedge clk or negedge rst_n) begin
             if (!rst_n) begin
-                wena_r <= 1'b0; wa1_r <= 4'd0; wa2_r <= 4'd0;
-                wd1_r <= {`DATA_WIDTH{1'b0}}; wd2_r <= {`DATA_WIDTH{1'b0}};
+                rf_wen_r <= 1'b0; rf_waddr_r <= 4'd0;
+                rf_wdata_r <= {`DATA_WIDTH{1'b0}};
+                dual_pending <= 1'b0; wa_hold <= 4'd0;
+                wd_hold <= {`DATA_WIDTH{1'b0}};
+            end else if (dual_pending) begin
+                rf_wen_r <= 1'b1;
+                rf_waddr_r <= wa_hold;
+                rf_wdata_r <= wd_hold;
+                dual_pending <= 1'b0;
             end else begin
-                wena_r <= wena; wa1_r <= wa1; wa2_r <= wa2;
-                wd1_r <= wd1; wd2_r <= wd2;
+                rf_wen_r <= wena;
+                rf_waddr_r <= wa1;
+                rf_wdata_r <= wd1;
+                if (is_dual_wr) begin
+                    dual_pending <= 1'b1;
+                    wa_hold <= wa2;
+                    wd_hold <= wd2;
+                end
             end
         end
-
-        wire [3:0] local_r3addr = (bdtu_busy && (tid_mem == g))
-                                  ? bdtu_rf_rd_addr : rs_addr_id;
-        wire [`DATA_WIDTH-1:0] rn_out, rm_out, r3_out, r4_out;
-
-        regfile u_rf (
-            .clk(clk),
-            .r1addr(rn_addr_id), .r2addr(rm_addr_id),
-            .r3addr(local_r3addr), .r4addr(rd_addr_id),
-            .wena(wena_r),
-            .wr_addr1(wa1_r), .wr_data1(wd1_r),
-            .wr_addr2(wa2_r), .wr_data2(wd2_r),
-            .r1data(rn_out), .r2data(rm_out),
-            .r3data(r3_out), .r4data(r4_out)
-        );
     end
 endgenerate
 
-/* RF read MUX */
-reg [`DATA_WIDTH-1:0] rn_data_id, rm_data_id, r3_data_id, r4_data_id;
+/* Write merge → single port */
+wire rf_wen_t0 = THREAD_RF[0].rf_wen_r;
+wire rf_wen_t1 = THREAD_RF[1].rf_wen_r;
+wire rf_wen_t2 = THREAD_RF[2].rf_wen_r;
+wire rf_wen_t3 = THREAD_RF[3].rf_wen_r;
 
-always @(*) begin
-    case (tid_id)
-        2'd0: begin rn_data_id = THREAD_RF[0].rn_out; rm_data_id = THREAD_RF[0].rm_out;
-                    r3_data_id = THREAD_RF[0].r3_out; r4_data_id = THREAD_RF[0].r4_out; end
-        2'd1: begin rn_data_id = THREAD_RF[1].rn_out; rm_data_id = THREAD_RF[1].rm_out;
-                    r3_data_id = THREAD_RF[1].r3_out; r4_data_id = THREAD_RF[1].r4_out; end
-        2'd2: begin rn_data_id = THREAD_RF[2].rn_out; rm_data_id = THREAD_RF[2].rm_out;
-                    r3_data_id = THREAD_RF[2].r3_out; r4_data_id = THREAD_RF[2].r4_out; end
-        default: begin rn_data_id = THREAD_RF[3].rn_out; rm_data_id = THREAD_RF[3].rm_out;
-                       r3_data_id = THREAD_RF[3].r3_out; r4_data_id = THREAD_RF[3].r4_out; end
-    endcase
-end
+assign rf_wen = rf_wen_t0 | rf_wen_t1 | rf_wen_t2 | rf_wen_t3;
 
-/* BDTU read-data MUX */
-reg [`DATA_WIDTH-1:0] bdtu_rf_rd_data;
-always @(*) begin
-    case (tid_mem)
-        2'd0: bdtu_rf_rd_data = THREAD_RF[0].r3_out;
-        2'd1: bdtu_rf_rd_data = THREAD_RF[1].r3_out;
-        2'd2: bdtu_rf_rd_data = THREAD_RF[2].r3_out;
-        default: bdtu_rf_rd_data = THREAD_RF[3].r3_out;
-    endcase
-end
+wire [1:0] rf_wr_tid = rf_wen_t0 ? 2'd0 :
+                        rf_wen_t1 ? 2'd1 :
+                        rf_wen_t2 ? 2'd2 : 2'd3;
+
+assign rf_waddr = {rf_wr_tid,
+    rf_wen_t0 ? THREAD_RF[0].rf_waddr_r :
+    rf_wen_t1 ? THREAD_RF[1].rf_waddr_r :
+    rf_wen_t2 ? THREAD_RF[2].rf_waddr_r :
+                THREAD_RF[3].rf_waddr_r};
+
+assign rf_wdata =
+    rf_wen_t0 ? THREAD_RF[0].rf_wdata_r :
+    rf_wen_t1 ? THREAD_RF[1].rf_wdata_r :
+    rf_wen_t2 ? THREAD_RF[2].rf_wdata_r :
+                THREAD_RF[3].rf_wdata_r;
 
 /* ================================================================
    ID/EX1 PIPELINE REGISTER
+   v3.1: removed mul_en, mul_long, mul_signed, mul_accumulate
    ================================================================ */
 reg [3:0] alu_op_ex1;
 reg alu_src_b_ex1, cpsr_wen_ex1;
@@ -423,7 +429,6 @@ reg [3:0] rn_addr_ex1, rs_addr_ex1, rd_addr_ex1;
 reg [3:0] fwd_addr1_ex1, fwd_addr2_ex1;
 reg [`DATA_WIDTH-1:0] fwd_data1_ex1, fwd_data2_ex1;
 reg fwd_en1_ex1, fwd_en2_ex1;
-reg mul_en_ex1, mul_long_ex1, mul_signed_ex1, mul_accumulate_ex1;
 reg cp_wen_ex1, cp_ren_ex1;
 
 always @(posedge clk or negedge rst_n) begin
@@ -447,7 +452,6 @@ always @(posedge clk or negedge rst_n) begin
         fwd_addr1_ex1 <= 4'd0; fwd_addr2_ex1 <= 4'd0;
         fwd_data1_ex1 <= 32'd0; fwd_data2_ex1 <= 32'd0;
         fwd_en1_ex1 <= 1'b0; fwd_en2_ex1 <= 1'b0;
-        mul_en_ex1 <= 1'b0; mul_long_ex1 <= 1'b0; mul_signed_ex1 <= 1'b0; mul_accumulate_ex1 <= 1'b0;
         cp_wen_ex1 <= 1'b0; cp_ren_ex1 <= 1'b0;
         tid_ex1 <= 2'd0; valid_ex1 <= 1'b0;
     end else if (!stall_all) begin
@@ -474,15 +478,13 @@ always @(posedge clk or negedge rst_n) begin
         fwd_addr1_ex1 <= wb_wr_addr1; fwd_addr2_ex1 <= wb_wr_addr2;
         fwd_data1_ex1 <= wb_wr_data1; fwd_data2_ex1 <= wb_wr_data2;
         fwd_en1_ex1 <= wb_wr_en1; fwd_en2_ex1 <= wb_wr_en2;
-        mul_en_ex1 <= mul_en_id; mul_long_ex1 <= mul_long_id;
-        mul_signed_ex1 <= mul_signed_id; mul_accumulate_ex1 <= mul_accumulate_id;
         cp_wen_ex1 <= cp_wen_id; cp_ren_ex1 <= cp_ren_id;
         tid_ex1 <= tid_id; valid_ex1 <= valid_id;
     end
 end
 
 /* ================================================================
-   EX1 — SHIFT / OPERAND-PREPARE (barrel shifter + opB mux)
+   EX1 — SHIFT / OPERAND-PREPARE
    ================================================================ */
 wire fwd_rn_p1 = fwd_en1_ex1 && (fwd_addr1_ex1 == rn_addr_ex1);
 wire fwd_rn_p2 = fwd_en2_ex1 && (fwd_addr2_ex1 == rn_addr_ex1);
@@ -530,6 +532,7 @@ wire [`PC_WIDTH-1:0] branch_target_br_ex1 = pc_plus4_ex1 + 32'd4 + imm32_ex1;
 
 /* ================================================================
    EX1/EX2 PIPELINE REGISTER
+   v3.1: removed mul_* regs
    ================================================================ */
 reg [`DATA_WIDTH-1:0] alu_src_b_val_ex2;
 reg shifter_cout_ex2;
@@ -552,7 +555,6 @@ reg addr_pre_idx_bdt_ex2, addr_up_bdt_ex2, swap_byte_ex2;
 reg [3:0] base_reg_ex2, rm_addr_ex2;
 reg psr_wr_ex2, psr_field_sel_ex2;
 reg [3:0] psr_mask_ex2;
-reg mul_en_ex2, mul_long_ex2, mul_signed_ex2, mul_accumulate_ex2;
 reg cp_wen_ex2, cp_ren_ex2;
 
 always @(posedge clk or negedge rst_n) begin
@@ -572,7 +574,6 @@ always @(posedge clk or negedge rst_n) begin
         addr_pre_idx_bdt_ex2 <= 1'b0; addr_up_bdt_ex2 <= 1'b0; swap_byte_ex2 <= 1'b0;
         base_reg_ex2 <= 4'd0; rm_addr_ex2 <= 4'd0;
         psr_wr_ex2 <= 1'b0; psr_mask_ex2 <= 4'd0; psr_field_sel_ex2 <= 1'b0;
-        mul_en_ex2 <= 1'b0; mul_long_ex2 <= 1'b0; mul_signed_ex2 <= 1'b0; mul_accumulate_ex2 <= 1'b0;
         cp_wen_ex2 <= 1'b0; cp_ren_ex2 <= 1'b0;
         tid_ex2 <= 2'd0; valid_ex2 <= 1'b0;
     end else if (!stall_all) begin
@@ -595,15 +596,14 @@ always @(posedge clk or negedge rst_n) begin
         addr_pre_idx_bdt_ex2 <= addr_pre_idx_bdt_ex1; addr_up_bdt_ex2 <= addr_up_bdt_ex1; swap_byte_ex2 <= swap_byte_ex1;
         base_reg_ex2 <= base_reg_ex1; rm_addr_ex2 <= rm_addr_ex1;
         psr_wr_ex2 <= psr_wr_ex1; psr_mask_ex2 <= psr_mask_ex1; psr_field_sel_ex2 <= psr_field_sel_ex1;
-        mul_en_ex2 <= mul_en_ex1; mul_long_ex2 <= mul_long_ex1;
-        mul_signed_ex2 <= mul_signed_ex1; mul_accumulate_ex2 <= mul_accumulate_ex1;
         cp_wen_ex2 <= cp_wen_ex1; cp_ren_ex2 <= cp_ren_ex1;
         tid_ex2 <= tid_ex1; valid_ex2 <= valid_ex1;
     end
 end
 
 /* ================================================================
-   EX2 — ALU / MAC / CP10 / BRANCH-RESOLVE
+   EX2 — ALU / CP10 / BRANCH-RESOLVE
+   v3.1: MAC removed entirely
    ================================================================ */
 wire [`DATA_WIDTH-1:0] rn_val_ex2 = rn_data_ex2;
 wire [`DATA_WIDTH-1:0] rm_val_ex2 = rm_data_ex2;
@@ -617,20 +617,6 @@ alu u_alu (
     .alu_op(alu_op_ex2), .cin(carry_in_ex2),
     .shift_carry_out(shifter_cout_ex2),
     .result(alu_result_ex2), .alu_flags(alu_flags_ex2)
-);
-
-/* MAC */
-wire [`DATA_WIDTH-1:0] mac_rn_acc_ex2 = mul_long_ex2 ? rn_data_ex2 : rd_data_ex2;
-wire [`DATA_WIDTH-1:0] mac_result_lo_ex2, mac_result_hi_ex2;
-wire [3:0] mac_flags_ex2;
-
-mac u_mac (
-    .rm(rm_data_ex2), .rs(rs_data_ex2),
-    .rn_acc(mac_rn_acc_ex2), .rdlo_acc(rd_data_ex2),
-    .mul_en(mul_en_ex2), .mul_long(mul_long_ex2),
-    .mul_signed(mul_signed_ex2), .mul_accumulate(mul_accumulate_ex2),
-    .result_lo(mac_result_lo_ex2), .result_hi(mac_result_hi_ex2),
-    .mac_flags(mac_flags_ex2)
 );
 
 /* CP10 coprocessor interface */
@@ -648,16 +634,16 @@ wire psr_wr_flags_ex2 = psr_wr_ex2 && psr_mask_ex2[3] && !psr_field_sel_ex2;
 wire [`CPU_DMEM_ADDR_WIDTH-1:0] mem_addr_ex2 = addr_pre_idx_ex2 ? alu_result_ex2 : rn_val_ex2;
 wire [`DATA_WIDTH-1:0] store_data_ex2 = rd_store_val_ex2;
 
-/* Flag source mux (ALU vs MAC) */
-wire [3:0] flags_ex2 = mul_en_ex2 ? mac_flags_ex2 : alu_flags_ex2;
+/* v3.1: flags directly from ALU, no MAC mux */
+wire [3:0] flags_ex2 = alu_flags_ex2;
 
 /* ================================================================
    EX3 — DEFERRED CPSR FLAG UPDATE (sidecar)
+   v3.1: simplified — no MAC flag path
    ================================================================ */
 reg alu_flag_n_ex3, alu_flag_c_ex3, alu_flag_v_ex3;
 reg [3:0] alu_result_top4_ex3;
 reg cpsr_wen_ex3, psr_wr_flags_ex3;
-reg mul_en_ex3, mul_long_ex3;
 reg [1:0] tid_ex3;
 reg valid_ex3;
 
@@ -666,26 +652,19 @@ always @(posedge clk or negedge rst_n) begin
         alu_flag_n_ex3 <= 1'b0; alu_flag_c_ex3 <= 1'b0; alu_flag_v_ex3 <= 1'b0;
         alu_result_top4_ex3 <= 4'b0;
         cpsr_wen_ex3 <= 1'b0; psr_wr_flags_ex3 <= 1'b0;
-        mul_en_ex3 <= 1'b0; mul_long_ex3 <= 1'b0;
         tid_ex3 <= 2'd0; valid_ex3 <= 1'b0;
     end else if (!stall_all) begin
         alu_flag_n_ex3 <= flags_ex2[3]; alu_flag_c_ex3 <= flags_ex2[1]; alu_flag_v_ex3 <= flags_ex2[0];
         alu_result_top4_ex3 <= alu_result_ex2[31:28];
         cpsr_wen_ex3 <= cpsr_wen_ex2; psr_wr_flags_ex3 <= psr_wr_flags_ex2;
-        mul_en_ex3 <= mul_en_ex2; mul_long_ex3 <= mul_long_ex2;
         tid_ex3 <= tid_ex2; valid_ex3 <= valid_ex2;
     end
 end
 
-/* Deferred Z from registered results in MEM stage */
+/* Deferred Z — ALU only, no MAC path */
 reg [`DATA_WIDTH-1:0] alu_result_mem;
-reg [`DATA_WIDTH-1:0] mac_result_lo_mem, mac_result_hi_mem;
 
-wire flag_z_deferred =
-    (mul_en_ex3 & mul_long_ex3) ? (mac_result_lo_mem == {`DATA_WIDTH{1'b0}} &&
-                                   mac_result_hi_mem == {`DATA_WIDTH{1'b0}}) :
-    mul_en_ex3                  ? (mac_result_lo_mem == {`DATA_WIDTH{1'b0}}) :
-                                  (alu_result_mem == {`DATA_WIDTH{1'b0}});
+wire flag_z_deferred = (alu_result_mem == {`DATA_WIDTH{1'b0}});
 
 integer f;
 always @(posedge clk or negedge rst_n) begin
@@ -703,6 +682,7 @@ end
 
 /* ================================================================
    EX2/MEM PIPELINE REGISTER
+   v3.1: removed mac_result_lo/hi, mul_long
    ================================================================ */
 reg [`CPU_DMEM_ADDR_WIDTH-1:0] mem_addr_mem;
 reg [`DATA_WIDTH-1:0] store_data_mem;
@@ -721,12 +701,10 @@ reg [3:0] base_reg_mem;
 reg [`DATA_WIDTH-1:0] base_value_mem;
 reg [3:0] swp_rd_mem, swp_rm_mem;
 reg [`DATA_WIDTH-1:0] cp_rd_data_mem;
-reg mul_long_mem;
 
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         alu_result_mem <= {`DATA_WIDTH{1'b0}};
-        mac_result_lo_mem <= {`DATA_WIDTH{1'b0}}; mac_result_hi_mem <= {`DATA_WIDTH{1'b0}};
         mem_addr_mem <= {`CPU_DMEM_ADDR_WIDTH{1'b0}}; store_data_mem <= {`DATA_WIDTH{1'b0}};
         mem_read_mem <= 1'b0; mem_write_mem <= 1'b0; mem_size_mem <= 2'd0; mem_signed_mem <= 1'b0;
         wb_sel_mem <= 3'd0;
@@ -737,11 +715,10 @@ always @(posedge clk or negedge rst_n) begin
         addr_pre_idx_bdt_mem <= 1'b0; addr_up_bdt_mem <= 1'b0; swap_byte_mem <= 1'b0;
         base_reg_mem <= 4'd0; base_value_mem <= {`DATA_WIDTH{1'b0}};
         swp_rd_mem <= 4'd0; swp_rm_mem <= 4'd0;
-        cp_rd_data_mem <= {`DATA_WIDTH{1'b0}}; mul_long_mem <= 1'b0;
+        cp_rd_data_mem <= {`DATA_WIDTH{1'b0}};
         tid_mem <= 2'd0; valid_mem <= 1'b0;
     end else if (!stall_all) begin
         alu_result_mem <= alu_result_ex2;
-        mac_result_lo_mem <= mac_result_lo_ex2; mac_result_hi_mem <= mac_result_hi_ex2;
         mem_addr_mem <= mem_addr_ex2; store_data_mem <= store_data_ex2;
         mem_read_mem <= mem_read_ex2; mem_write_mem <= mem_write_ex2;
         mem_size_mem <= mem_size_ex2; mem_signed_mem <= mem_signed_ex2;
@@ -755,7 +732,7 @@ always @(posedge clk or negedge rst_n) begin
         addr_pre_idx_bdt_mem <= addr_pre_idx_bdt_ex2; addr_up_bdt_mem <= addr_up_bdt_ex2; swap_byte_mem <= swap_byte_ex2;
         base_reg_mem <= base_reg_ex2; base_value_mem <= rn_val_ex2;
         swp_rd_mem <= wr_addr1_ex2; swp_rm_mem <= rm_addr_ex2;
-        cp_rd_data_mem <= cp_rd_data_i; mul_long_mem <= mul_long_ex2;
+        cp_rd_data_mem <= cp_rd_data_i;
         tid_mem <= tid_ex2; valid_mem <= valid_ex2;
     end
 end
@@ -793,6 +770,7 @@ assign d_mem_size_o = bdtu_busy ? bdtu_mem_size : mem_size_mem;
 
 /* ================================================================
    MEM/WB PIPELINE REGISTER
+   v3.1: removed mac_result_lo/hi, mul_long
    ================================================================ */
 reg [`DATA_WIDTH-1:0] alu_result_wb;
 reg [`PC_WIDTH-1:0] pc_plus4_wb;
@@ -801,35 +779,32 @@ reg [3:0] wr_addr1_wb, wr_addr2_wb;
 reg wr_en1_wb, wr_en2_wb;
 reg [1:0] mem_size_wb;
 reg mem_signed_wb;
-reg [`DATA_WIDTH-1:0] mac_result_lo_wb, mac_result_hi_wb, cp_rd_data_wb;
-reg mul_long_wb;
+reg [`DATA_WIDTH-1:0] cp_rd_data_wb;
 
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         alu_result_wb <= {`DATA_WIDTH{1'b0}};
-        mac_result_lo_wb <= {`DATA_WIDTH{1'b0}}; mac_result_hi_wb <= {`DATA_WIDTH{1'b0}};
         cp_rd_data_wb <= {`DATA_WIDTH{1'b0}};
         pc_plus4_wb <= {`PC_WIDTH{1'b0}}; wb_sel_wb <= 3'd0;
         wr_addr1_wb <= 4'd0; wr_addr2_wb <= 4'd0; wr_en1_wb <= 1'b0; wr_en2_wb <= 1'b0;
-        mem_size_wb <= 2'd0; mem_signed_wb <= 1'b0; mul_long_wb <= 1'b0;
+        mem_size_wb <= 2'd0; mem_signed_wb <= 1'b0;
         tid_wb <= 2'd0; valid_wb <= 1'b0;
     end else begin
         alu_result_wb <= alu_result_mem;
-        mac_result_lo_wb <= mac_result_lo_mem; mac_result_hi_wb <= mac_result_hi_mem;
         cp_rd_data_wb <= cp_rd_data_mem;
         pc_plus4_wb <= pc_plus4_mem; wb_sel_wb <= wb_sel_mem;
         wr_addr1_wb <= wr_addr1_mem; wr_addr2_wb <= wr_addr2_mem;
         wr_en1_wb <= wr_en1_mem; wr_en2_wb <= wr_en2_mem;
-        mem_size_wb <= mem_size_mem; mem_signed_wb <= mem_signed_mem; mul_long_wb <= mul_long_mem;
+        mem_size_wb <= mem_size_mem; mem_signed_wb <= mem_signed_mem;
         tid_wb <= tid_mem; valid_wb <= valid_mem;
     end
 end
 
 /* ================================================================
    WB — WRITE-BACK
+   v3.1: removed WB_MUL path, simplified wb_data2
    ================================================================ */
 reg [`DATA_WIDTH-1:0] load_data_wb;
-
 always @(*) begin
     case (mem_size_wb)
         2'b00: load_data_wb = mem_signed_wb
@@ -851,13 +826,13 @@ always @(*) begin
         `WB_MEM: wb_data1 = load_data_wb;
         `WB_LINK: wb_data1 = pc_plus4_wb;
         `WB_PSR: wb_data1 = {cpsr_flags_wb, {(`DATA_WIDTH-4){1'b0}}};
-        `WB_MUL: wb_data1 = mac_result_lo_wb;
         `WB_CP: wb_data1 = cp_rd_data_wb;
         default: wb_data1 = alu_result_wb;
     endcase
 end
 
-wire [`DATA_WIDTH-1:0] wb_data2 = mul_long_wb ? mac_result_hi_wb : alu_result_wb;
+/* v3.1: wb_data2 always alu_result (no MAC hi path) */
+wire [`DATA_WIDTH-1:0] wb_data2 = alu_result_wb;
 
 assign wb_wr_addr1 = wr_addr1_wb;
 assign wb_wr_data1 = wb_data1;
@@ -867,10 +842,11 @@ assign wb_wr_data2 = wb_data2;
 assign wb_wr_en2 = wr_en2_wb && valid_wb;
 
 /* ================================================================
-   STALL LOGIC
-   v2.8: ~running freezes entire pipeline until cpu_start
+   STALL LOGIC (v3.0)
    ================================================================ */
-assign stall_all = bdtu_busy | ~running;
+wire dual_wr_stall = THREAD_RF[0].dual_pending | THREAD_RF[1].dual_pending |
+                     THREAD_RF[2].dual_pending | THREAD_RF[3].dual_pending;
+assign stall_all = bdtu_busy | ~running | dual_wr_stall;
 
 endmodule
 

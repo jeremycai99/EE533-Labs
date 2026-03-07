@@ -3,6 +3,13 @@
  Author: Jeremy Cai
  Date: Mar. 4, 2026
  Version: 1.2
+    Revision history:
+        - v1.0 — Initial (Feb. 2026).
+        - v1.1 — Deferred imm rotation to EX1 barrel shifter.
+        - v1.2 — CP10 coprocessor support (Mar. 4, 2026).
+        - v1.3 — Remove multiply execution support (Mar. 6, 2026).
+                  MUL/MULL/MLAL decode retained for instruction classification
+                  (prevents mis-decode as DP register). All mul_* outputs removed.
  */
 
 `ifndef CU_V
@@ -11,107 +18,102 @@
 `include "define.v"
 `include "cond_eval.v"
 
-// Pure combinational control unit and offload the sequential control for multi-cycle instruction to 
-// BDTU to simplify this design.
 module cu (
-    // Keep input of control signals simply the instruction and condition evaluation results. The condition evaluation is done in cond_eval module, and the output control signals are generated based on the instruction decoding and condition evaluation results.
-    input wire [`INSTR_WIDTH-1:0] instr, // Input instruction from IF/ID pipeline register
-    input wire cond_met, // Condition evaluation result from cond_eval module
-    /* Large fanout control signals*/
-    // Instruction type decoding outputs
-    output wire t_dp_reg, // Data processing register operand
-    output wire t_dp_imm, // Data processing immediate operand
-    output wire t_mul, // Multiply instruction
-    output wire t_mull, // Multiply long instruction
-    output wire t_swp, // Single data swap instruction
-    output wire t_bx, // Branch and exchange instruction
-    output wire t_hdt_rego, // Halfword data transfer with register offset
-    output wire t_hdt_immo, // Halfword data transfer with immediate offset
-    output wire t_sdt_rego, // Single data transfer with register offset
-    output wire t_sdt_immo, // Single data transfer with immediate offset
-    output wire t_bdt, // Block data transfer instruction
-    output wire t_br, // Branch instruction
-    output wire t_mrs, // Move from PSR instruction
-    output wire t_msr_reg, // Move to PSR instruction with register operand
-    output wire t_msr_imm, // Move to PSR instruction with immediate operand
-    output wire t_swi, // Software interrupt instruction
-    output wire t_undef, // Undefined instruction
-    output wire t_mcr, // Coprocessor register write (MCR)
-    output wire t_mrc, // Coprocessor register read  (MRC)
+    input wire [`INSTR_WIDTH-1:0] instr,
+    input wire cond_met,
+
+    // Instruction type decoding
+    output wire t_dp_reg,
+    output wire t_dp_imm,
+    output wire t_mul,      // kept for classification only
+    output wire t_mull,     // kept for classification only
+    output wire t_swp,
+    output wire t_bx,
+    output wire t_hdt_rego,
+    output wire t_hdt_immo,
+    output wire t_sdt_rego,
+    output wire t_sdt_immo,
+    output wire t_bdt,
+    output wire t_br,
+    output wire t_mrs,
+    output wire t_msr_reg,
+    output wire t_msr_imm,
+    output wire t_swi,
+    output wire t_undef,
+    output wire t_mcr,
+    output wire t_mrc,
 
     // Register file addresses
-    output wire [3:0] rn_addr, // Rn register address for reading
-    output wire [3:0] rd_addr, // Rd register address for reading/writing
-    output wire [3:0] rs_addr, // Rs register address for reading (for multiply instructions)
-    output wire [3:0] rm_addr, // Rm register address for reading (for data processing instructions with register operand, and multiply instructions)
+    output wire [3:0] rn_addr,
+    output wire [3:0] rd_addr,
+    output wire [3:0] rs_addr,
+    output wire [3:0] rm_addr,
 
-    // Register file write control signals for single-cycle instructions
-    // Please be aware that for instructions that have W flag set, the write back to register file
-    // happens so eventually we end up with two write ports in the register file and a wider pipeline register to accommodate this complex datapath design
+    // Register file write control
     output wire [3:0] wr_addr1,
     output wire wr_en1,
     output wire [3:0] wr_addr2,
     output wire wr_en2,
 
-    // ALU control signals
-    output wire [3:0] alu_op, // ALU operation code for data processing
-    output wire alu_src_b, // ALU source B select: 0 for register operand, 1 for immediate operand
-    output wire cpsr_wen, // Control signal to indicate whether the instruction updates CPSR flags
+    // ALU control
+    output wire [3:0] alu_op,
+    output wire alu_src_b,
+    output wire cpsr_wen,
 
-    // Barrel shifter control signals
-    output wire [1:0] shift_type, // Barrel shifter type: 00 for LSL, 01 for LSR, 10 for ASR, 11 for ROR
-    output wire [`SHIFT_AMOUNT_WIDTH-1:0] shift_amount, // Barrel shifter amount (5 bits to support shifts up to 31)
-    output wire shift_src, // Barrel shifter source select: 0 for immediate shift amount, 1 for register specified shift amount
+    // Barrel shifter control
+    output wire [1:0] shift_type,
+    output wire [`SHIFT_AMOUNT_WIDTH-1:0] shift_amount,
+    output wire shift_src,
 
-    // Immediate Value
-    output reg [31:0] imm32, // 32-bit immediate value extracted from instruction for data processing immediate instructions and branch instructions (after sign extension for branch offset)
+    // Immediate value
+    output reg [31:0] imm32,
 
-    //Memory access control signals
-    output wire mem_read, // Memory read enable signal for load instructions
-    output wire mem_write, // Memory write enable signal for store instructions
-    output reg [1:0] mem_size, // Memory access size: 00 for byte, 01 for halfword, 10 for word (for single data transfer instructions)
-    output wire mem_signed, // Memory access signed/unsigned control: 0 for unsigned, 1 for signed (for single data transfer instructions)
+    // Memory access control
+    output wire mem_read,
+    output wire mem_write,
+    output reg [1:0] mem_size,
+    output wire mem_signed,
 
-    //Address mode control signals
-    output wire addr_pre_idx, // Addressing mode control signal for pre-indexing (1) vs post-indexing (0) for single data transfer and block data transfer instructions
-    output wire addr_up, // Addressing mode control signal for up (1) vs down (0) for single data transfer and block data transfer instructions
-    output wire addr_wb, // Addressing mode control signal for write-back (1) vs no write-back (0) for single data transfer and block data transfer instructions
-    
-    // Write back source select signal
+    // Address mode control
+    output wire addr_pre_idx,
+    output wire addr_up,
+    output wire addr_wb,
+
+    // Write back source select
     output reg [2:0] wb_sel,
 
-    // Branch control signals
+    // Branch control
     output wire branch_en,
     output wire branch_link,
     output wire branch_exchange,
 
-    // Multiply control signals (not used in this lab) 
+    // Multiply outputs — stubbed to zero (v1.3: MAC removed)
     output wire mul_en,
     output wire mul_long,
     output wire mul_signed,
     output wire mul_accumulate,
 
-    //PSR transfer control signals (not used in this lab)
+    // PSR transfer control
     output wire psr_rd,
     output wire psr_wr,
     output wire psr_field_sel,
     output wire [3:0] psr_mask,
 
-    // Block data transfer control signals output to BDTU
-    output wire [15:0] bdt_list, // Register list for block data transfer instructions (LDM/STM)
-    output wire bdt_load, // Load/store control signal for block data transfer instructions: 1 for load (LDM), 0 for store (STM)
-    output wire bdt_s, // PSR transfer control signal for block data transfer instructions: 1 to update CPSR with the value from the last loaded register in LDM, 0 to not update CPSR
-    output wire bdt_wb, // Write-back control signal for block data transfer instructions: 1 to write back the updated base address to Rn, 0 to not write back
+    // Block data transfer control
+    output wire [15:0] bdt_list,
+    output wire bdt_load,
+    output wire bdt_s,
+    output wire bdt_wb,
 
-    //Swap and software interrupt control signals (not used in this lab)
-    output wire swap_byte, // Byte/word control signal for SWP instruction: 1 for byte swap (SWPB), 0 for word swap (SWP)
-    output wire swi_en, // Enable signal for software interrupt instruction (SWI)
+    // Swap and SWI control
+    output wire swap_byte,
+    output wire swi_en,
 
-    // Coprocessor control signals
-    output wire cp_wen, // MCR: write ARM Rd → CP.CRn (gated by cond_met & cp_num match)
-    output wire cp_ren, // MRC: read CP.CRn → ARM Rd (gated by cond_met & cp_num match)
+    // Coprocessor control
+    output wire cp_wen,
+    output wire cp_ren,
 
-    //Register usage flags for hazard detection and forwarding unit
+    // Register usage flags
     output wire use_rn,
     output wire use_rd,
     output wire use_rs,
@@ -121,39 +123,34 @@ module cu (
     output wire is_multi_cycle
 );
 
+// ================================================================
 // Step 1: Instruction field extraction
-wire [2:0] f_primary_opcode = instr[27:25]; // Primary opcode field for instruction type decoding. Naming of this field is not official
-wire [3:0] f_opcode = instr[24:21]; // Opcode field for data processing instruction decoding
-wire f_l = instr[20]; // L bit for load
-wire f_s = instr[20]; // S bit for seting condition codes
-wire [3:0] f_rn = instr[19:16]; // Rn register address field
-wire [3:0] f_rd = instr[15:12]; // Rd register address field
-wire [3:0] f_rs = instr[11:8]; // Rs register address field (for multiply instructions)
-wire [4:0] f_shamt = instr[11:7]; // Shift amount field for data processing instructions with immediate shift amount
-wire [1:0] f_sh = instr[6:5]; // Shift type field for data processing instructions with immediate shift amount.  See encoding definition in define.v
-wire f_bit7 = instr[7]; // Bit 7 for halfword data transfer instruction decoding
-wire f_bit4 = instr[4]; // Bit 4 for halfword data transfer instruction decoding
-wire [3:0] f_rm = instr[3:0]; // Rm register address field for data processing instructions with register operand, and for multiply instructions
-wire [7:0] f_imm8 = instr[7:0]; // Immediate value field for data processing immediate instructions
-wire [3:0] f_rot = instr[11:8]; // Rotate field for data processing immediate instructions (the actual rotate amount is this field multiplied by 2)
-wire [11:0] f_off12 = instr[11:0]; // Offset value field for single data transfer instructions (the actual immediate value is this field after processing the I bit for immediate offset or register offset)
-wire [23:0] f_off24 = instr[23:0]; // Offset value field for branch instructions (the actual immediate value is this field sign-extended and multiplied by 4)
+// ================================================================
+wire [2:0] f_primary_opcode = instr[27:25];
+wire [3:0] f_opcode = instr[24:21];
+wire f_l = instr[20];
+wire f_s = instr[20];
+wire [3:0] f_rn = instr[19:16];
+wire [3:0] f_rd = instr[15:12];
+wire [3:0] f_rs = instr[11:8];
+wire [4:0] f_shamt = instr[11:7];
+wire [1:0] f_sh = instr[6:5];
+wire f_bit7 = instr[7];
+wire f_bit4 = instr[4];
+wire [3:0] f_rm = instr[3:0];
+wire [7:0] f_imm8 = instr[7:0];
+wire [3:0] f_rot = instr[11:8];
+wire [11:0] f_off12 = instr[11:0];
+wire [23:0] f_off24 = instr[23:0];
 
-// Coprocessor field extraction (reuses existing wires)
-// cp_num = f_rs = instr[11:8]  — coprocessor number
-// CRn    = f_rn = instr[19:16] — coprocessor register select
-// Rd     = f_rd = instr[15:12] — ARM source (MCR) / dest (MRC)
-// opc1   = instr[23:21]        — ignored (single-encoding CP10)
-// opc2   = instr[7:5]          — ignored
-// CRm    = f_rm = instr[3:0]   — ignored
-
-// Connect register address to differnt fields
 assign rn_addr = f_rn;
 assign rd_addr = f_rd;
 assign rs_addr = f_rs;
 assign rm_addr = f_rm;
 
+// ================================================================
 // Step 2: Instruction type decoding
+// ================================================================
 wire o000 = (f_primary_opcode == 3'b000);
 wire o001 = (f_primary_opcode == 3'b001);
 wire o010 = (f_primary_opcode == 3'b010);
@@ -162,267 +159,244 @@ wire o100 = (f_primary_opcode == 3'b100);
 wire o101 = (f_primary_opcode == 3'b101);
 wire o111 = (f_primary_opcode == 3'b111);
 
-wire b7_4_eq_1001 = (instr[7:4] == 4'b1001); //Bit 7 to 4 equal to 1001 for multiply instructions
-wire b7_and_b4 = f_bit7 & f_bit4; // Bit 7 and bit 4
+wire b7_4_eq_1001 = (instr[7:4] == 4'b1001);
+wire b7_and_b4 = f_bit7 & f_bit4;
+wire sh_nonzero = (f_sh != 0);
 
-wire sh_nonzero = (f_sh != 0); // Shift type not equal to zero for data processing instructions.
-
-// Determine multipy insructions based on current encoding scheme.
+// Multiply decode — kept for classification only
 wire dec_mul = o000 & b7_4_eq_1001 & ~instr[24] & ~instr[23] & ~instr[22];
 wire dec_mull = o000 & b7_4_eq_1001 & ~instr[24] & instr[23];
 
-// Determine single data swap instruction based on current encoding scheme
-wire dec_swp = o000 & b7_4_eq_1001 & instr[24] & ~instr[23] & ~instr[21] & ~instr[20] & (f_rs == 4'd0); //Skip instr[22] B field
-
-// Determine branch exchange instruction
-wire dec_bx = (instr[27:4] == 24'b000100101111111111110001); // Fixed encoding for BX instruction based on Armv4T encoding. 24'h 12FFF1 in hexadecimal
+wire dec_swp = o000 & b7_4_eq_1001 & instr[24] & ~instr[23] & ~instr[21] & ~instr[20] & (f_rs == 4'd0);
+wire dec_bx = (instr[27:4] == 24'b000100101111111111110001);
 
 wire dec_mrs = o000 & (instr[24:23] == 2'b10) &
-                ~instr[21] & ~instr[20] &
-                (f_rn == 4'hF) & (f_off12 == 12'd0);
+               ~instr[21] & ~instr[20] &
+               (f_rn == 4'hF) & (f_off12 == 12'd0);
 
 wire dec_msr_reg = o000 & (instr[24:23] == 2'b10) &
-                    instr[21] & ~instr[20] &
-                    (f_rd == 4'hF) & (instr[11:4] == 8'd0);
+                   instr[21] & ~instr[20] &
+                   (f_rd == 4'hF) & (instr[11:4] == 8'd0);
 
 wire dec_msr_imm = o001 & (instr[24:23] == 2'b10) &
-                    instr[21] & ~instr[20] & (f_rd == 4'hF);
+                   instr[21] & ~instr[20] & (f_rd == 4'hF);
 
-// Halfword Data Transfer
-wire hdt_pat    = o000 & b7_and_b4 & sh_nonzero;
+wire hdt_pat = o000 & b7_and_b4 & sh_nonzero;
 wire dec_hdt_rego = hdt_pat & ~instr[22];
-wire dec_hdt_immo = hdt_pat &  instr[22];
+wire dec_hdt_immo = hdt_pat & instr[22];
 
-// Data Processing (register)
 wire dp_reg_ok = o000 & (~f_bit4 | (f_bit4 & ~f_bit7));
-wire dec_dp_reg  = dp_reg_ok & ~dec_bx & ~dec_mrs & ~dec_msr_reg;
-
-// Data Processing (immediate)
+wire dec_dp_reg = dp_reg_ok & ~dec_bx & ~dec_mrs & ~dec_msr_reg;
 wire dec_dp_imm = o001 & ~dec_msr_imm;
 
-// Single Data Transfer
 wire dec_sdt_immo = o010;
 wire dec_sdt_rego = o011 & ~f_bit4;
 
-// Block Data Transfer / Branch / SWI
 wire dec_bdt = o100;
-wire dec_br  = o101;
+wire dec_br = o101;
 wire dec_swi = o111 & instr[24];
 
-// Coprocessor Register Transfer (MCR / MRC)
-// Encoding: cond 1110 opc1[3] CRn[4] Rd[4] cp#[4] opc2[3] 1 CRm[4]
-//   instr[27:24] = 4'b1110  →  o111 & ~instr[24]
-//   instr[4]     = 1        →  f_bit4 (distinguishes from CDP where bit4=0)
-//   instr[20]    = 0 (MCR)  →  ~f_l
-//   instr[20]    = 1 (MRC)  →   f_l
-//   cp_num = instr[11:8] = f_rs — must match CP10 (4'b1010)
 wire cp_num_match = (f_rs == 4'b1010);
 wire dec_cp_base = o111 & ~instr[24] & f_bit4 & cp_num_match;
 wire dec_mcr = dec_cp_base & ~f_l;
-wire dec_mrc = dec_cp_base &  f_l;
+wire dec_mrc = dec_cp_base & f_l;
 
-// Undefined instruction identification
-wire dec_valid = dec_dp_reg  | dec_dp_imm  | dec_mul    | dec_mull   |
-                    dec_swp   | dec_bx    | dec_hdt_rego | dec_hdt_immo |
-                    dec_sdt_immo | dec_sdt_rego | dec_bdt  | dec_br     |
-                    dec_mrs   | dec_msr_reg | dec_msr_imm  | dec_swi   |
-                    dec_mcr   | dec_mrc;
+wire dec_valid = dec_dp_reg | dec_dp_imm | dec_mul | dec_mull |
+                 dec_swp | dec_bx | dec_hdt_rego | dec_hdt_immo |
+                 dec_sdt_immo | dec_sdt_rego | dec_bdt | dec_br |
+                 dec_mrs | dec_msr_reg | dec_msr_imm | dec_swi |
+                 dec_mcr | dec_mrc;
 
 wire dec_undef = ~dec_valid;
 
-assign t_dp_reg  = dec_dp_reg;
-assign t_dp_imm  = dec_dp_imm;
-assign t_mul     = dec_mul;
-assign t_mull    = dec_mull;
-assign t_swp     = dec_swp;
-assign t_bx      = dec_bx;
-assign t_hdt_rego  = dec_hdt_rego;
-assign t_hdt_immo  = dec_hdt_immo;
-assign t_sdt_immo  = dec_sdt_immo;
-assign t_sdt_rego  = dec_sdt_rego;
-assign t_bdt     = dec_bdt;
-assign t_br      = dec_br;
-assign t_mrs     = dec_mrs;
+assign t_dp_reg = dec_dp_reg;
+assign t_dp_imm = dec_dp_imm;
+assign t_mul = dec_mul;
+assign t_mull = dec_mull;
+assign t_swp = dec_swp;
+assign t_bx = dec_bx;
+assign t_hdt_rego = dec_hdt_rego;
+assign t_hdt_immo = dec_hdt_immo;
+assign t_sdt_immo = dec_sdt_immo;
+assign t_sdt_rego = dec_sdt_rego;
+assign t_bdt = dec_bdt;
+assign t_br = dec_br;
+assign t_mrs = dec_mrs;
 assign t_msr_reg = dec_msr_reg;
 assign t_msr_imm = dec_msr_imm;
-assign t_swi     = dec_swi;
-assign t_undef   = dec_undef;
-assign t_mcr     = dec_mcr;
-assign t_mrc     = dec_mrc;
+assign t_swi = dec_swi;
+assign t_undef = dec_undef;
+assign t_mcr = dec_mcr;
+assign t_mrc = dec_mrc;
 
-// Step 3: Identify convenience groups
+// ================================================================
+// Step 3: Convenience groups
+// ================================================================
 wire is_dp = dec_dp_reg | dec_dp_imm;
 wire is_sdt = dec_sdt_immo | dec_sdt_rego;
 wire is_hdt = dec_hdt_rego | dec_hdt_immo;
 wire is_load = f_l;
 wire dp_test = (f_opcode[3:2] == 2'b10);
 
+// ================================================================
 // Step 4: Immediate value generation
-wire [4:0] rot_amount = {f_rot, 1'b0}; // ISE fix: concatenation avoids 4-bit truncation
-wire [31:0] imm8_ext = {24'b0, f_imm8}; // Zero-extend the 8-bit immediate value to 32 bits
+// ================================================================
+wire [4:0] rot_amount = {f_rot, 1'b0};
+wire [31:0] imm8_ext = {24'b0, f_imm8};
 wire [31:0] imm_sdt = {20'b0, f_off12};
-wire [31:0] imm_hdt = {24'b0, f_rs, f_rm}; 
-
-/* v1.1 FIX: Rotation deferred to EX1 barrel shifter.
- *
- * OLD (timing violation — ~9ns combinational path in ID stage):
- *   wire [31:0] imm_dp = (rot_amount == 0) ? imm8_ext
- *       : (imm8_ext >> rot_amount) | (imm8_ext << (32 - rot_amount));
- *
- * NEW: Output the raw unrotated immediate.  The rotation is performed
- * by the EX1 barrel shifter using shift_type=ROR, shift_amount=rot_amount
- * (see Step 6 below).  The barrel shifter operates on registered inputs
- * from the ID/EX1 pipe reg, well within the 8ns timing budget (~3-4ns).
- */
-wire [31:0] imm_dp = imm8_ext;
-
-wire [31:0] imm_br = {{6{f_off24[23]}}, f_off24, 2'b00}; // Sign-extend the 24-bit branch offset to 32 bits and shift left by 2 (multiply by 4)
+wire [31:0] imm_hdt = {24'b0, f_rs, f_rm};
+wire [31:0] imm_dp = imm8_ext; // rotation deferred to EX1 barrel shifter
+wire [31:0] imm_br = {{6{f_off24[23]}}, f_off24, 2'b00};
 
 always @(*) begin
-    if (dec_dp_imm | dec_msr_imm) begin
-        imm32 = imm_dp;
-    end else if (dec_br) begin
-        imm32 = imm_br;
-    end else if (dec_sdt_immo) begin
-        imm32 = imm_sdt; // For single data transfer instructions with immediate offset, the immediate value is the zero-extended 12-bit offset field (the I bit is already processed in the instruction type decoding to determine whether it's immediate offset or register offset)
-    end else if (dec_hdt_immo) begin
-        imm32 = imm_hdt; // For halfword data transfer instructions, the immediate value is constructed from the shift type field and bit 7 and bit 4 based on the current encoding scheme for halfword data transfer instructions
-    end else begin
-         imm32 = 32'b0; // Default value when immediate is not used
-    end
+    if (dec_dp_imm | dec_msr_imm) imm32 = imm_dp;
+    else if (dec_br) imm32 = imm_br;
+    else if (dec_sdt_immo) imm32 = imm_sdt;
+    else if (dec_hdt_immo) imm32 = imm_hdt;
+    else imm32 = 32'b0;
 end
 
-// Step 5: Generate ALU control signals
-wire [3:0] alu_op_mem = addr_up ? 4'b0100 : 4'b0010; // ADD : SUB
+// ================================================================
+// Step 5: ALU control
+// ================================================================
+wire [3:0] alu_op_mem = addr_up ? 4'b0100 : 4'b0010;
 assign alu_op = (is_dp) ? f_opcode :
                 (is_sdt | is_hdt) ? alu_op_mem :
-                (dec_msr_reg | dec_msr_imm) ? 4'b1101 : // MOV: pass operand_b through
-                                              4'b0100; // Default ADD for others
+                (dec_msr_reg | dec_msr_imm) ? 4'b1101 :
+                4'b0100;
 
-assign alu_src_b = dec_dp_imm | dec_msr_imm | dec_sdt_immo | dec_hdt_immo; // Use immediate value for data processing immediate instructions, move to PSR immediate instructions, single data transfer with immediate offset, and halfword data transfer with immediate offset
-assign cpsr_wen = cond_met & ((is_dp | dec_mul | dec_mull) & f_s);
+assign alu_src_b = dec_dp_imm | dec_msr_imm | dec_sdt_immo | dec_hdt_immo;
 
-// Step 6: Generate barrel shifter control signals
+/* v1.3: multiply removed from cpsr_wen */
+assign cpsr_wen = cond_met & (is_dp & f_s);
+
+// ================================================================
+// Step 6: Barrel shifter control
+// ================================================================
 wire sh_active = dec_dp_reg | dec_sdt_rego;
 wire imm_rot_active = (dec_dp_imm | dec_msr_imm) & (rot_amount != 5'd0);
 
-assign shift_type = sh_active      ? f_sh       :
-                    imm_rot_active  ? `SHIFT_ROR : 2'b00;
+assign shift_type = sh_active ? f_sh :
+                    imm_rot_active ? `SHIFT_ROR : 2'b00;
 
-assign shift_amount = sh_active             ? f_shamt    :
+assign shift_amount = sh_active ? f_shamt :
                       (dec_dp_imm | dec_msr_imm) ? rot_amount : 5'b0;
 
-assign shift_src = dec_dp_reg & f_bit4; // For data processing instructions with register operand, if bit 4 is 1 then the shift amount is specified in Rs, otherwise it's specified in the immediate shift amount field
+assign shift_src = dec_dp_reg & f_bit4;
 
-// Step 7: Single-cycle memory control signal generation
+// ================================================================
+// Step 7: Memory control
+// ================================================================
 assign mem_read = cond_met & (is_sdt | is_hdt) & is_load;
 assign mem_write = cond_met & (is_sdt | is_hdt) & ~is_load;
 
 always @(*) begin
-    if (is_sdt)
-        mem_size = instr[22] ? 2'b00 : 2'b10; // LDRB/STRB : LDR/STR
+    if (is_sdt) mem_size = instr[22] ? 2'b00 : 2'b10;
     else if (is_hdt) begin
         case (f_sh)
-            2'b01:   mem_size = 2'b01; // Unsigned half
-            2'b10:   mem_size = 2'b00; // Signed byte
-            2'b11:   mem_size = 2'b01; // Signed half
+            2'b01: mem_size = 2'b01;
+            2'b10: mem_size = 2'b00;
+            2'b11: mem_size = 2'b01;
             default: mem_size = 2'b10;
         endcase
     end
-    else
-        mem_size = 2'b10; // default word
+    else mem_size = 2'b10;
 end
 
 assign mem_signed = is_hdt & f_sh[1];
 
-// Step 8: Addressing mode control signal generation
-assign addr_pre_idx = instr[24]; // P bit
-assign addr_up  = instr[23]; // U bit
-assign addr_wb  = ~instr[24] | instr[21]; // post-ix or W
+// ================================================================
+// Step 8: Address mode control
+// ================================================================
+assign addr_pre_idx = instr[24];
+assign addr_up = instr[23];
+assign addr_wb = ~instr[24] | instr[21];
 
-// Step 9: Write-back source select signal generation
+// ================================================================
+// Step 9: Write-back source select
+// v1.3: WB_MUL removed
+// ================================================================
 always @(*) begin
-    if ((is_sdt | is_hdt) & is_load) wb_sel = `WB_MEM;   // 3'b001 memory data
-    else if (dec_br & instr[24])     wb_sel = `WB_LINK;   // 3'b010 BL return addr
-    else if (dec_mrs)                wb_sel = `WB_PSR;    // 3'b011 PSR value
-    else if (dec_mul | dec_mull)     wb_sel = 3'b100;      // multiplier
-    else if (dec_mrc)                wb_sel = `WB_CP;      // 3'b101 coprocessor read
-    else                             wb_sel = `WB_ALU;     // 3'b000 ALU result
+    if ((is_sdt | is_hdt) & is_load) wb_sel = `WB_MEM;
+    else if (dec_br & instr[24]) wb_sel = `WB_LINK;
+    else if (dec_mrs) wb_sel = `WB_PSR;
+    else if (dec_mrc) wb_sel = `WB_CP;
+    else wb_sel = `WB_ALU;
 end
 
-// Step 10: Register write signal generation (Also see BDTU unit for multi-cycle instruction register write control)
-assign wr_addr1 = dec_mul ? f_rn  :    // MUL/MLA dest
-                 (dec_br & instr[24]) ? 4'd14 :    // BL -> R14
-                 f_rd;
-// --- Primary write enable ---
-// MRC writes coprocessor read data to ARM Rd
-wire raw_we1 = (is_dp & ~dp_test)            | // DP (non-test)
-                ((is_sdt | is_hdt) & is_load) | // LDR / LDRH / …
-                dec_mul                        | // MUL / MLA
-                dec_mull                       | // MULL / MLAL
-                dec_mrs                        | // MRS
-                (dec_br & instr[24])           | // BL (link)
-                dec_mrc;                         // MRC → Rd
+// ================================================================
+// Step 10: Register write control
+// v1.3: multiply writes removed
+// ================================================================
+assign wr_addr1 = (dec_br & instr[24]) ? 4'd14 : f_rd;
+
+wire raw_we1 = (is_dp & ~dp_test) |
+               ((is_sdt | is_hdt) & is_load) |
+               dec_mrs |
+               (dec_br & instr[24]) |
+               dec_mrc;
 assign wr_en1 = cond_met & raw_we1;
 
 assign wr_addr2 = f_rn;
-// --- Secondary write enable ---
-wire raw_we2 = ((is_sdt | is_hdt) & addr_wb) | // SDT/HDT writeback
-                dec_mull;
+wire raw_we2 = (is_sdt | is_hdt) & addr_wb;
 assign wr_en2 = cond_met & raw_we2;
 
-// Step 11: Branch control signal generation
-assign branch_en   = cond_met & (dec_br | dec_bx);
+// ================================================================
+// Step 11: Branch control
+// ================================================================
+assign branch_en = cond_met & (dec_br | dec_bx);
 assign branch_link = cond_met & dec_br & instr[24];
 assign branch_exchange = cond_met & dec_bx;
 
-// Step 12: Multiply control signal generation (not used in this lab)
-assign mul_en  = cond_met & (dec_mul | dec_mull);
-assign mul_long = dec_mull;
-assign mul_signed = dec_mull & instr[22];
-assign mul_accumulate = (dec_mul | dec_mull) & instr[21];
+// ================================================================
+// Step 12: Multiply outputs — stubbed (v1.3: MAC removed)
+// ================================================================
+assign mul_en = 1'b0;
+assign mul_long = 1'b0;
+assign mul_signed = 1'b0;
+assign mul_accumulate = 1'b0;
 
-// Step 13: PSR transfer control signal generation
+// ================================================================
+// Step 13: PSR transfer control
+// ================================================================
 assign psr_rd = dec_mrs;
 assign psr_wr = cond_met & (dec_msr_reg | dec_msr_imm);
-assign psr_field_sel = instr[22]; 
-assign psr_mask = f_rn; // field mask
+assign psr_field_sel = instr[22];
+assign psr_mask = f_rn;
 
-// Step 14: Block data transfer control signal generation
-assign bdt_list  = instr[15:0];
-assign bdt_load = f_l;  // bit 20 = L
-assign bdt_s = instr[22]; // S bit
-assign bdt_wb = instr[21]; // W bit
+// ================================================================
+// Step 14: Block data transfer control
+// ================================================================
+assign bdt_list = instr[15:0];
+assign bdt_load = f_l;
+assign bdt_s = instr[22];
+assign bdt_wb = instr[21];
 
-// Step 15: Swap and software interrupt control signal generation (not used in this lab)
-assign swap_byte = instr[22]; // 1 = SWPB
+// ================================================================
+// Step 15: Swap and SWI control
+// ================================================================
+assign swap_byte = instr[22];
 assign swi_en = cond_met & dec_swi;
 
-// Step 16: Coprocessor control signal generation
-// cp_wen/cp_ren are condition-gated and cp_num-matched.
-// CRn (= f_rn = rn_addr) is already an output — cpu_mt pipes it
-// through the existing rn_addr pipeline registers to EX2.
-// MCR source data is ARM Rd, read via RF port 4 (rd_addr).
+// ================================================================
+// Step 16: Coprocessor control
+// ================================================================
 assign cp_wen = cond_met & dec_mcr;
 assign cp_ren = cond_met & dec_mrc;
 
-// Step 17: Register usage flag generation for hazard detection and forwarding unit
-// MCR reads Rd as the data source (ARM Rd → CP10.CRn)
-assign use_rn = is_dp | is_sdt | is_hdt | dec_swp | dec_bdt |
-                (dec_mull & instr[21]);              // MLAL acc RdHi
-
+// ================================================================
+// Step 17: Register usage flags
+// v1.3: multiply references removed
+// ================================================================
+assign use_rn = is_dp | is_sdt | is_hdt | dec_swp | dec_bdt;
 assign use_rm = dec_dp_reg | dec_hdt_rego | dec_sdt_rego |
-                dec_mul  | dec_mull   | dec_swp     | dec_bx |
-                dec_msr_reg;
+                dec_swp | dec_bx | dec_msr_reg;
+assign use_rs = dec_dp_reg & f_bit4;
+assign use_rd = ((is_sdt | is_hdt) & ~is_load) | dec_mcr;
 
-assign use_rs = (dec_dp_reg & f_bit4) | dec_mul | dec_mull;
-
-assign use_rd = ((is_sdt | is_hdt) & ~is_load)  |  // STR data
-                (dec_mul  & instr[21])            |  // MLA accumulate
-                (dec_mull & instr[21])            |  // MLAL acc RdLo
-                dec_mcr;                              // MCR source
-
+// ================================================================
 // Step 18: Multi-cycle instruction indication
+// ================================================================
 assign is_multi_cycle = cond_met & ((dec_bdt & |bdt_list) | dec_swp);
 
 endmodule
