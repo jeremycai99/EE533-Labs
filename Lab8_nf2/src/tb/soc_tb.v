@@ -2224,6 +2224,137 @@ initial begin
         settle;
     end
 
+    // ════════════════════════════════════════════════════════════
+    //  Network Mode Tests (T26-T27)
+    //
+    //  These tests validate pkt_proc v2.0 network mode:
+    //    - EtherType filtering (0x88B5 = SoC, others = passthrough)
+    //    - Header skip (3 words: module hdr + Ethernet)
+    //    - Passthrough for non-SoC packets
+    //    - Header prepend on TX for SoC packets
+    //
+    //  Network packet layout in FIFO (as seen by pkt_proc):
+    //    Word 0: ctrl=port_mask, data=module_header  (NetFPGA adds this)
+    //    Word 1: ctrl=0x00, data={DST_MAC[47:0], SRC_MAC[47:32]}
+    //    Word 2: ctrl=0x00, data={SRC_MAC[31:0], EtherType, Pad}
+    //    Word 3+: ctrl=0x00, data=payload / commands
+    // ════════════════════════════════════════════════════════════
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 26: Network passthrough (non-SoC EtherType)
+    //
+    //  Sends a 5-word packet with EtherType=0x0800 (IPv4).
+    //  pkt_proc should detect non-SoC EtherType and passthrough
+    //  the entire packet unchanged via TX drain.
+    //
+    //  Input packet:
+    //    Word 0: ctrl=0x04, data=module_hdr  (port routing)
+    //    Word 1: ctrl=0x00, data={DA, SA_hi} (Ethernet)
+    //    Word 2: ctrl=0x00, data={SA_lo, 0x0800, 0x0000} (IPv4)
+    //    Word 3: ctrl=0x00, data=0xDEADBEEF_CAFEBABE (payload)
+    //    Word 4: ctrl=0x00, data=0x12345678_9ABCDEF0 (payload)
+    //
+    //  Expected TX: all 5 words unchanged, ctrl[0]=0x04
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 26: Network passthrough (non-SoC EtherType) ---");
+        cycle_cnt = 0;
+
+        // Simulated network packet: module header + Ethernet + payload
+        rx(64'h0001_0002_0003_0004, 8'h04);  // Word 0: module hdr, ctrl=port mask
+        rx(64'hFFFF_FFFF_FFFF_0011, 8'h00);  // Word 1: DA=broadcast, SA_hi
+        rx(64'h2233_4455_0800_0000, 8'h00);  // Word 2: SA_lo, EtherType=0x0800 (NOT 0x88B5)
+        rx(64'hDEAD_BEEF_CAFE_BABE, 8'h00);  // Word 3: payload
+        rx(64'h1234_5678_9ABC_DEF0, 8'h00);  // Word 4: payload
+        rx_end;
+
+        wait_and_capture(MAX_CYCLES);
+
+        // Passthrough: entire packet should come back unchanged
+        checkN(tx_cnt, 5, "T26 TX count (passthrough)");
+        if (tx_cnt >= 5) begin
+            check64(tx_data[0], 64'h0001_0002_0003_0004, "T26 TX[0] module hdr");
+            check64(tx_data[1], 64'hFFFF_FFFF_FFFF_0011, "T26 TX[1] ETH DA+SA");
+            check64(tx_data[2], 64'h2233_4455_0800_0000, "T26 TX[2] ETH SA+Type");
+            check64(tx_data[3], 64'hDEAD_BEEF_CAFE_BABE, "T26 TX[3] payload");
+            check64(tx_data[4], 64'h1234_5678_9ABC_DEF0, "T26 TX[4] payload");
+            check8(tx_ctrl[0], 8'h04, "T26 ctrl passthrough");
+        end
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 27: Network SoC packet (CPU ADD with Ethernet headers)
+    //
+    //  Same computation as Test 1 (10+20=30) but wrapped in
+    //  Ethernet frame with EtherType=0x88B5.
+    //
+    //  Input packet:
+    //    Word 0:  ctrl=0x04, data=module_hdr
+    //    Word 1:  ctrl=0x00, data={DA, SA_hi}
+    //    Word 2:  ctrl=0x00, data={SA_lo, 0x88B5, 0x0000}
+    //    Word 3:  ctrl=0x00, data=LOAD_IMEM cmd
+    //    Word 4:  ctrl=0x00, data={instr1, instr0}
+    //    Word 5:  ctrl=0x00, data={instr3, instr2}
+    //    Word 6:  ctrl=0x00, data={instr5, instr4}
+    //    Word 7:  ctrl=0x00, data=LOAD_DMEM cmd
+    //    Word 8:  ctrl=0x00, data={20, 10}
+    //    Word 9:  ctrl=0x00, data={0, 0}
+    //    Word 10: ctrl=0x00, data=CPU_START cmd
+    //    Word 11: ctrl=0x00, data=READBACK cmd
+    //    Word 12: ctrl=0x00, data=SEND_PKT cmd
+    //
+    //  Expected TX:
+    //    TX[0]: hdr_word0 (module hdr), ctrl=0x04
+    //    TX[1]: hdr_word1 (ETH DA+SA)
+    //    TX[2]: hdr_word2 (ETH SA+Type)
+    //    TX[3]: {20, 10}  (readback word 0)
+    //    TX[4]: {0, 30}   (readback word 1 = result)
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 27: Network SoC packet (CPU ADD via Ethernet) ---");
+        cycle_cnt = 0;
+
+        // Module header
+        rx(64'h0001_0002_0005_000D, 8'h04);  // Word 0: module hdr, ctrl=0x04
+
+        // Ethernet header
+        rx(64'hFFFF_FFFF_FFFF_0011, 8'h00);  // Word 1: DA=broadcast, SA_hi=0x0011
+        rx(64'h2233_4455_88B5_0000, 8'h00);  // Word 2: SA_lo, EtherType=0x88B5, pad=0
+
+        // Commands (same as Test 1, ctrl=0x00 for all)
+        rx(cmd(4'h1, 12'h000, 16'd3, 32'h0), 8'h00);          // LOAD_IMEM
+        rx({32'hE5901000, 32'hE3A00000}, 8'h00);               // instrs [1,0]
+        rx({32'hE0813002, 32'hE5902004}, 8'h00);               // instrs [3,2]
+        rx({ARM_HALT,     32'hE5803008}, 8'h00);               // instrs [5,4]
+
+        rx(cmd(4'h2, 12'h000, 16'd2, 32'h0), 8'h00);          // LOAD_DMEM
+        rx({32'h0000_0014, 32'h0000_000A}, 8'h00);             // {20, 10}
+        rx({32'h0000_0000, 32'h0000_0000}, 8'h00);             // {0, 0}
+
+        rx(cmd(4'h3, 12'h000, 16'd0, 32'h0), 8'h00);          // CPU_START
+        rx(cmd(4'h4, 12'h000, 16'd2, 32'h0), 8'h00);          // READBACK addr=0, count=2
+        rx(cmd(4'h5, 12'h000, 16'd0, 32'h0), 8'h00);          // SEND_PKT
+        rx_end;
+
+        wait_and_capture(MAX_CYCLES);
+
+        // TX: 3 header words + 2 readback words = 5 total
+        checkN(tx_cnt, 5, "T27 TX count (hdr+data)");
+        if (tx_cnt >= 5) begin
+            // Header replay
+            check64(tx_data[0], 64'h0001_0002_0005_000D, "T27 TX[0] module hdr replay");
+            check64(tx_data[1], 64'hFFFF_FFFF_FFFF_0011, "T27 TX[1] ETH DA+SA replay");
+            check64(tx_data[2], 64'h2233_4455_88B5_0000, "T27 TX[2] ETH Type replay");
+            // Readback data (same as Test 1)
+            check64(tx_data[3], {32'h0000_0014, 32'h0000_000A}, "T27 TX[3] inputs 20,10");
+            check64(tx_data[4], {32'h0000_0000, 32'h0000_001E}, "T27 TX[4] result 0,30");
+            // ctrl on word 0 should be the saved port mask
+            check8(tx_ctrl[0], 8'h04, "T27 ctrl from module hdr");
+        end
+        settle;
+    end
+
     // ═══════════════════════════════════════════════════════════
     //  Summary
     // ═══════════════════════════════════════════════════════════

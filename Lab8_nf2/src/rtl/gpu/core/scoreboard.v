@@ -2,13 +2,15 @@
  Description: Scoreboard for the CUDA-like SM core pipeline.
  Tracks in-flight register writes and stalls on RAW hazards.
  Author: Jeremy Cai
- Date: Feb. 27, 2026
- Version: 1.1
+ Date: Mar. 7, 2026
+ Version: 2.0
  Revision history:
     - Feb. 27, 2026: v1.0 — Initial implementation.
     - Mar. 05, 2026: v1.1 — Add synchronous clear input for kernel_start.
       Without this, stale pending bits from a deadlocked or incomplete kernel
       persist across kernel launches, causing permanent front_stall.
+    - Mar. 07, 2026: v2.0 — Two-part timing fix targeting the 13-level
+      combinational critical path through the stall/issue feedback loop
 */
 
 `ifndef SCOREBOARD_V
@@ -43,22 +45,47 @@ module scoreboard (
     output wire stall,
     output wire any_pending
 );
+
     reg [15:0] pending [0:3];
 
-    wire [15:0] set_mask = (16'b1 << rD_addr);
+    // ================================================================
+    // WB clear path (unchanged — no longer on critical path)
+    // ================================================================
     wire [15:0] clr_mask = (16'b1 << wb_rD_addr);
+    wire [3:0] clr_en = {4{wb_rf_we}} & wb_active_mask;
 
-    wire [3:0] set_en;
-    wire [3:0] clr_en;
+    // ================================================================
+    // Issue set path — REGISTERED
+    // ================================================================
+    reg issue_r;
+    reg [3:0] issue_rD_addr_r;
+    reg [3:0] issue_active_mask_r;
 
-    assign set_en = {4{issue & rf_we}} & active_mask;
-    assign clr_en = {4{wb_rf_we}} & wb_active_mask;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            issue_r <= 1'b0;
+            issue_rD_addr_r <= 4'd0;
+            issue_active_mask_r <= 4'd0;
+        end else if (clear) begin
+            issue_r <= 1'b0;
+        end else begin
+            issue_r <= issue & rf_we;
+            issue_rD_addr_r <= rD_addr;
+            issue_active_mask_r <= active_mask;
+        end
+    end
 
+    wire [15:0] set_mask_r = (16'b1 << issue_rD_addr_r);
+    wire [3:0] set_en_r = {4{issue_r}} & issue_active_mask_r;
+
+    // ================================================================
+    // Pending register update
+    // ================================================================
     genvar t;
     generate
         for (t = 0; t < 4; t = t + 1) begin : gen_pending
             wire [15:0] clr_vec = clr_en[t] ? clr_mask : 16'b0;
-            wire [15:0] set_vec = set_en[t] ? set_mask : 16'b0;
+            wire [15:0] set_vec = set_en_r[t] ? set_mask_r : 16'b0;
 
             always @(posedge clk or negedge rst_n) begin
                 if (!rst_n)
@@ -71,12 +98,14 @@ module scoreboard (
         end
     endgenerate
 
+    // ================================================================
+    // Hazard detection (v2.0 FIX 1: no WB bypass)
+    // ================================================================
     wire [3:0] hazard;
 
     generate
         for (t = 0; t < 4; t = t + 1) begin : gen_check
-            wire [15:0] eff_clr  = clr_en[t] ? clr_mask : 16'b0;
-            wire [15:0] pend_eff = pending[t] & ~eff_clr;
+            wire [15:0] pend_eff = pending[t];
 
             wire src_a = uses_rA & pend_eff[rA_addr];
             wire src_b = uses_rB & pend_eff[rB_addr];
@@ -86,9 +115,28 @@ module scoreboard (
         end
     endgenerate
 
-    assign stall = |(active_mask & hazard);
-    assign any_pending = |{pending[3], pending[2], pending[1], pending[0]};
+    // ================================================================
+    // Bypass comparator (v2.0 FIX 2 companion)
+    // ================================================================
+    wire bypass_hit_a = uses_rA & (rA_addr == issue_rD_addr_r);
+    wire bypass_hit_b = uses_rB & (rB_addr == issue_rD_addr_r);
+    wire bypass_hit_d = (is_fma | is_st) & (rD_addr == issue_rD_addr_r);
+
+    wire bypass_thread_overlap = |(active_mask & issue_active_mask_r);
+
+    wire bypass_stall = issue_r & bypass_thread_overlap
+                      & (bypass_hit_a | bypass_hit_b | bypass_hit_d);
+
+    // ================================================================
+    // Outputs
+    // ================================================================
+
+    // Stall: regular pending-based hazard OR 1-cycle bypass.
+    assign stall = |(active_mask & hazard) | bypass_stall;
+
+    assign any_pending = |{pending[3], pending[2], pending[1], pending[0]}
+                       | issue_r;
 
 endmodule
 
-`endif
+`endif // SCOREBOARD_V
