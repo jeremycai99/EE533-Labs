@@ -88,6 +88,7 @@ module sm_core (
     wire sp_wb_rf_we [0:3];
     wire sp_wb_active [0:3];
     wire sp_wb_valid [0:3];
+    wire sp_wb_pred_we [0:3];
 
     wire [`GPU_DMEM_ADDR_WIDTH-1:0] dmem_addr_a [0:3];
     wire [`GPU_DMEM_DATA_WIDTH-1:0] dmem_din_a [0:3];
@@ -406,6 +407,7 @@ module sm_core (
     assign ret_detected = id_issue_ctrl & de_is_ret;
 
     wire sb_issue = id_can_issue & de_rf_we;
+    wire sb_issue_pred = id_can_issue & de_pred_we;
 
     // ================================================================
     // Scoreboard
@@ -414,6 +416,10 @@ module sm_core (
                                     sp_wb_active[1], sp_wb_active[0]};
     wire sb_wb_rf_we_any = sp_wb_rf_we[0] | sp_wb_rf_we[1]
                          | sp_wb_rf_we[2] | sp_wb_rf_we[3];
+    
+    wire sb_wb_pred_we_any = sp_wb_pred_we[0] | sp_wb_pred_we[1]
+                           | sp_wb_pred_we[2] | sp_wb_pred_we[3];
+
     wire sb_any_pending;
 
     scoreboard u_sb (
@@ -426,6 +432,7 @@ module sm_core (
         .issue(sb_issue),
         .wb_rD_addr(sp_wb_rD_addr[0]), .wb_rf_we(sb_wb_rf_we_any),
         .wb_active_mask(wb_active_mask_sb),
+        .issue_pred(sb_issue_pred), .wb_pred_we(sb_wb_pred_we_any),
         .stall(sb_stall), .any_pending(sb_any_pending)
     );
 
@@ -750,7 +757,8 @@ module sm_core (
                 .wb_ext_w_we(ext_w_we[t]),
                 .mem_is_load(sp_mem_is_load[t]), .mem_is_store(sp_mem_is_store[t]),
                 .wb_rD_addr(sp_wb_rD_addr[t]), .wb_rf_we(sp_wb_rf_we[t]),
-                .wb_active(sp_wb_active[t]), .wb_valid(sp_wb_valid[t])
+                .wb_active(sp_wb_active[t]), .wb_valid(sp_wb_valid[t]),
+                .wb_pred_we(sp_wb_pred_we[t])
             );
         end
     endgenerate

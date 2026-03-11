@@ -2,16 +2,23 @@
  Description: Scoreboard for the CUDA-like SM core pipeline.
  Tracks in-flight register writes and stalls on RAW hazards.
  Author: Jeremy Cai
- Date: Mar. 7, 2026
- Version: 2.0
+ Date: Mar. 11, 2026
+ Version: 2.1
  Revision history:
     - Feb. 27, 2026: v1.0 — Initial implementation.
     - Mar. 05, 2026: v1.1 — Add synchronous clear input for kernel_start.
       Without this, stale pending bits from a deadlocked or incomplete kernel
       persist across kernel launches, causing permanent front_stall.
     - Mar. 07, 2026: v2.0 — Two-part timing fix targeting the 13-level
-      combinational critical path through the stall/issue feedback loop
-*/
+      combinational critical path through the stall/issue feedback loop.
+    - Mar. 11, 2026: v2.1 — Add predicate write in-flight tracking.
+      SETP/SET have rf_we=0 so the GPR pending array never sees them.
+      Without tracking, pipeline_drained goes high while pred writes are
+      still in MEM/WB, allowing PBRA to fire with stale predicates.
+      Fix: 2-bit saturating counter (pred_cnt) tracks pred writes from
+      issue to WB. Included in any_pending so pipeline_drained stays
+      low until all pred writes complete.
+ */
 
 `ifndef SCOREBOARD_V
 `define SCOREBOARD_V
@@ -36,10 +43,13 @@ module scoreboard (
     input  wire [3:0] active_mask,
     // Issue handshake
     input  wire issue,
-    // From WB stage
+    // From WB stage — GPR
     input wire [3:0] wb_rD_addr,
     input wire wb_rf_we,
     input wire [3:0] wb_active_mask,
+    // v2.1: Predicate write tracking
+    input wire issue_pred,       // pred-writing instr issued (SETP/SET)
+    input wire wb_pred_we,       // pred write completed at WB (any lane)
 
     // Outputs
     output wire stall,
@@ -128,6 +138,29 @@ module scoreboard (
                       & (bypass_hit_a | bypass_hit_b | bypass_hit_d);
 
     // ================================================================
+    // v2.1: Predicate write in-flight counter
+    // ================================================================
+    reg issue_pred_r;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)     issue_pred_r <= 1'b0;
+        else if (clear) issue_pred_r <= 1'b0;
+        else            issue_pred_r <= issue_pred;
+    end
+
+    reg [1:0] pred_cnt;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n || clear)
+            pred_cnt <= 2'd0;
+        else begin
+            case ({issue_pred_r, wb_pred_we})
+                2'b10:   pred_cnt <= pred_cnt + 2'd1;
+                2'b01:   pred_cnt <= (pred_cnt != 2'd0) ? pred_cnt - 2'd1 : 2'd0;
+                default: pred_cnt <= pred_cnt;
+            endcase
+        end
+    end
+
+    // ================================================================
     // Outputs
     // ================================================================
 
@@ -135,7 +168,7 @@ module scoreboard (
     assign stall = |(active_mask & hazard) | bypass_stall;
 
     assign any_pending = |{pending[3], pending[2], pending[1], pending[0]}
-                       | issue_r;
+                       | issue_r | issue_pred_r | (pred_cnt != 2'd0);
 
 endmodule
 

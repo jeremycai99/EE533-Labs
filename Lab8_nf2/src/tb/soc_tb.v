@@ -2355,6 +2355,865 @@ initial begin
         settle;
     end
 
+    // ════════════════════════════════════════════════════════════
+    //  ARMv4T ISA Coverage Suite (T28-T34)
+    //
+    //  Thorough testing of all data processing instructions,
+    //  barrel shifter modes, condition codes, and flag operations.
+    //  No multiply-family (MUL/MLA/UMULL/SMULL) — tested in T2/T7.
+    //
+    //  ARM Data Processing encoding:
+    //    cond[31:28] | 00 | I[25] | opcode[24:21] | S[20] | Rn[19:16] | Rd[15:12] | operand2[11:0]
+    //
+    //  Opcodes: 0000=AND 0001=EOR 0010=SUB 0011=RSB 0100=ADD
+    //           0101=ADC 0110=SBC 0111=RSC 1000=TST 1001=TEQ
+    //           1010=CMP 1011=CMN 1100=ORR 1101=MOV 1110=BIC 1111=MVN
+    //
+    //  Barrel shifter operand2 (register):
+    //    shift_imm[11:7] | shift_type[6:5] | 0 | Rm[3:0]
+    //    type: 00=LSL 01=LSR 10=ASR 11=ROR
+    // ════════════════════════════════════════════════════════════
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 28: SUB, RSB — subtraction variants
+    //
+    //  IMEM (8 instrs):
+    //    [0] E3A00000  MOV R0, #0
+    //    [1] E5901000  LDR R1, [R0]       ; R1 = 100
+    //    [2] E5902004  LDR R2, [R0, #4]   ; R2 = 30
+    //    [3] E0413002  SUB R3, R1, R2     ; 100-30 = 70 = 0x46
+    //    [4] E0614002  RSB R4, R1, R2     ; 30-100 = -70 = 0xFFFFFFBA
+    //    [5] E5803008  STR R3, [R0, #8]
+    //    [6] E580400C  STR R4, [R0, #12]
+    //    [7] EAFFFFFE  B .
+    //
+    //  DMEM: [0]=100, [1]=30, [2]=0, [3]=0
+    //  TX[0] = {30, 100}
+    //  TX[1] = {0xFFFFFFBA, 0x46}
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 28: SUB, RSB ---");
+        cycle_cnt = 0;
+
+        // 8 instrs = 4 DWs
+        rx(cmd(4'h1, 12'h000, 16'd4, 32'h0), 8'h04);
+        rx({32'hE5901000, 32'hE3A00000}, 8'h00);   // [1]LDR R1,[R0]; [0]MOV R0,#0
+        rx({32'hE0413002, 32'hE5902004}, 8'h00);   // [3]SUB R3,R1,R2; [2]LDR R2,[R0,#4]
+        rx({32'hE5803008, 32'hE0614002}, 8'h00);   // [5]STR R3,[R0,#8]; [4]RSB R4,R1,R2
+        rx({ARM_HALT,     32'hE580400C}, 8'h00);   // [7]B .; [6]STR R4,[R0,#12]
+
+        rx(cmd(4'h2, 12'h000, 16'd2, 32'h0), 8'h00);
+        rx({32'h0000_001E, 32'h0000_0064}, 8'h00); // {word1=30, word0=100}
+        rx({32'h0000_0000, 32'h0000_0000}, 8'h00); // {word3=0, word2=0}
+
+        rx(cmd(4'h3, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx(cmd(4'h4, 12'h000, 16'd2, 32'h0), 8'h00);
+        rx(cmd(4'h5, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx_end;
+
+        wait_and_capture(MAX_CYCLES);
+
+        checkN(tx_cnt, 2, "T28 TX count");
+        check64(tx_data[0], {32'h0000_001E, 32'h0000_0064}, "T28 TX[0] inputs 30,100");
+        check64(tx_data[1], {32'hFFFF_FFBA, 32'h0000_0046}, "T28 TX[1] RSB=-70, SUB=70");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 29: AND, ORR, EOR, BIC, MVN — bitwise operations
+    //
+    //  IMEM (14 instrs):
+    //    [0]  E3A00000  MOV R0, #0
+    //    [1]  E5901000  LDR R1, [R0]       ; 0xFF00FF00
+    //    [2]  E5902004  LDR R2, [R0, #4]   ; 0x0F0F0F0F
+    //    [3]  E0013002  AND R3, R1, R2     ; 0x0F000F00
+    //    [4]  E1814002  ORR R4, R1, R2     ; 0xFF0FFF0F
+    //    [5]  E0215002  EOR R5, R1, R2     ; 0xF00FF00F
+    //    [6]  E1C16002  BIC R6, R1, R2     ; 0xF000F000
+    //    [7]  E1E07002  MVN R7, R2         ; 0xF0F0F0F0
+    //    [8]  E5803008  STR R3, [R0, #8]
+    //    [9]  E580400C  STR R4, [R0, #12]
+    //    [10] E5805010  STR R5, [R0, #16]
+    //    [11] E5806014  STR R6, [R0, #20]
+    //    [12] E5807018  STR R7, [R0, #24]
+    //    [13] EAFFFFFE  B .
+    //
+    //  DMEM: [0]=0xFF00FF00, [1]=0x0F0F0F0F, [2..7]=0
+    //  Readback addr=0, count=4:
+    //    TX[0] = {0x0F0F0F0F, 0xFF00FF00} inputs
+    //    TX[1] = {0xFF0FFF0F, 0x0F000F00} ORR, AND
+    //    TX[2] = {0xF000F000, 0xF00FF00F} BIC, EOR
+    //    TX[3] = {0x00000000, 0xF0F0F0F0} pad, MVN
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 29: AND, ORR, EOR, BIC, MVN ---");
+        cycle_cnt = 0;
+
+        // 14 instrs = 7 DWs
+        rx(cmd(4'h1, 12'h000, 16'd7, 32'h0), 8'h04);
+        rx({32'hE5901000, 32'hE3A00000}, 8'h00);   // [1]LDR R1; [0]MOV R0
+        rx({32'hE0013002, 32'hE5902004}, 8'h00);   // [3]AND R3; [2]LDR R2
+        rx({32'hE0215002, 32'hE1814002}, 8'h00);   // [5]EOR R5; [4]ORR R4
+        rx({32'hE1E07002, 32'hE1C16002}, 8'h00);   // [7]MVN R7; [6]BIC R6
+        rx({32'hE580400C, 32'hE5803008}, 8'h00);   // [9]STR R4,[12]; [8]STR R3,[8]
+        rx({32'hE5806014, 32'hE5805010}, 8'h00);   // [11]STR R6,[20]; [10]STR R5,[16]
+        rx({ARM_HALT,     32'hE5807018}, 8'h00);   // [13]B .; [12]STR R7,[24]
+
+        // DMEM: 4 DWs = 8 words
+        rx(cmd(4'h2, 12'h000, 16'd4, 32'h0), 8'h00);
+        rx({32'h0F0F0F0F, 32'hFF00FF00}, 8'h00);   // {word1, word0}
+        rx(64'h0, 8'h00);
+        rx(64'h0, 8'h00);
+        rx(64'h0, 8'h00);
+
+        rx(cmd(4'h3, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx(cmd(4'h4, 12'h000, 16'd4, 32'h0), 8'h00);
+        rx(cmd(4'h5, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx_end;
+
+        wait_and_capture(MAX_CYCLES);
+
+        checkN(tx_cnt, 4, "T29 TX count");
+        check64(tx_data[0], {32'h0F0F0F0F, 32'hFF00FF00}, "T29 TX[0] inputs");
+        check64(tx_data[1], {32'hFF0FFF0F, 32'h0F000F00}, "T29 TX[1] ORR, AND");
+        check64(tx_data[2], {32'hF000F000, 32'hF00FF00F}, "T29 TX[2] BIC, EOR");
+        check64(tx_data[3], {32'h0000_0000, 32'hF0F0F0F0}, "T29 TX[3] pad, MVN");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 30: Barrel shifter — LSL, LSR, ASR, ROR
+    //
+    //  IMEM (14 instrs):
+    //    [0]  E3A00000  MOV R0, #0
+    //    [1]  E5901000  LDR R1, [R0]       ; 0x0000000F
+    //    [2]  E1A02201  MOV R2, R1, LSL #4 ; 0x000000F0
+    //    [3]  E1A03401  MOV R3, R1, LSL #8 ; 0x00000F00
+    //    [4]  E5904004  LDR R4, [R0, #4]   ; 0x80000001
+    //    [5]  E1A050A4  MOV R5, R4, LSR #1 ; 0x40000000
+    //    [6]  E1A060C4  MOV R6, R4, ASR #1 ; 0xC0000000
+    //    [7]  E1A07264  MOV R7, R4, ROR #4 ; 0x18000000
+    //    [8]  E5802008  STR R2, [R0, #8]
+    //    [9]  E580300C  STR R3, [R0, #12]
+    //    [10] E5805010  STR R5, [R0, #16]
+    //    [11] E5806014  STR R6, [R0, #20]
+    //    [12] E5807018  STR R7, [R0, #24]
+    //    [13] EAFFFFFE  B .
+    //
+    //  Barrel shifter operand2 encoding:
+    //    LSL #4: shift=00100, type=00, Rm=R1 → 0x201
+    //    LSL #8: shift=01000, type=00, Rm=R1 → 0x401
+    //    LSR #1: shift=00001, type=01, Rm=R4 → 0x0A4
+    //    ASR #1: shift=00001, type=10, Rm=R4 → 0x0C4
+    //    ROR #4: shift=00100, type=11, Rm=R4 → 0x264
+    //
+    //  DMEM: [0]=0xF, [1]=0x80000001, [2..7]=0
+    //  Readback addr=0, count=4:
+    //    TX[0] = {0x80000001, 0x0000000F} inputs
+    //    TX[1] = {0x00000F00, 0x000000F0} LSL#8, LSL#4
+    //    TX[2] = {0xC0000000, 0x40000000} ASR#1, LSR#1
+    //    TX[3] = {0x00000000, 0x18000000} pad, ROR#4
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 30: Barrel shifter (LSL/LSR/ASR/ROR) ---");
+        cycle_cnt = 0;
+
+        // 14 instrs = 7 DWs
+        rx(cmd(4'h1, 12'h000, 16'd7, 32'h0), 8'h04);
+        rx({32'hE5901000, 32'hE3A00000}, 8'h00);   // [1]LDR R1; [0]MOV R0
+        rx({32'hE1A03401, 32'hE1A02201}, 8'h00);   // [3]LSL#8; [2]LSL#4
+        rx({32'hE1A050A4, 32'hE5904004}, 8'h00);   // [5]LSR#1; [4]LDR R4
+        rx({32'hE1A07264, 32'hE1A060C4}, 8'h00);   // [7]ROR#4; [6]ASR#1
+        rx({32'hE580300C, 32'hE5802008}, 8'h00);   // [9]STR R3; [8]STR R2
+        rx({32'hE5806014, 32'hE5805010}, 8'h00);   // [11]STR R6; [10]STR R5
+        rx({ARM_HALT,     32'hE5807018}, 8'h00);   // [13]B .; [12]STR R7
+
+        // DMEM: 4 DWs
+        rx(cmd(4'h2, 12'h000, 16'd4, 32'h0), 8'h00);
+        rx({32'h80000001, 32'h0000000F}, 8'h00);   // {word1, word0}
+        rx(64'h0, 8'h00);
+        rx(64'h0, 8'h00);
+        rx(64'h0, 8'h00);
+
+        rx(cmd(4'h3, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx(cmd(4'h4, 12'h000, 16'd4, 32'h0), 8'h00);
+        rx(cmd(4'h5, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx_end;
+
+        wait_and_capture(MAX_CYCLES);
+
+        checkN(tx_cnt, 4, "T30 TX count");
+        check64(tx_data[0], {32'h80000001, 32'h0000000F}, "T30 TX[0] inputs");
+        check64(tx_data[1], {32'h00000F00, 32'h000000F0}, "T30 TX[1] LSL#8=0xF00, LSL#4=0xF0");
+        check64(tx_data[2], {32'hC0000000, 32'h40000000}, "T30 TX[2] ASR#1=0xC.., LSR#1=0x4..");
+        check64(tx_data[3], {32'h00000000, 32'h18000000}, "T30 TX[3] pad, ROR#4=0x18..");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 31: ADC, SBC — carry flag operations
+    //
+    //  IMEM (16 instrs):
+    //    [0]  E3A00000  MOV R0, #0
+    //    [1]  E3A01000  MOV R1, #0
+    //    [2]  E1E01001  MVN R1, R1          ; R1 = 0xFFFFFFFF
+    //    [3]  E3A02001  MOV R2, #1
+    //    [4]  E0913002  ADDS R3, R1, R2    ; 0xFFFFFFFF+1=0, C=1, Z=1
+    //    [5]  E3A04005  MOV R4, #5
+    //    [6]  E3A05003  MOV R5, #3
+    //    [7]  E0A46005  ADC R6, R4, R5     ; 5+3+C(=1) = 9
+    //    [8]  E0557004  SUBS R7, R5, R4    ; 3-5 = -2 = 0xFFFFFFFE, C=0
+    //    [9]  E0C48005  SBC R8, R4, R5     ; 5-3-!C = 5-3-1 = 1
+    //    [10] E5803000  STR R3, [R0]       ; DMEM[0] = 0
+    //    [11] E5806004  STR R6, [R0, #4]   ; DMEM[1] = 9
+    //    [12] E5807008  STR R7, [R0, #8]   ; DMEM[2] = 0xFFFFFFFE
+    //    [13] E580800C  STR R8, [R0, #12]  ; DMEM[3] = 1
+    //    [14] EAFFFFFE  B .
+    //    [15] E1A00000  NOP
+    //
+    //  ADDS: ADD with S=1 → updates CPSR flags
+    //  ADC: Rd = Rn + Rm + C
+    //  SUBS: SUB with S=1 → C=0 on borrow
+    //  SBC: Rd = Rn - Rm - !C
+    //
+    //  TX[0] = {9, 0}
+    //  TX[1] = {1, 0xFFFFFFFE}
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 31: ADC, SBC (carry flag) ---");
+        cycle_cnt = 0;
+
+        // 16 instrs = 8 DWs
+        rx(cmd(4'h1, 12'h000, 16'd8, 32'h0), 8'h04);
+        rx({32'hE3A01000, 32'hE3A00000}, 8'h00);   // [1]MOV R1,#0; [0]MOV R0,#0
+        rx({32'hE3A02001, 32'hE1E01001}, 8'h00);   // [3]MOV R2,#1; [2]MVN R1,R1
+        rx({32'hE3A04005, 32'hE0913002}, 8'h00);   // [5]MOV R4,#5; [4]ADDS R3,R1,R2
+        rx({32'hE0A46005, 32'hE3A05003}, 8'h00);   // [7]ADC R6,R4,R5; [6]MOV R5,#3
+        rx({32'hE0C48005, 32'hE0557004}, 8'h00);   // [9]SBC R8,R4,R5; [8]SUBS R7,R5,R4
+        rx({32'hE5806004, 32'hE5803000}, 8'h00);   // [11]STR R6,[4]; [10]STR R3,[0]
+        rx({32'hE580800C, 32'hE5807008}, 8'h00);   // [13]STR R8,[12]; [12]STR R7,[8]
+        rx({ARM_NOP,      ARM_HALT},     8'h00);   // [15]NOP; [14]B .
+
+        rx(cmd(4'h2, 12'h000, 16'd2, 32'h0), 8'h00);
+        rx(64'h0, 8'h00);
+        rx(64'h0, 8'h00);
+
+        rx(cmd(4'h3, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx(cmd(4'h4, 12'h000, 16'd2, 32'h0), 8'h00);
+        rx(cmd(4'h5, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx_end;
+
+        wait_and_capture(MAX_CYCLES);
+
+        checkN(tx_cnt, 2, "T31 TX count");
+        check64(tx_data[0], {32'h0000_0009, 32'h0000_0000}, "T31 TX[0] ADC=9, ADDS=0");
+        check64(tx_data[1], {32'h0000_0001, 32'hFFFF_FFFE}, "T31 TX[1] SBC=1, SUBS=-2");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 32: Condition codes — EQ/NE/MI/PL/LT/GE
+    //
+    //  Tests conditional execution after CMP sets flags.
+    //
+    //  IMEM (26 instrs):
+    //    [0]  E3A00000  MOV R0, #0
+    //    [1]  E3A03000  MOV R3, #0       ; init result regs
+    //    [2]  E3A04000  MOV R4, #0
+    //    [3]  E3A05000  MOV R5, #0
+    //    [4]  E3A06000  MOV R6, #0
+    //    [5]  E3A07000  MOV R7, #0
+    //    [6]  E3A08000  MOV R8, #0
+    //    [7]  E3A0100A  MOV R1, #10
+    //    [8]  E3A0200A  MOV R2, #10
+    //    [9]  E1510002  CMP R1, R2       ; 10==10: Z=1, C=1, N=0
+    //    [10] 03A03001  MOVEQ R3, #1    ; Z=1 → execute
+    //    [11] 13A04001  MOVNE R4, #1    ; Z=0 → skip
+    //    [12] E3A01005  MOV R1, #5
+    //    [13] E1510002  CMP R1, R2       ; 5<10: Z=0, N=1, C=0, V=0
+    //    [14] 43A05001  MOVMI R5, #1    ; N=1 → execute
+    //    [15] 53A06001  MOVPL R6, #1    ; N=0 → skip
+    //    [16] B3A07001  MOVLT R7, #1    ; N!=V(1!=0) → execute
+    //    [17] A3A08001  MOVGE R8, #1    ; N==V(1==0) → skip
+    //    [18] E5803000  STR R3, [R0]     ; DMEM[0] = 1 (EQ)
+    //    [19] E5804004  STR R4, [R0, #4] ; DMEM[1] = 0 (NE)
+    //    [20] E5805008  STR R5, [R0, #8] ; DMEM[2] = 1 (MI)
+    //    [21] E580600C  STR R6, [R0, #12]; DMEM[3] = 0 (PL)
+    //    [22] E5807010  STR R7, [R0, #16]; DMEM[4] = 1 (LT)
+    //    [23] E5808014  STR R8, [R0, #20]; DMEM[5] = 0 (GE)
+    //    [24] EAFFFFFE  B .
+    //    [25] E1A00000  NOP
+    //
+    //  TX[0] = {NE=0, EQ=1}
+    //  TX[1] = {PL=0, MI=1}
+    //  TX[2] = {GE=0, LT=1}
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 32: Condition codes (EQ/NE/MI/PL/LT/GE) ---");
+        cycle_cnt = 0;
+
+        // 26 instrs = 13 DWs
+        rx(cmd(4'h1, 12'h000, 16'd13, 32'h0), 8'h04);
+        rx({32'hE3A03000, 32'hE3A00000}, 8'h00);   // [1]MOV R3,#0; [0]MOV R0,#0
+        rx({32'hE3A05000, 32'hE3A04000}, 8'h00);   // [3]MOV R5; [2]MOV R4
+        rx({32'hE3A07000, 32'hE3A06000}, 8'h00);   // [5]MOV R7; [4]MOV R6
+        rx({32'hE3A0100A, 32'hE3A08000}, 8'h00);   // [7]MOV R1,#10; [6]MOV R8
+        rx({32'hE1510002, 32'hE3A0200A}, 8'h00);   // [9]CMP R1,R2; [8]MOV R2,#10
+        rx({32'h13A04001, 32'h03A03001}, 8'h00);   // [11]MOVNE R4; [10]MOVEQ R3
+        rx({32'hE1510002, 32'hE3A01005}, 8'h00);   // [13]CMP R1,R2; [12]MOV R1,#5
+        rx({32'h53A06001, 32'h43A05001}, 8'h00);   // [15]MOVPL R6; [14]MOVMI R5
+        rx({32'hA3A08001, 32'hB3A07001}, 8'h00);   // [17]MOVGE R8; [16]MOVLT R7
+        rx({32'hE5804004, 32'hE5803000}, 8'h00);   // [19]STR R4,[4]; [18]STR R3,[0]
+        rx({32'hE580600C, 32'hE5805008}, 8'h00);   // [21]STR R6,[12]; [20]STR R5,[8]
+        rx({32'hE5808014, 32'hE5807010}, 8'h00);   // [23]STR R8,[20]; [22]STR R7,[16]
+        rx({ARM_NOP,      ARM_HALT},     8'h00);   // [25]NOP; [24]B .
+
+        // Zero DMEM (3 DWs = 6 words)
+        rx(cmd(4'h2, 12'h000, 16'd3, 32'h0), 8'h00);
+        rx(64'h0, 8'h00);
+        rx(64'h0, 8'h00);
+        rx(64'h0, 8'h00);
+
+        rx(cmd(4'h3, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx(cmd(4'h4, 12'h000, 16'd3, 32'h0), 8'h00);
+        rx(cmd(4'h5, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx_end;
+
+        wait_and_capture(MAX_CYCLES);
+
+        checkN(tx_cnt, 3, "T32 TX count");
+        check64(tx_data[0], {32'h0000_0000, 32'h0000_0001}, "T32 TX[0] NE=0, EQ=1");
+        check64(tx_data[1], {32'h0000_0000, 32'h0000_0001}, "T32 TX[1] PL=0, MI=1");
+        check64(tx_data[2], {32'h0000_0000, 32'h0000_0001}, "T32 TX[2] GE=0, LT=1");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 33: Shifted register in ALU + immediate operand
+    //
+    //  IMEM (14 instrs):
+    //    [0]  E3A00000  MOV R0, #0
+    //    [1]  E3A01005  MOV R1, #5
+    //    [2]  E3A02003  MOV R2, #3
+    //    [3]  E0813102  ADD R3, R1, R2, LSL #2  ; 5+(3<<2)=5+12=17
+    //    [4]  E0414102  SUB R4, R1, R2, LSL #2  ; 5-12=-7=0xFFFFFFF9
+    //    [5]  E2415001  SUB R5, R1, #1          ; 5-1=4 (immediate)
+    //    [6]  E2616000  RSB R6, R1, #0          ; 0-5=-5=0xFFFFFFFB (negate)
+    //    [7]  E0017102  AND R7, R1, R2, LSL #2  ; 5 & 12 = 4
+    //    [8]  E5803008  STR R3, [R0, #8]
+    //    [9]  E580400C  STR R4, [R0, #12]
+    //    [10] E5805010  STR R5, [R0, #16]
+    //    [11] E5806014  STR R6, [R0, #20]
+    //    [12] E5807018  STR R7, [R0, #24]
+    //    [13] EAFFFFFE  B .
+    //
+    //  operand2 for R2, LSL #2:
+    //    shift=00010, type=00(LSL), Rm=R2 → 0x102
+    //
+    //  No DMEM input — all immediates.
+    //  DMEM: 4 DWs zeroed
+    //  Readback addr=0, count=4:
+    //    TX[0] = {DMEM[1]=0, DMEM[0]=0} (unused)
+    //    TX[1] = {0xFFFFFFF9, 0x11}  SUB shifted=-7, ADD shifted=17
+    //    TX[2] = {0xFFFFFFFB, 0x04}  RSB negate=-5, SUB imm=4
+    //    TX[3] = {0, 0x04}            pad, AND shifted=4
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 33: Shifted register ALU + immediate ---");
+        cycle_cnt = 0;
+
+        // 14 instrs = 7 DWs
+        rx(cmd(4'h1, 12'h000, 16'd7, 32'h0), 8'h04);
+        rx({32'hE3A01005, 32'hE3A00000}, 8'h00);   // [1]MOV R1,#5; [0]MOV R0,#0
+        rx({32'hE0813102, 32'hE3A02003}, 8'h00);   // [3]ADD R3,R1,R2 LSL#2; [2]MOV R2,#3
+        rx({32'hE2415001, 32'hE0414102}, 8'h00);   // [5]SUB R5,R1,#1; [4]SUB R4,R1,R2 LSL#2
+        rx({32'hE0017102, 32'hE2616000}, 8'h00);   // [7]AND R7,R1,R2 LSL#2; [6]RSB R6,R1,#0
+        rx({32'hE580400C, 32'hE5803008}, 8'h00);   // [9]STR R4,[12]; [8]STR R3,[8]
+        rx({32'hE5806014, 32'hE5805010}, 8'h00);   // [11]STR R6,[20]; [10]STR R5,[16]
+        rx({ARM_HALT,     32'hE5807018}, 8'h00);   // [13]B .; [12]STR R7,[24]
+
+        rx(cmd(4'h2, 12'h000, 16'd4, 32'h0), 8'h00);
+        rx(64'h0, 8'h00); rx(64'h0, 8'h00);
+        rx(64'h0, 8'h00); rx(64'h0, 8'h00);
+
+        rx(cmd(4'h3, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx(cmd(4'h4, 12'h000, 16'd4, 32'h0), 8'h00);
+        rx(cmd(4'h5, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx_end;
+
+        wait_and_capture(MAX_CYCLES);
+
+        checkN(tx_cnt, 4, "T33 TX count");
+        check64(tx_data[0], {32'h0, 32'h0}, "T33 TX[0] unused DMEM");
+        check64(tx_data[1], {32'hFFFFFFF9, 32'h00000011}, "T33 TX[1] SUB_sh=-7, ADD_sh=17");
+        check64(tx_data[2], {32'hFFFFFFFB, 32'h00000004}, "T33 TX[2] RSB_neg=-5, SUB_imm=4");
+        check64(tx_data[3], {32'h00000000, 32'h00000004}, "T33 TX[3] pad, AND_sh=4");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 34: TST, TEQ, CMN — flag-only operations
+    //
+    //  IMEM (20 instrs):
+    //    [0]  E3A00000  MOV R0, #0
+    //    [1]  E3A03000  MOV R3, #0       ; init results
+    //    [2]  E3A04000  MOV R4, #0
+    //    [3]  E3A05000  MOV R5, #0
+    //    --- TST: sets Z based on AND ---
+    //    [4]  E3A01003  MOV R1, #3       ; 0x03
+    //    [5]  E3A02005  MOV R2, #5       ; 0x05
+    //    [6]  E1110002  TST R1, R2       ; 3 AND 5 = 1 → Z=0
+    //    [7]  13A03001  MOVNE R3, #1     ; Z=0 → R3=1
+    //    --- TEQ: sets Z based on EOR ---
+    //    [8]  E3A010FF  MOV R1, #0xFF
+    //    [9]  E3A020FF  MOV R2, #0xFF
+    //    [10] E1310002  TEQ R1, R2       ; 0xFF XOR 0xFF = 0 → Z=1
+    //    [11] 03A04001  MOVEQ R4, #1     ; Z=1 → R4=1
+    //    --- CMN: sets flags based on ADD ---
+    //    [12] E3A01001  MOV R1, #1
+    //    [13] E1E02002  MVN R2, R2       ; R2 = ~0xFF = 0xFFFFFF00
+    //    [14] E1710002  CMN R1, R2       ; 1+0xFFFFFF00=0xFFFFFF01 → N=1
+    //    [15] 43A05001  MOVMI R5, #1     ; N=1 → R5=1
+    //    [16] E5803000  STR R3, [R0]     ; TST result = 1
+    //    [17] E5804004  STR R4, [R0, #4] ; TEQ result = 1
+    //    [18] E5805008  STR R5, [R0, #8] ; CMN result = 1
+    //    [19] EAFFFFFE  B .
+    //
+    //  Encodings:
+    //    TST R1, R2:  E1110002  (op=1000, S=1, Rn=R1, Rd=0)
+    //    TEQ R1, R2:  E1310002  (op=1001, S=1, Rn=R1, Rd=0)
+    //    CMN R1, R2:  E1710002  (op=1011, S=1, Rn=R1, Rd=0)
+    //
+    //  TX[0] = {TEQ=1, TST=1}
+    //  TX[1] = {0, CMN=1}
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 34: TST, TEQ, CMN (flag-only ops) ---");
+        cycle_cnt = 0;
+
+        // 20 instrs = 10 DWs
+        rx(cmd(4'h1, 12'h000, 16'd10, 32'h0), 8'h04);
+        rx({32'hE3A03000, 32'hE3A00000}, 8'h00);   // [1]MOV R3,#0; [0]MOV R0,#0
+        rx({32'hE3A05000, 32'hE3A04000}, 8'h00);   // [3]MOV R5,#0; [2]MOV R4,#0
+        rx({32'hE3A02005, 32'hE3A01003}, 8'h00);   // [5]MOV R2,#5; [4]MOV R1,#3
+        rx({32'h13A03001, 32'hE1110002}, 8'h00);   // [7]MOVNE R3; [6]TST R1,R2
+        rx({32'hE3A020FF, 32'hE3A010FF}, 8'h00);   // [9]MOV R2,#0xFF; [8]MOV R1,#0xFF
+        rx({32'h03A04001, 32'hE1310002}, 8'h00);   // [11]MOVEQ R4; [10]TEQ R1,R2
+        rx({32'hE1E02002, 32'hE3A01001}, 8'h00);   // [13]MVN R2,R2; [12]MOV R1,#1
+        rx({32'h43A05001, 32'hE1710002}, 8'h00);   // [15]MOVMI R5; [14]CMN R1,R2
+        rx({32'hE5804004, 32'hE5803000}, 8'h00);   // [17]STR R4,[4]; [16]STR R3,[0]
+        rx({ARM_HALT,     32'hE5805008}, 8'h00);   // [19]B .; [18]STR R5,[8]
+
+        rx(cmd(4'h2, 12'h000, 16'd2, 32'h0), 8'h00);
+        rx(64'h0, 8'h00);
+        rx(64'h0, 8'h00);
+
+        rx(cmd(4'h3, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx(cmd(4'h4, 12'h000, 16'd2, 32'h0), 8'h00);
+        rx(cmd(4'h5, 12'h000, 16'd0, 32'h0), 8'h00);
+        rx_end;
+
+        wait_and_capture(MAX_CYCLES);
+
+        checkN(tx_cnt, 2, "T34 TX count");
+        check64(tx_data[0], {32'h0000_0001, 32'h0000_0001}, "T34 TX[0] TEQ=1, TST=1");
+        check64(tx_data[1], {32'h0000_0000, 32'h0000_0001}, "T34 TX[1] pad, CMN=1");
+        settle;
+    end
+
+// ════════════════════════════════════════════════════════════
+    //  GPU ISA Coverage Suite (T35-T42)
+    //
+    //  Tests all remaining GPU opcodes through the full SoC path
+    //  (pkt_proc → LOAD_IMEM → ARM → DMA → GPU → DMA → D_PACK → TX).
+    //
+    //  Encoding reference (verified against sm_core_tb.v enc_* helpers):
+    //    enc_r:       {op[4:0], dt, 2'b00, rd, ra, rb, 12'd0}
+    //    enc_i:       {op[4:0], dt, 2'b00, rd, ra, imm16}
+    //    enc_movi:    {OP_MOVI=00100, 0, 00, rd, 0000, imm16}
+    //    enc_m:       {op, 0, 00, rd, ra, offset16}
+    //    enc_m_f:     {op, 1, 00, rd, ra, offset16}
+    //    enc_setp:    {OP_SETP=10101, dt, cmp[1:0], pd, ra, rb, 12'd0}
+    //    enc_set:     {OP_SET=11010, 0, 00, {00,pd}, 0000, 15'd0, val}
+    //    enc_selp:    {OP_SELP=10110, 0, pred_sel[1:0], rd, ra, rb, 12'd0}
+    //    enc_mov_tid: {OP_MOV=00011, 1, 00, rd, 0000, 16'd0}  (DT=1→TID)
+    //    enc_pbra:    {OP_PBRA=11000, pred_sel[1:0], target[12:0], reconv[11:0]}
+    //    enc_bra:     {OP_BRA=10111, target[26:0]}
+    //
+    //  Hex byte prefixes (bit31:24):
+    //    NOP=00  ST=08  ST.f=0C  LD=10  LD.f=14  MOV=18  MOV.TID=1C
+    //    MOVI=20  CVT.f2i=28  CVT.i2f=2C  ADD=30  ADD.f=34
+    //    SUB=38  SUB.f=3C  MUL=40  MUL.f=44  FMA=48  FMA.f=4C
+    //    MAX=50  MAX.f=54  MIN=58  MIN.f=5C  ABS=60  ABS.f=64
+    //    NEG=68  NEG.f=6C  AND=70  OR=78  XOR=80  SHL=88  SHR=90
+    //    ADDI=98  MULI=A0
+    //    SETP+EQ=A8  SETP+NE=A9  SETP+LT=AA  SETP+LE=AB
+    //    SELP.P0=B0  SELP.P1=B4
+    //    BRA=B8  PBRA.P0=C0  RET=C8  SET=D0
+    //    WMMA.MMA=EC  WMMA.LD=F0  WMMA.ST=F8
+    // ════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════
+    //  GPU ISA Coverage Suite (T35-T42)
+    //
+    //  Encodings verified against sm_core_tb.v enc_* helpers.
+    //
+    //  D_PACK TX format depends on nw (DMEM words per bank):
+    //    nw=2: 2×16=32 bits/bank → 2 banks per TX word
+    //      TX[0]={bank1[1:0], bank0[1:0]}, TX[1]={bank3[1:0], bank2[1:0]}
+    //    nw=4: 4×16=64 bits/bank → 1 bank per TX word
+    //      TX[0]=bank0{[3],[2],[1],[0]}, TX[1]=bank1, TX[2]=bank2, TX[3]=bank3
+    //
+    //  Encoding reference:
+    //    enc_r:    {op[4:0], dt, 2'b00, rd, ra, rb, 12'd0}
+    //    enc_i:    {op[4:0], dt, 2'b00, rd, ra, imm16}
+    //    enc_m:    {op, 0, 00, rd, ra, offset16}   ⚠ ST: rD=source
+    //    enc_setp: {OP_SETP, dt, cmp[1:0], pd, ra, rb, 12'd0}
+    //    enc_set:  {OP_SET, 0, 00, {00,pd}, 0000, 15'd0, val}
+    //    enc_selp: {OP_SELP, dt, pred_sel, rd, ra, rb, 12'd0}
+    //    enc_mov_tid: {OP_MOV, 1, 00, rd, 0000, 16'd0}
+    //    enc_bra:  {OP_BRA, target[26:0]}
+    //    enc_pbra: {OP_PBRA, pred_sel, target[12:0], reconv[11:0]}
+    // ════════════════════════════════════════════════════════════
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 35: GPU AND, OR, XOR (int16)
+    //
+    //  Input per bank: 0x0F0FFF00 → DMEM[0]=0xFF00, DMEM[1]=0x0F0F
+    //  AND=0x0F00, OR=0xFF0F, XOR=0xF00F
+    //  Stores: [0]=AND, [1]=OR, [2]=XOR, [3]=0
+    //
+    //  nw=4 → TX[n] = {DMEM[3],DMEM[2],DMEM[1],DMEM[0]} per bank
+    //        = {0x0000, 0xF00F, 0xFF0F, 0x0F00} = 0x0000F00FFF0F0F00
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 35: GPU AND, OR, XOR (int16) ---");
+        cycle_cnt = 0;
+
+        send_gpu_arm(8'h04, 8'd1, 8'd0, 8'd2);
+        send_gpu_imem(
+            {32'h10100000, 32'h20000000}, // [1]LD R1,[R0+0]; [0]MOVI R0,0
+            {32'h70312000, 32'h10200001}, // [3]AND R3,R1,R2; [2]LD R2,[R0+1]
+            {32'h80512000, 32'h78412000}, // [5]XOR R5,R1,R2; [4]OR R4,R1,R2
+            {32'h08400001, 32'h08300000}, // [7]ST R4,[R0+1]; [6]ST R3,[R0+0]
+            {32'h20600000, 32'h08500002}, // [9]MOVI R6,0;    [8]ST R5,[R0+2]
+            {32'hC8000000, 32'h08600003}, // [11]RET;          [10]ST R6,[R0+3]
+            64'h0, 64'h0
+        );
+        rx(cmd(4'h2, 12'h010, 16'd2, 32'h0), 8'h00);
+        rx({32'h0F0FFF00, 32'h0F0FFF00}, 8'h00);
+        rx({32'h0F0FFF00, 32'h0F0FFF00}, 8'h00);
+
+        send_gpu_tail(4);
+        wait_and_capture(MAX_CYCLES);
+
+        checkN(tx_cnt, 4, "T35 TX count");
+        check64(tx_data[0], 64'h0000F00FFF0F0F00, "T35 TX[0] bank0 {0,XOR,OR,AND}");
+        check64(tx_data[1], 64'h0000F00FFF0F0F00, "T35 TX[1] bank1");
+        check64(tx_data[2], 64'h0000F00FFF0F0F00, "T35 TX[2] bank2");
+        check64(tx_data[3], 64'h0000F00FFF0F0F00, "T35 TX[3] bank3");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 36: GPU SHL, SHR, ADDI, MULI (int16)
+    //
+    //  Input per bank: 0x00000005 → DMEM[0]=5, DMEM[1]=0
+    //  SHL=40, SHR=2, ADDI=15, MULI=35
+    //  Stores: [0]=SHL=40, [1]=SHR=2, [2]=ADDI=15, [3]=MULI=35
+    //
+    //  nw=4 → TX[n] = {35, 15, 2, 40}
+    //        = {0x0023, 0x000F, 0x0002, 0x0028} = 0x0023000F00020028
+    //
+    //  BUG FIX: ST R3,[R0+1] was 0x08310001 (rA=R1). Fixed to 0x08300001 (rA=R0).
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 36: GPU SHL, SHR, ADDI, MULI ---");
+        cycle_cnt = 0;
+
+        send_gpu_arm(8'h04, 8'd1, 8'd0, 8'd2);
+        send_gpu_imem(
+            {32'h10100000, 32'h20000000}, // [1]LD R1,[R0+0]; [0]MOVI R0,0
+            {32'h90310001, 32'h88210003}, // [3]SHR R3,R1,1;  [2]SHL R2,R1,3
+            {32'hA0510007, 32'h9841000A}, // [5]MULI R5,R1,7; [4]ADDI R4,R1,10
+            {32'h08300001, 32'h08200000}, // [7]ST R3,[R0+1]; [6]ST R2,[R0+0]
+                                          //  ^^^^^^^^ fixed (was 0x08310001 rA=R1)
+            {32'h08500003, 32'h08400002}, // [9]ST R5,[R0+3]; [8]ST R4,[R0+2]
+            {32'hC8000000, 32'h00000000}, // [11]RET;          [10]NOP
+            64'h0, 64'h0
+        );
+        rx(cmd(4'h2, 12'h010, 16'd2, 32'h0), 8'h00);
+        rx({32'h00000005, 32'h00000005}, 8'h00);
+        rx({32'h00000005, 32'h00000005}, 8'h00);
+
+        send_gpu_tail(4);
+        wait_and_capture(MAX_CYCLES);
+
+        checkN(tx_cnt, 4, "T36 TX count");
+        check64(tx_data[0], 64'h0023000F00020028, "T36 TX[0] bank0 {MULI,ADDI,SHR,SHL}");
+        check64(tx_data[1], 64'h0023000F00020028, "T36 TX[1] bank1");
+        check64(tx_data[2], 64'h0023000F00020028, "T36 TX[2] bank2");
+        check64(tx_data[3], 64'h0023000F00020028, "T36 TX[3] bank3");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 37: GPU ABS, NEG, MIN (int16, per-bank different)
+    //
+    //  D_UNPACK per bank:
+    //    Bank 0: 0x0014FFF6 → DMEM[0]=-10=FFF6, DMEM[1]=20=0014
+    //    Bank 1: 0x000AFFEC → DMEM[0]=-20=FFEC, DMEM[1]=10=000A
+    //    Bank 2: 0x001EFFF1 → DMEM[0]=-15=FFF1, DMEM[1]=30=001E
+    //    Bank 3: 0x0005FFE2 → DMEM[0]=-30=FFE2, DMEM[1]=5=0005
+    //
+    //  GPU: ABS(R1)→[0], NEG(R2)→[1], MIN(R1,R2)→[2], 0→[3]
+    //
+    //  nw=4 → TX[n] = bank_n {DMEM[3],DMEM[2],DMEM[1],DMEM[0]}:
+    //    TX[0]=bank0: {0, MIN(-10,20)=-10, NEG(20)=-20, ABS(-10)=10}
+    //         = {0000, FFF6, FFEC, 000A} = 0x0000FFF6FFEC000A
+    //    TX[1]=bank1: {0, MIN(-20,10)=-20, NEG(10)=-10, ABS(-20)=20}
+    //         = {0000, FFEC, FFF6, 0014} = 0x0000FFECFFF60014
+    //    TX[2]=bank2: {0, MIN(-15,30)=-15, NEG(30)=-30, ABS(-15)=15}
+    //         = {0000, FFF1, FFE2, 000F} = 0x0000FFF1FFE2000F
+    //    TX[3]=bank3: {0, MIN(-30,5)=-30, NEG(5)=-5, ABS(-30)=30}
+    //         = {0000, FFE2, FFFB, 001E} = 0x0000FFE2FFFB001E
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 37: GPU ABS, NEG, MIN (int16) ---");
+        cycle_cnt = 0;
+
+        send_gpu_arm(8'h04, 8'd1, 8'd0, 8'd2);
+        send_gpu_imem(
+            {32'h10100000, 32'h20000000}, // [1]LD R1,[R0+0]; [0]MOVI R0,0
+            {32'h60310000, 32'h10200001}, // [3]ABS R3,R1;    [2]LD R2,[R0+1]
+            {32'h58512000, 32'h68420000}, // [5]MIN R5,R1,R2; [4]NEG R4,R2
+            {32'h08400001, 32'h08300000}, // [7]ST R4,[R0+1]; [6]ST R3,[R0+0]
+            {32'h20600000, 32'h08500002}, // [9]MOVI R6,0;    [8]ST R5,[R0+2]
+            {32'hC8000000, 32'h08600003}, // [11]RET;          [10]ST R6,[R0+3]
+            64'h0, 64'h0
+        );
+        rx(cmd(4'h2, 12'h010, 16'd2, 32'h0), 8'h00);
+        rx({32'h000AFFEC, 32'h0014FFF6}, 8'h00); // bank1, bank0
+        rx({32'h0005FFE2, 32'h001EFFF1}, 8'h00); // bank3, bank2
+
+        send_gpu_tail(4);
+        wait_and_capture(MAX_CYCLES);
+
+        checkN(tx_cnt, 4, "T37 TX count");
+        check64(tx_data[0], 64'h0000FFF6FFEC000A, "T37 TX[0] bank0 ABS=10,NEG=-20,MIN=-10");
+        check64(tx_data[1], 64'h0000FFECFFF60014, "T37 TX[1] bank1 ABS=20,NEG=-10,MIN=-20");
+        check64(tx_data[2], 64'h0000FFF1FFE2000F, "T37 TX[2] bank2 ABS=15,NEG=-30,MIN=-15");
+        check64(tx_data[3], 64'h0000FFE2FFFB001E, "T37 TX[3] bank3 ABS=30,NEG=-5,MIN=-30");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 38: GPU SUB.f, NEG.f, ABS.f, MIN.f (bf16)
+    //
+    //  Input per bank: {5.0=40A0, 3.0=4040} → DMEM[0]=3.0, DMEM[1]=5.0
+    //  SUB.f(3,5)=-2.0=C000  NEG.f(3)=-3.0=C040
+    //  ABS.f(-2)=2.0=4000    MIN.f(3,5)=3.0=4040
+    //  Stores: [0]=SUB.f, [1]=NEG.f, [2]=ABS.f, [3]=MIN.f
+    //
+    //  nw=4 → TX[n] = {MIN.f, ABS.f, NEG.f, SUB.f}
+    //        = {4040, 4000, C040, C000} = 0x40404000C040C000
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 38: GPU SUB.f, NEG.f, ABS.f, MIN.f (bf16) ---");
+        cycle_cnt = 0;
+
+        send_gpu_arm(8'h04, 8'd1, 8'd0, 8'd2);
+        send_gpu_imem(
+            {32'h14100000, 32'h20000000}, // [1]LD.f R1,[R0+0]; [0]MOVI R0,0
+            {32'h3C312000, 32'h14200001}, // [3]SUB.f R3,R1,R2; [2]LD.f R2,[R0+1]
+            {32'h64530000, 32'h6C410000}, // [5]ABS.f R5,R3;    [4]NEG.f R4,R1
+            {32'h0C400001, 32'h5C612000}, // [7]ST.f R4,[R0+1]; [6]MIN.f R6,R1,R2
+            {32'h0C500002, 32'h0C300000}, // [9]ST.f R5,[R0+2]; [8]ST.f R3,[R0+0]
+            {32'hC8000000, 32'h0C600003}, // [11]RET;            [10]ST.f R6,[R0+3]
+            64'h0, 64'h0
+        );
+        rx(cmd(4'h2, 12'h010, 16'd2, 32'h0), 8'h00);
+        rx({32'h40A04040, 32'h40A04040}, 8'h00);
+        rx({32'h40A04040, 32'h40A04040}, 8'h00);
+
+        send_gpu_tail(4);
+        wait_and_capture(MAX_CYCLES);
+
+        checkN(tx_cnt, 4, "T38 TX count");
+        check64(tx_data[0], 64'h40404000C040C000, "T38 TX[0] bank0 {MIN,ABS,NEG,SUB}");
+        check64(tx_data[1], 64'h40404000C040C000, "T38 TX[1] bank1");
+        check64(tx_data[2], 64'h40404000C040C000, "T38 TX[2] bank2");
+        check64(tx_data[3], 64'h40404000C040C000, "T38 TX[3] bank3");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 39: GPU BRA (unconditional branch)
+    //
+    //  BRA skips two MOVIs. If it works, DMEM[0]=42; if broken, 88.
+    //  nw=2 → TX[0]={bank1,bank0}, TX[1]={bank3,bank2}
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 39: GPU BRA (unconditional branch) ---");
+        cycle_cnt = 0;
+
+        send_gpu_arm(8'h04, 8'd1, 8'd0, 8'd1);
+        send_gpu_imem(
+            {32'h2010002A, 32'h20000000}, // [1]MOVI R1,42;    [0]MOVI R0,0
+            {32'h20100063, 32'hB8000005}, // [3]MOVI R1,99;    [2]BRA 5
+            {32'h08100000, 32'h20100058}, // [5]ST R1,[R0+0];  [4]MOVI R1,88
+            {32'h08200001, 32'h20200000}, // [7]ST R2,[R0+1];  [6]MOVI R2,0
+            {32'hC8000000, 32'h00000000}, // [9]pad;            [8]RET
+            64'h0, 64'h0, 64'h0
+        );
+        rx(cmd(4'h2, 12'h010, 16'd2, 32'h0), 8'h00);
+        rx({32'h0000BEEF, 32'h0000BEEF}, 8'h00);
+        rx({32'h0000BEEF, 32'h0000BEEF}, 8'h00);
+
+        send_gpu_tail(2);
+        wait_and_capture(MAX_CYCLES);
+
+        checkN(tx_cnt, 2, "T39 TX count");
+        check64(tx_data[0], {32'h0000002A, 32'h0000002A}, "T39 TX[0] BRA: R1=42");
+        check64(tx_data[1], {32'h0000002A, 32'h0000002A}, "T39 TX[1] all banks");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 40: GPU MOV reg-to-reg, SETP, SELP
+    //
+    //  Input: {200,100} = 0x00C80064 → DMEM[0]=100, DMEM[1]=200
+    //  MOV R3,R1=100; SETP P0=(100<200)=1; SELP R4=P0?R1:R2=100
+    //  Stores: [0]=MOV=100, [1]=SELP=100
+    //  nw=2 → TX[0]={bank1,bank0} = {0x00640064, 0x00640064}
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 40: GPU MOV reg, SETP, SELP ---");
+        cycle_cnt = 0;
+
+        send_gpu_arm(8'h04, 8'd1, 8'd0, 8'd1);
+        //  [0]  MOVI R0,0           0x20000000
+        //  [1]  LD R1,[R0+0]       0x10100000   R1=100
+        //  [2]  LD R2,[R0+1]       0x10200001   R2=200
+        //  [3]  MOV R3,R1           0x18310000   R3=100
+        //  [4]  SETP P0,R1,R2,LT   0xAA012000   P0=(100<200)=1
+        //  [5-7] NOP×3             pred WB drain
+        //  [8]  SELP R4,R1,R2,P0   0xB0412000   R4=P0?R1:R2=100
+        //  [9]  ST R3,[R0+0]       0x08300000
+        //  [10] ST R4,[R0+1]       0x08400001
+        //  [11] RET                0xC8000000
+        send_gpu_imem(
+            {32'h10100000, 32'h20000000}, // [1]LD R1;          [0]MOVI R0,0
+            {32'h18310000, 32'h10200001}, // [3]MOV R3,R1;      [2]LD R2,[R0+1]
+            {32'h00000000, 32'hAA012000}, // [5]NOP;             [4]SETP P0,R1,R2,LT
+            {32'h00000000, 32'h00000000}, // [7]NOP;             [6]NOP
+            {32'h08300000, 32'hB0412000}, // [9]ST R3,[R0+0];   [8]SELP R4,R1,R2,P0
+            {32'hC8000000, 32'h08400001}, // [11]RET;            [10]ST R4,[R0+1]
+            64'h0, 64'h0
+        );
+        rx(cmd(4'h2, 12'h010, 16'd2, 32'h0), 8'h00);
+        rx({32'h00C80064, 32'h00C80064}, 8'h00);
+        rx({32'h00C80064, 32'h00C80064}, 8'h00);
+
+        send_gpu_tail(2);
+        wait_and_capture(MAX_CYCLES);
+
+        checkN(tx_cnt, 2, "T40 TX count");
+        check64(tx_data[0], {32'h00640064, 32'h00640064}, "T40 TX[0] {SELP=100,MOV=100}");
+        check64(tx_data[1], {32'h00640064, 32'h00640064}, "T40 TX[1] all banks");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 41: GPU SET + SELP (predicate set/select)
+    //
+    //  SET writes P[n] ← literal bit (predicate RF, NOT GPR).
+    //  Pattern matches K38 in sm_core_tb: SET → 3 NOPs → SELP.
+    //
+    //  SET P0=1 → SELP R3=P0?AAAA:BBBB → AAAA
+    //  SET P0=0 → SELP R4=P0?AAAA:BBBB → BBBB
+    //  nw=2 → TX = {0xBBBBAAAA, 0xBBBBAAAA}
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 41: GPU SET + SELP (predicate) ---");
+        cycle_cnt = 0;
+
+        send_gpu_arm(8'h04, 8'd1, 8'd0, 8'd1);
+        //  [0]  MOVI R0,0           [1]  MOVI R1,0xAAAA
+        //  [2]  MOVI R2,0xBBBB      [3]  SET P0,1 (0xD0000001)
+        //  [4-6] NOP×3              [7]  SELP R3,R1,R2,P0 (0xB0312000)
+        //  [8]  SET P0,0 (D0000000) [9-11] NOP×3
+        //  [12] SELP R4,R1,R2,P0    [13] ST R3,[R0+0]
+        //  [14] ST R4,[R0+1]        [15] RET
+        send_gpu_imem(
+            {32'h2010AAAA, 32'h20000000}, // [1]MOVI R1,AAAA;  [0]MOVI R0,0
+            {32'hD0000001, 32'h2020BBBB}, // [3]SET P0,1;       [2]MOVI R2,BBBB
+            {32'h00000000, 32'h00000000}, // [5]NOP;             [4]NOP
+            {32'hB0312000, 32'h00000000}, // [7]SELP R3,R1,R2;  [6]NOP
+            {32'h00000000, 32'hD0000000}, // [9]NOP;             [8]SET P0,0
+            {32'h00000000, 32'h00000000}, // [11]NOP;            [10]NOP
+            {32'h08300000, 32'hB0412000}, // [13]ST R3,[R0+0];  [12]SELP R4,R1,R2
+            {32'hC8000000, 32'h08400001}  // [15]RET;            [14]ST R4,[R0+1]
+        );
+        rx(cmd(4'h2, 12'h010, 16'd2, 32'h0), 8'h00);
+        rx({32'h0000DEAD, 32'h0000DEAD}, 8'h00);
+        rx({32'h0000DEAD, 32'h0000DEAD}, 8'h00);
+
+        send_gpu_tail(2);
+        wait_and_capture(MAX_CYCLES);
+
+        checkN(tx_cnt, 2, "T41 TX count");
+        check64(tx_data[0], {32'hBBBBAAAA, 32'hBBBBAAAA}, "T41 TX[0] {P0=0->BBBB, P0=1->AAAA}");
+        check64(tx_data[1], {32'hBBBBAAAA, 32'hBBBBAAAA}, "T41 TX[1] all banks");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 42: GPU PBRA — divergent execution + SIMT reconvergence
+    //
+    //  SETP P0=(TID<2): T0,T1 taken; T2,T3 fall.
+    //  Layout matches K31 in sm_core_tb.
+    //
+    //  [0]  MOVI R0,0           [1]  MOV.TID R1  (0x1C100000)
+    //  [2]  MOVI R3,2           [3]  SETP P0,R1,R3,LT (0xAA013000)
+    //  [4]  NOP                 [5]  PBRA P0,tgt=9,rc=12 (0xC000900C)
+    //  --- Fall (T2,T3, pend_pc=6) ---
+    //  [6]  MOVI R2,0xBBBB      [7]  ST R2,[R0+0]   [8]  BRA 12
+    //  --- Taken (T0,T1, target=9) ---
+    //  [9]  MOVI R2,0xAAAA      [10] ST R2,[R0+0]   [11] NOP
+    //  --- Reconvergence [12] ---
+    //  [12] MOVI R3,0           [13] ST R3,[R0+1]   [14] RET
+    //
+    //  nw=2 → TX[0]={T1=AAAA, T0=AAAA}, TX[1]={T3=BBBB, T2=BBBB}
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 42: GPU PBRA divergence + SIMT reconvergence ---");
+        cycle_cnt = 0;
+
+        send_gpu_arm(8'h04, 8'd1, 8'd0, 8'd1);
+        send_gpu_imem(
+            {32'h1C100000, 32'h20000000}, // [1]MOV.TID R1;     [0]MOVI R0,0
+            {32'hAA013000, 32'h20300002}, // [3]SETP P0,R1,R3,LT; [2]MOVI R3,2
+            {32'hC000900C, 32'h00000000}, // [5]PBRA P0,t=9,r=12; [4]NOP
+            {32'h08200000, 32'h2020BBBB}, // [7]ST R2,[R0+0];    [6]MOVI R2,BBBB
+            {32'h2020AAAA, 32'hB800000C}, // [9]MOVI R2,AAAA;   [8]BRA 12
+            {32'h00000000, 32'h08200000}, // [11]NOP;             [10]ST R2,[R0+0]
+            {32'h08300001, 32'h20300000}, // [13]ST R3,[R0+1];   [12]MOVI R3,0
+            {32'h00000000, 32'hC8000000}  // [15]NOP;             [14]RET
+        );
+        rx(cmd(4'h2, 12'h010, 16'd2, 32'h0), 8'h00);
+        rx({32'h0000DEAD, 32'h0000DEAD}, 8'h00);
+        rx({32'h0000DEAD, 32'h0000DEAD}, 8'h00);
+
+        send_gpu_tail(2);
+        wait_and_capture(20000);
+
+        checkN(tx_cnt, 2, "T42 TX count");
+        check64(tx_data[0], {32'h0000AAAA, 32'h0000AAAA}, "T42 TX[0] T1=AAAA,T0=AAAA (taken)");
+        check64(tx_data[1], {32'h0000BBBB, 32'h0000BBBB}, "T42 TX[1] T3=BBBB,T2=BBBB (fall)");
+        settle;
+    end
+
     // ═══════════════════════════════════════════════════════════
     //  Summary
     // ═══════════════════════════════════════════════════════════

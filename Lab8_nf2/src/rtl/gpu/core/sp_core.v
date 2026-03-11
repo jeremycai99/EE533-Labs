@@ -99,7 +99,8 @@ module sp_core #(
     output wire [3:0] wb_rD_addr,
     output wire wb_rf_we,
     output wire wb_active,
-    output wire wb_valid
+    output wire wb_valid,
+    output wire wb_pred_we
 );
 
     // TID constant
@@ -460,6 +461,7 @@ module sp_core #(
     assign wb_rf_we = mem_wb_rf_we & mem_wb_valid;
     assign wb_active = mem_wb_active;
     assign wb_valid = mem_wb_valid;
+    assign wb_pred_we = pred_wr_we;
 
 endmodule
 
