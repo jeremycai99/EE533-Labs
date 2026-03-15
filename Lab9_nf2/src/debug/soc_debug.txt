@@ -18,7 +18,7 @@ VCD info: dumpfile soc_tb.vcd opened for output.
 
 --- Test 2: CPU MUL ---
     [PASS] T5: T2 TX count = 1
-    [PASS] T6: T2 MUL 7*6=42 = 0x000000000000002a
+    [FAIL] T6: T2 MUL 7*6=42 = 0x000000000000001e, exp 0x000000000000002a
     [PASS] T7: T2 ctrl = 0x08
 
 --- Test 3: CPU MCR/MRC (CP10 scratch) ---
@@ -51,7 +51,7 @@ VCD info: dumpfile soc_tb.vcd opened for output.
 
 --- Test 7: CPU MLA (multiply-accumulate) ---
     [PASS] T26: T7 TX count = 1
-    [PASS] T27: T7 MLA 7*6+10=52 = 0x0000000000000034
+    [FAIL] T27: T7 MLA 7*6+10=52 = 0x0000000000000001, exp 0x0000000000000034
     [PASS] T28: T7 ctrl = 0x04
 
 --- Test 8: CPU loop (sum 4 elements) ---
@@ -248,7 +248,7 @@ VCD info: dumpfile soc_tb.vcd opened for output.
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=0 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=0 rf_we=0 | MEM/WB: valid=0 rD=0 rf_we=0 active=1 | WB: w0_we=0
-         SB: pending[0]=0001 pending[1]=0001 pending[2]=0001 pending[3]=0001 | wb_rf_we=0 wb_rD=0 wb_amask=1111
+         SB: pending[0]=0000 pending[1]=0000 pending[2]=0000 pending[3]=0000 | wb_rf_we=0 wb_rD=0 wb_amask=1111
          RR: valid=1 op=04 rD=0 rf_we=1 dt=0
   [C0572] GPU: run=1 pc=3 fv=1 ir=30211000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=02 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
@@ -262,77 +262,101 @@ VCD info: dumpfile soc_tb.vcd opened for output.
          SP0 EX/MEM: valid=1 rD=0 rf_we=1 | MEM/WB: valid=0 rD=0 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0001 pending[1]=0001 pending[2]=0001 pending[3]=0001 | wb_rf_we=0 wb_rD=0 wb_amask=1111
          RR: valid=0 op=04 rD=0 rf_we=0 dt=0
-  [C0574] GPU: run=1 pc=3 fv=1 ir=30211000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=02 de_valid=1
-  [C0575] GPU: run=1 pc=4 fv=1 ir=30211000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
+  [C0574] GPU: run=1 pc=3 fv=1 ir=30211000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=02 de_valid=1
+         STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
+         SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=0 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
+         SP0 EX/MEM: valid=0 rD=0 rf_we=0 | MEM/WB: valid=1 rD=0 rf_we=1 active=1 | WB: w0_we=1
+         SB: pending[0]=0001 pending[1]=0001 pending[2]=0001 pending[3]=0001 | wb_rf_we=1 wb_rD=0 wb_amask=1111
+         RR: valid=0 op=04 rD=0 rf_we=0 dt=0
+  [C0575] GPU: run=1 pc=3 fv=1 ir=30211000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=02 de_valid=1
+  [C0576] GPU: run=1 pc=4 fv=1 ir=30211000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=0 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=0 rf_we=0 | MEM/WB: valid=0 rD=0 rf_we=0 active=1 | WB: w0_we=0
-         SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=0 wb_rD=0 wb_amask=1111
+         SB: pending[0]=0000 pending[1]=0000 pending[2]=0000 pending[3]=0000 | wb_rf_we=0 wb_rD=0 wb_amask=1111
          RR: valid=1 op=02 rD=1 rf_we=1 dt=0
-  [C0576] GPU: run=1 pc=4 fv=1 ir=08200000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
+  [C0577] GPU: run=1 pc=4 fv=1 ir=08200000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=02 id_ex_dt=0 id_ex_rD=1 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=0 rf_we=0 | MEM/WB: valid=0 rD=0 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=0 wb_rD=0 wb_amask=1111
          RR: valid=0 op=02 rD=1 rf_we=0 dt=0
-  [C0577] GPU: run=1 pc=4 fv=1 ir=08200000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
+  [C0578] GPU: run=1 pc=4 fv=1 ir=08200000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=02 id_ex_dt=0 id_ex_rD=1 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=1 rD=1 rf_we=1 | MEM/WB: valid=0 rD=0 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=0 wb_rD=0 wb_amask=1111
          RR: valid=0 op=02 rD=1 rf_we=0 dt=0
-  [C0578] GPU: run=1 pc=4 fv=1 ir=08200000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
-  [C0579] GPU: run=1 pc=5 fv=1 ir=08200000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0579] GPU: run=1 pc=4 fv=1 ir=08200000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
+         STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
+         SP0: id_ex_valid=0 id_ex_op=02 id_ex_dt=0 id_ex_rD=1 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
+         SP0 EX/MEM: valid=0 rD=1 rf_we=0 | MEM/WB: valid=1 rD=1 rf_we=1 active=1 | WB: w0_we=1
+         SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=1 wb_rD=1 wb_amask=1111
+         RR: valid=0 op=02 rD=1 rf_we=0 dt=0
+  [C0580] GPU: run=1 pc=4 fv=1 ir=08200000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
+  [C0581] GPU: run=1 pc=5 fv=1 ir=08200000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=02 id_ex_dt=0 id_ex_rD=1 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=1 rf_we=0 | MEM/WB: valid=0 rD=1 rf_we=0 active=1 | WB: w0_we=0
-         SB: pending[0]=0004 pending[1]=0004 pending[2]=0004 pending[3]=0004 | wb_rf_we=0 wb_rD=1 wb_amask=1111
+         SB: pending[0]=0000 pending[1]=0000 pending[2]=0000 pending[3]=0000 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=1 op=06 rD=2 rf_we=1 dt=0
-  [C0580] GPU: run=1 pc=5 fv=1 ir=20300000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0582] GPU: run=1 pc=5 fv=1 ir=20300000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=06 id_ex_dt=0 id_ex_rD=2 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=1 rf_we=0 | MEM/WB: valid=0 rD=1 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0004 pending[1]=0004 pending[2]=0004 pending[3]=0004 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=0 op=06 rD=2 rf_we=0 dt=0
-  [C0581] GPU: run=1 pc=5 fv=1 ir=20300000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0583] GPU: run=1 pc=5 fv=1 ir=20300000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=06 id_ex_dt=0 id_ex_rD=2 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=1 rD=2 rf_we=1 | MEM/WB: valid=0 rD=1 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0004 pending[1]=0004 pending[2]=0004 pending[3]=0004 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=0 op=06 rD=2 rf_we=0 dt=0
-  [C0582] GPU: run=1 pc=5 fv=1 ir=20300000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
-  [C0583] GPU: run=1 pc=6 fv=1 ir=20300000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=04 de_valid=1
-  [C0584] GPU: run=1 pc=7 fv=1 ir=20300000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0584] GPU: run=1 pc=5 fv=1 ir=20300000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+         STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
+         SP0: id_ex_valid=0 id_ex_op=06 id_ex_dt=0 id_ex_rD=2 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
+         SP0 EX/MEM: valid=0 rD=2 rf_we=0 | MEM/WB: valid=1 rD=2 rf_we=1 active=1 | WB: w0_we=1
+         SB: pending[0]=0004 pending[1]=0004 pending[2]=0004 pending[3]=0004 | wb_rf_we=1 wb_rD=2 wb_amask=1111
+         RR: valid=0 op=06 rD=2 rf_we=0 dt=0
+  [C0585] GPU: run=1 pc=5 fv=1 ir=20300000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0586] GPU: run=1 pc=6 fv=1 ir=20300000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=04 de_valid=1
+  [C0587] GPU: run=1 pc=7 fv=1 ir=20300000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=01 id_ex_dt=0 id_ex_rD=2 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=2 rf_we=0 | MEM/WB: valid=0 rD=2 rf_we=0 active=1 | WB: w0_we=0
-         SB: pending[0]=0008 pending[1]=0008 pending[2]=0008 pending[3]=0008 | wb_rf_we=0 wb_rD=2 wb_amask=1111
+         SB: pending[0]=0000 pending[1]=0000 pending[2]=0000 pending[3]=0000 | wb_rf_we=0 wb_rD=2 wb_amask=1111
          RR: valid=1 op=04 rD=3 rf_we=1 dt=0
-  [C0585] GPU: run=1 pc=7 fv=1 ir=00000000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0588] GPU: run=1 pc=7 fv=1 ir=00000000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=04 id_ex_dt=0 id_ex_rD=3 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=1 rD=2 rf_we=0 | MEM/WB: valid=0 rD=2 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0008 pending[1]=0008 pending[2]=0008 pending[3]=0008 | wb_rf_we=0 wb_rD=2 wb_amask=1111
          RR: valid=0 op=04 rD=3 rf_we=0 dt=0
-  [C0585] GPU_SP→DMEM: we=1111 addr0=0 din0=001e addr1=0 din1=0032
-  [C0586] GPU: run=1 pc=7 fv=1 ir=00000000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0588] GPU_SP→DMEM: we=1111 addr0=0 din0=001e addr1=0 din1=0032
+  [C0589] GPU: run=1 pc=7 fv=1 ir=00000000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=3 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=1 rD=3 rf_we=1 | MEM/WB: valid=1 rD=2 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0008 pending[1]=0008 pending[2]=0008 pending[3]=0008 | wb_rf_we=0 wb_rD=2 wb_amask=1111
          RR: valid=0 op=04 rD=3 rf_we=0 dt=0
-  [C0587] GPU: run=1 pc=7 fv=1 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
-  [C0588] GPU: run=1 pc=8 fv=1 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=00 de_valid=1
-  [C0589] GPU RET_DETECTED: amask=1111
-  [C0589] GPU: run=1 pc=9 fv=1 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=1 done=0 | op=19 de_valid=1
-  [C0590] GPU: run=0 pc=9 fv=0 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=19 de_valid=0
-  [C0590] GPU_SP→DMEM: we=1111 addr0=1 din0=0000 addr1=1 din1=0000
-  [C0591] GPU: run=0 pc=9 fv=0 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=02 de_valid=0
-  [C0592] GPU: run=0 pc=9 fv=0 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=02 de_valid=0
-  [C0593] GPU: run=0 pc=9 fv=0 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=02 de_valid=0
-  [C0594] GPU: run=0 pc=9 fv=0 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=02 de_valid=0
-  [C0595] GPU KERNEL_DONE
-  [C0595] GPU: run=0 pc=9 fv=0 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=1 | op=02 de_valid=0
+  [C0590] GPU: run=1 pc=7 fv=1 ir=00000000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+         STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
+         SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=3 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
+         SP0 EX/MEM: valid=0 rD=3 rf_we=0 | MEM/WB: valid=1 rD=3 rf_we=1 active=1 | WB: w0_we=1
+         SB: pending[0]=0008 pending[1]=0008 pending[2]=0008 pending[3]=0008 | wb_rf_we=1 wb_rD=3 wb_amask=1111
+         RR: valid=0 op=04 rD=3 rf_we=0 dt=0
+  [C0591] GPU: run=1 pc=7 fv=1 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0592] GPU: run=1 pc=8 fv=1 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=00 de_valid=1
+  [C0593] GPU RET_DETECTED: amask=1111
+  [C0593] GPU: run=1 pc=9 fv=1 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=1 done=0 | op=19 de_valid=1
+  [C0594] GPU: run=0 pc=9 fv=0 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=19 de_valid=0
+  [C0594] GPU_SP→DMEM: we=1111 addr0=1 din0=0000 addr1=1 din1=0000
+  [C0595] GPU: run=0 pc=9 fv=0 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=02 de_valid=0
+  [C0596] GPU: run=0 pc=9 fv=0 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=02 de_valid=0
+  [C0597] GPU: run=0 pc=9 fv=0 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=02 de_valid=0
+  [C0598] GPU: run=0 pc=9 fv=0 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=02 de_valid=0
+  [C0599] GPU KERNEL_DONE
+  [C0599] GPU: run=0 pc=9 fv=0 ir=00000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=1 | op=02 de_valid=0
   [C0651] CP10 WR: CR4 <= 0x00000008
   [C0652] CP10 WR: CR4 <= 0x00000008
   [C0653] CP10 WR: CR4 <= 0x00000008
@@ -359,7 +383,7 @@ VCD info: dumpfile soc_tb.vcd opened for output.
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=0 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=0 rf_we=0 | MEM/WB: valid=0 rD=0 rf_we=0 active=1 | WB: w0_we=0
-         SB: pending[0]=0001 pending[1]=0001 pending[2]=0001 pending[3]=0001 | wb_rf_we=0 wb_rD=0 wb_amask=1111
+         SB: pending[0]=0000 pending[1]=0000 pending[2]=0000 pending[3]=0000 | wb_rf_we=0 wb_rD=0 wb_amask=1111
          RR: valid=1 op=04 rD=0 rf_we=1 dt=0
   [C0676] GPU: run=1 pc=11 fv=1 ir=2020000a amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=02 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
@@ -373,77 +397,101 @@ VCD info: dumpfile soc_tb.vcd opened for output.
          SP0 EX/MEM: valid=1 rD=0 rf_we=1 | MEM/WB: valid=0 rD=0 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0001 pending[1]=0001 pending[2]=0001 pending[3]=0001 | wb_rf_we=0 wb_rD=0 wb_amask=1111
          RR: valid=0 op=04 rD=0 rf_we=0 dt=0
-  [C0678] GPU: run=1 pc=11 fv=1 ir=2020000a amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=02 de_valid=1
-  [C0679] GPU: run=1 pc=12 fv=1 ir=2020000a amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=04 de_valid=1
-  [C0680] GPU: run=1 pc=13 fv=1 ir=2020000a amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
+  [C0678] GPU: run=1 pc=11 fv=1 ir=2020000a amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=02 de_valid=1
+         STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
+         SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=0 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
+         SP0 EX/MEM: valid=0 rD=0 rf_we=0 | MEM/WB: valid=1 rD=0 rf_we=1 active=1 | WB: w0_we=1
+         SB: pending[0]=0001 pending[1]=0001 pending[2]=0001 pending[3]=0001 | wb_rf_we=1 wb_rD=0 wb_amask=1111
+         RR: valid=0 op=04 rD=0 rf_we=0 dt=0
+  [C0679] GPU: run=1 pc=11 fv=1 ir=2020000a amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=02 de_valid=1
+  [C0680] GPU: run=1 pc=12 fv=1 ir=2020000a amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=04 de_valid=1
+  [C0681] GPU: run=1 pc=13 fv=1 ir=2020000a amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=02 id_ex_dt=0 id_ex_rD=1 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=0 rf_we=0 | MEM/WB: valid=0 rD=0 rf_we=0 active=1 | WB: w0_we=0
-         SB: pending[0]=0006 pending[1]=0006 pending[2]=0006 pending[3]=0006 | wb_rf_we=0 wb_rD=0 wb_amask=1111
+         SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=0 wb_rD=0 wb_amask=1111
          RR: valid=1 op=04 rD=2 rf_we=1 dt=0
-  [C0681] GPU: run=1 pc=13 fv=1 ir=08300000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
+  [C0682] GPU: run=1 pc=13 fv=1 ir=08300000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=04 id_ex_dt=0 id_ex_rD=2 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=1 rD=1 rf_we=1 | MEM/WB: valid=0 rD=0 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0006 pending[1]=0006 pending[2]=0006 pending[3]=0006 | wb_rf_we=0 wb_rD=0 wb_amask=1111
          RR: valid=0 op=04 rD=2 rf_we=0 dt=0
-  [C0682] GPU: run=1 pc=13 fv=1 ir=08300000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
+  [C0683] GPU: run=1 pc=13 fv=1 ir=08300000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=2 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=1 rD=2 rf_we=1 | MEM/WB: valid=1 rD=1 rf_we=1 active=1 | WB: w0_we=1
          SB: pending[0]=0006 pending[1]=0006 pending[2]=0006 pending[3]=0006 | wb_rf_we=1 wb_rD=1 wb_amask=1111
          RR: valid=0 op=04 rD=2 rf_we=0 dt=0
-  [C0683] GPU: run=1 pc=13 fv=1 ir=08300000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
-  [C0684] GPU: run=1 pc=14 fv=1 ir=08300000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0684] GPU: run=1 pc=13 fv=1 ir=08300000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
+         STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
+         SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=2 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
+         SP0 EX/MEM: valid=0 rD=2 rf_we=0 | MEM/WB: valid=1 rD=2 rf_we=1 active=1 | WB: w0_we=1
+         SB: pending[0]=0004 pending[1]=0004 pending[2]=0004 pending[3]=0004 | wb_rf_we=1 wb_rD=2 wb_amask=1111
+         RR: valid=0 op=04 rD=2 rf_we=0 dt=0
+  [C0685] GPU: run=1 pc=13 fv=1 ir=08300000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=06 de_valid=1
+  [C0686] GPU: run=1 pc=14 fv=1 ir=08300000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=2 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=2 rf_we=0 | MEM/WB: valid=0 rD=2 rf_we=0 active=1 | WB: w0_we=0
-         SB: pending[0]=0008 pending[1]=0008 pending[2]=0008 pending[3]=0008 | wb_rf_we=0 wb_rD=2 wb_amask=1111
+         SB: pending[0]=0000 pending[1]=0000 pending[2]=0000 pending[3]=0000 | wb_rf_we=0 wb_rD=2 wb_amask=1111
          RR: valid=1 op=06 rD=3 rf_we=1 dt=0
-  [C0685] GPU: run=1 pc=14 fv=1 ir=20400000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0687] GPU: run=1 pc=14 fv=1 ir=20400000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=06 id_ex_dt=0 id_ex_rD=3 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=2 rf_we=0 | MEM/WB: valid=0 rD=2 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0008 pending[1]=0008 pending[2]=0008 pending[3]=0008 | wb_rf_we=0 wb_rD=2 wb_amask=1111
          RR: valid=0 op=06 rD=3 rf_we=0 dt=0
-  [C0686] GPU: run=1 pc=14 fv=1 ir=20400000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0688] GPU: run=1 pc=14 fv=1 ir=20400000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=06 id_ex_dt=0 id_ex_rD=3 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=1 rD=3 rf_we=1 | MEM/WB: valid=0 rD=2 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0008 pending[1]=0008 pending[2]=0008 pending[3]=0008 | wb_rf_we=0 wb_rD=2 wb_amask=1111
          RR: valid=0 op=06 rD=3 rf_we=0 dt=0
-  [C0687] GPU: run=1 pc=14 fv=1 ir=20400000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
-  [C0688] GPU: run=1 pc=15 fv=1 ir=20400000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=04 de_valid=1
-  [C0689] GPU: run=1 pc=16 fv=1 ir=20400000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0689] GPU: run=1 pc=14 fv=1 ir=20400000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+         STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
+         SP0: id_ex_valid=0 id_ex_op=06 id_ex_dt=0 id_ex_rD=3 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
+         SP0 EX/MEM: valid=0 rD=3 rf_we=0 | MEM/WB: valid=1 rD=3 rf_we=1 active=1 | WB: w0_we=1
+         SB: pending[0]=0008 pending[1]=0008 pending[2]=0008 pending[3]=0008 | wb_rf_we=1 wb_rD=3 wb_amask=1111
+         RR: valid=0 op=06 rD=3 rf_we=0 dt=0
+  [C0690] GPU: run=1 pc=14 fv=1 ir=20400000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0691] GPU: run=1 pc=15 fv=1 ir=20400000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=04 de_valid=1
+  [C0692] GPU: run=1 pc=16 fv=1 ir=20400000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=01 id_ex_dt=0 id_ex_rD=3 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=3 rf_we=0 | MEM/WB: valid=0 rD=3 rf_we=0 active=1 | WB: w0_we=0
-         SB: pending[0]=0010 pending[1]=0010 pending[2]=0010 pending[3]=0010 | wb_rf_we=0 wb_rD=3 wb_amask=1111
+         SB: pending[0]=0000 pending[1]=0000 pending[2]=0000 pending[3]=0000 | wb_rf_we=0 wb_rD=3 wb_amask=1111
          RR: valid=1 op=04 rD=4 rf_we=1 dt=0
-  [C0690] GPU: run=1 pc=16 fv=1 ir=c8000000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0693] GPU: run=1 pc=16 fv=1 ir=c8000000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=04 id_ex_dt=0 id_ex_rD=4 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=1 rD=3 rf_we=0 | MEM/WB: valid=0 rD=3 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0010 pending[1]=0010 pending[2]=0010 pending[3]=0010 | wb_rf_we=0 wb_rD=3 wb_amask=1111
          RR: valid=0 op=04 rD=4 rf_we=0 dt=0
-  [C0690] GPU_SP→DMEM: we=1111 addr0=0 din0=0028 addr1=0 din1=003c
-  [C0691] GPU: run=1 pc=16 fv=1 ir=c8000000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0693] GPU_SP→DMEM: we=1111 addr0=0 din0=0028 addr1=0 din1=003c
+  [C0694] GPU: run=1 pc=16 fv=1 ir=c8000000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=4 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=1 rD=4 rf_we=1 | MEM/WB: valid=1 rD=3 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0010 pending[1]=0010 pending[2]=0010 pending[3]=0010 | wb_rf_we=0 wb_rD=3 wb_amask=1111
          RR: valid=0 op=04 rD=4 rf_we=0 dt=0
-  [C0692] GPU: run=1 pc=16 fv=1 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
-  [C0693] GPU RET_DETECTED: amask=1111
-  [C0693] GPU: run=1 pc=17 fv=1 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=1 done=0 | op=19 de_valid=1
-  [C0694] GPU: run=0 pc=17 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=19 de_valid=0
-  [C0695] GPU: run=0 pc=17 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=xx de_valid=0
-  [C0695] GPU_SP→DMEM: we=1111 addr0=1 din0=0000 addr1=1 din1=0000
-  [C0696] GPU: run=0 pc=17 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=xx de_valid=0
-  [C0697] GPU: run=0 pc=17 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=xx de_valid=0
-  [C0698] GPU: run=0 pc=17 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=xx de_valid=0
-  [C0699] GPU KERNEL_DONE
-  [C0699] GPU: run=0 pc=17 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=1 | op=xx de_valid=0
+  [C0695] GPU: run=1 pc=16 fv=1 ir=c8000000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+         STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
+         SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=4 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
+         SP0 EX/MEM: valid=0 rD=4 rf_we=0 | MEM/WB: valid=1 rD=4 rf_we=1 active=1 | WB: w0_we=1
+         SB: pending[0]=0010 pending[1]=0010 pending[2]=0010 pending[3]=0010 | wb_rf_we=1 wb_rD=4 wb_amask=1111
+         RR: valid=0 op=04 rD=4 rf_we=0 dt=0
+  [C0696] GPU: run=1 pc=16 fv=1 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0697] GPU RET_DETECTED: amask=1111
+  [C0697] GPU: run=1 pc=17 fv=1 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=1 done=0 | op=19 de_valid=1
+  [C0698] GPU: run=0 pc=17 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=19 de_valid=0
+  [C0699] GPU: run=0 pc=17 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=xx de_valid=0
+  [C0699] GPU_SP→DMEM: we=1111 addr0=1 din0=0000 addr1=1 din1=0000
+  [C0700] GPU: run=0 pc=17 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=xx de_valid=0
+  [C0701] GPU: run=0 pc=17 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=xx de_valid=0
+  [C0702] GPU: run=0 pc=17 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=xx de_valid=0
+  [C0703] GPU KERNEL_DONE
+  [C0703] GPU: run=0 pc=17 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=1 | op=xx de_valid=0
   [C0755] CP10 WR: CR0 <= 0x00000000
   [C0756] CP10 WR: CR0 <= 0x00000000
   [C0757] CP10 WR: CR0 <= 0x00000000
@@ -613,7 +661,7 @@ VCD info: dumpfile soc_tb.vcd opened for output.
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=04 id_ex_dt=0 id_ex_rD=0 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=0 rf_we=0 | MEM/WB: valid=0 rD=0 rf_we=0 active=1 | WB: w0_we=0
-         SB: pending[0]=0003 pending[1]=0003 pending[2]=0003 pending[3]=0003 | wb_rf_we=0 wb_rD=0 wb_amask=1111
+         SB: pending[0]=0001 pending[1]=0001 pending[2]=0001 pending[3]=0001 | wb_rf_we=0 wb_rD=0 wb_amask=1111
          RR: valid=1 op=04 rD=1 rf_we=1 dt=0
   [C0403] GPU: run=1 pc=4 fv=1 ir=28110000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=05 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
@@ -627,100 +675,124 @@ VCD info: dumpfile soc_tb.vcd opened for output.
          SP0 EX/MEM: valid=1 rD=1 rf_we=1 | MEM/WB: valid=1 rD=0 rf_we=1 active=1 | WB: w0_we=1
          SB: pending[0]=0003 pending[1]=0003 pending[2]=0003 pending[3]=0003 | wb_rf_we=1 wb_rD=0 wb_amask=1111
          RR: valid=0 op=04 rD=1 rf_we=0 dt=0
-  [C0405] GPU: run=1 pc=4 fv=1 ir=28110000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=05 de_valid=1
-  [C0406] GPU: run=1 pc=5 fv=1 ir=28110000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=05 de_valid=1
+  [C0405] GPU: run=1 pc=4 fv=1 ir=28110000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=05 de_valid=1
+         STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
+         SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=1 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
+         SP0 EX/MEM: valid=0 rD=1 rf_we=0 | MEM/WB: valid=1 rD=1 rf_we=1 active=1 | WB: w0_we=1
+         SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=1 wb_rD=1 wb_amask=1111
+         RR: valid=0 op=04 rD=1 rf_we=0 dt=0
+  [C0406] GPU: run=1 pc=4 fv=1 ir=28110000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=05 de_valid=1
+  [C0407] GPU: run=1 pc=5 fv=1 ir=28110000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=05 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=1 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=1 rf_we=0 | MEM/WB: valid=0 rD=1 rf_we=0 active=1 | WB: w0_we=0
-         SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=0 wb_rD=1 wb_amask=1111
+         SB: pending[0]=0000 pending[1]=0000 pending[2]=0000 pending[3]=0000 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=1 op=05 rD=1 rf_we=1 dt=1
-  [C0407] GPU: run=1 pc=5 fv=1 ir=08100000 amask=1111 front_stall=1 sp_stall=1 ret=0 done=0 | op=05 de_valid=1
+  [C0408] GPU: run=1 pc=5 fv=1 ir=08100000 amask=1111 front_stall=1 sp_stall=1 ret=0 done=0 | op=05 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=1|1|1|1 cvt_busy=0|0|0|0 any_ex=1 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=05 id_ex_dt=1 id_ex_rD=1 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=1 rf_we=0 | MEM/WB: valid=0 rD=1 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=0 op=05 rD=1 rf_we=0 dt=1
-  [C0408] GPU: run=1 pc=5 fv=1 ir=08100000 amask=1111 front_stall=1 sp_stall=1 ret=0 done=0 | op=05 de_valid=1
+  [C0409] GPU: run=1 pc=5 fv=1 ir=08100000 amask=1111 front_stall=1 sp_stall=1 ret=0 done=0 | op=05 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=1|1|1|1 cvt_busy=1|1|1|1 any_ex=1 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=05 id_ex_dt=1 id_ex_rD=1 id_ex_launched=1 | cvt_pipe=01 cvt_done=0
          SP0 EX/MEM: valid=0 rD=1 rf_we=0 | MEM/WB: valid=0 rD=1 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=0 op=05 rD=1 rf_we=0 dt=1
-  [C0409] GPU: run=1 pc=5 fv=1 ir=08100000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=05 de_valid=1
+  [C0410] GPU: run=1 pc=5 fv=1 ir=08100000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=05 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=05 id_ex_dt=1 id_ex_rD=1 id_ex_launched=1 | cvt_pipe=10 cvt_done=1
          SP0 EX/MEM: valid=0 rD=1 rf_we=0 | MEM/WB: valid=0 rD=1 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=0 op=05 rD=1 rf_we=0 dt=1
-  [C0410] GPU: run=1 pc=5 fv=1 ir=08100000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=05 de_valid=1
+  [C0411] GPU: run=1 pc=5 fv=1 ir=08100000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=05 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=05 id_ex_dt=1 id_ex_rD=1 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=1 rD=1 rf_we=1 | MEM/WB: valid=0 rD=1 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=0 op=05 rD=1 rf_we=0 dt=1
-  [C0411] GPU: run=1 pc=5 fv=1 ir=08100000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=05 de_valid=1
-  [C0412] GPU: run=1 pc=6 fv=1 ir=08100000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0412] GPU: run=1 pc=5 fv=1 ir=08100000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=05 de_valid=1
+         STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
+         SP0: id_ex_valid=0 id_ex_op=05 id_ex_dt=1 id_ex_rD=1 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
+         SP0 EX/MEM: valid=0 rD=1 rf_we=0 | MEM/WB: valid=1 rD=1 rf_we=1 active=1 | WB: w0_we=1
+         SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=1 wb_rD=1 wb_amask=1111
+         RR: valid=0 op=05 rD=1 rf_we=0 dt=1
+  [C0413] GPU: run=1 pc=5 fv=1 ir=08100000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=05 de_valid=1
+  [C0414] GPU: run=1 pc=6 fv=1 ir=08100000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=05 id_ex_dt=1 id_ex_rD=1 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=1 rf_we=0 | MEM/WB: valid=0 rD=1 rf_we=0 active=1 | WB: w0_we=0
-         SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=0 wb_rD=1 wb_amask=1111
+         SB: pending[0]=0000 pending[1]=0000 pending[2]=0000 pending[3]=0000 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=1 op=05 rD=1 rf_we=1 dt=0
-  [C0413] GPU: run=1 pc=6 fv=1 ir=20200000 amask=1111 front_stall=1 sp_stall=1 ret=0 done=0 | op=01 de_valid=1
+  [C0415] GPU: run=1 pc=6 fv=1 ir=20200000 amask=1111 front_stall=1 sp_stall=1 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=1|1|1|1 cvt_busy=0|0|0|0 any_ex=1 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=05 id_ex_dt=0 id_ex_rD=1 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=1 rf_we=0 | MEM/WB: valid=0 rD=1 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=0 op=05 rD=1 rf_we=0 dt=0
-  [C0414] GPU: run=1 pc=6 fv=1 ir=20200000 amask=1111 front_stall=1 sp_stall=1 ret=0 done=0 | op=01 de_valid=1
+  [C0416] GPU: run=1 pc=6 fv=1 ir=20200000 amask=1111 front_stall=1 sp_stall=1 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=1|1|1|1 cvt_busy=1|1|1|1 any_ex=1 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=05 id_ex_dt=0 id_ex_rD=1 id_ex_launched=1 | cvt_pipe=01 cvt_done=0
          SP0 EX/MEM: valid=0 rD=1 rf_we=0 | MEM/WB: valid=0 rD=1 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=0 op=05 rD=1 rf_we=0 dt=0
-  [C0415] GPU: run=1 pc=6 fv=1 ir=20200000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0417] GPU: run=1 pc=6 fv=1 ir=20200000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=05 id_ex_dt=0 id_ex_rD=1 id_ex_launched=1 | cvt_pipe=10 cvt_done=1
          SP0 EX/MEM: valid=0 rD=1 rf_we=0 | MEM/WB: valid=0 rD=1 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=0 op=05 rD=1 rf_we=0 dt=0
-  [C0416] GPU: run=1 pc=6 fv=1 ir=20200000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0418] GPU: run=1 pc=6 fv=1 ir=20200000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=05 id_ex_dt=0 id_ex_rD=1 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=1 rD=1 rf_we=1 | MEM/WB: valid=0 rD=1 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=0 op=05 rD=1 rf_we=0 dt=0
-  [C0417] GPU: run=1 pc=6 fv=1 ir=20200000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
-  [C0418] GPU: run=1 pc=7 fv=1 ir=20200000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=04 de_valid=1
-  [C0419] GPU: run=1 pc=8 fv=1 ir=20200000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0419] GPU: run=1 pc=6 fv=1 ir=20200000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+         STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
+         SP0: id_ex_valid=0 id_ex_op=05 id_ex_dt=0 id_ex_rD=1 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
+         SP0 EX/MEM: valid=0 rD=1 rf_we=0 | MEM/WB: valid=1 rD=1 rf_we=1 active=1 | WB: w0_we=1
+         SB: pending[0]=0002 pending[1]=0002 pending[2]=0002 pending[3]=0002 | wb_rf_we=1 wb_rD=1 wb_amask=1111
+         RR: valid=0 op=05 rD=1 rf_we=0 dt=0
+  [C0420] GPU: run=1 pc=6 fv=1 ir=20200000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0421] GPU: run=1 pc=7 fv=1 ir=20200000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=04 de_valid=1
+  [C0422] GPU: run=1 pc=8 fv=1 ir=20200000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=01 id_ex_dt=0 id_ex_rD=1 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=0 rD=1 rf_we=0 | MEM/WB: valid=0 rD=1 rf_we=0 active=1 | WB: w0_we=0
-         SB: pending[0]=0004 pending[1]=0004 pending[2]=0004 pending[3]=0004 | wb_rf_we=0 wb_rD=1 wb_amask=1111
+         SB: pending[0]=0000 pending[1]=0000 pending[2]=0000 pending[3]=0000 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=1 op=04 rD=2 rf_we=1 dt=0
-  [C0420] GPU: run=1 pc=8 fv=1 ir=c8000000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0423] GPU: run=1 pc=8 fv=1 ir=c8000000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=1 id_ex_op=04 id_ex_dt=0 id_ex_rD=2 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=1 rD=1 rf_we=0 | MEM/WB: valid=0 rD=1 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0004 pending[1]=0004 pending[2]=0004 pending[3]=0004 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=0 op=04 rD=2 rf_we=0 dt=0
-  [C0420] GPU_SP→DMEM: we=1111 addr0=0 din0=000f addr1=0 din1=000f
-  [C0421] GPU: run=1 pc=8 fv=1 ir=c8000000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0423] GPU_SP→DMEM: we=1111 addr0=0 din0=000f addr1=0 din1=000f
+  [C0424] GPU: run=1 pc=8 fv=1 ir=c8000000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
          STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
          SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=2 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
          SP0 EX/MEM: valid=1 rD=2 rf_we=1 | MEM/WB: valid=1 rD=1 rf_we=0 active=1 | WB: w0_we=0
          SB: pending[0]=0004 pending[1]=0004 pending[2]=0004 pending[3]=0004 | wb_rf_we=0 wb_rD=1 wb_amask=1111
          RR: valid=0 op=04 rD=2 rf_we=0 dt=0
-  [C0422] GPU: run=1 pc=8 fv=1 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
-  [C0423] GPU RET_DETECTED: amask=1111
-  [C0423] GPU: run=1 pc=9 fv=1 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=1 done=0 | op=19 de_valid=1
-  [C0424] GPU: run=0 pc=9 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=19 de_valid=0
-  [C0425] GPU: run=0 pc=9 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=00 de_valid=0
-  [C0425] GPU_SP→DMEM: we=1111 addr0=1 din0=0000 addr1=1 din1=0000
-  [C0426] GPU: run=0 pc=9 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=00 de_valid=0
-  [C0427] GPU: run=0 pc=9 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=00 de_valid=0
-  [C0428] GPU: run=0 pc=9 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=00 de_valid=0
-  [C0429] GPU KERNEL_DONE
-  [C0429] GPU: run=0 pc=9 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=1 | op=00 de_valid=0
+  [C0425] GPU: run=1 pc=8 fv=1 ir=c8000000 amask=1111 front_stall=1 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+         STALL: sb=1 sb_gated=1 ex_busy=0|0|0|0 cvt_busy=0|0|0|0 any_ex=0 tc=0 burst=0
+         SP0: id_ex_valid=0 id_ex_op=04 id_ex_dt=0 id_ex_rD=2 id_ex_launched=0 | cvt_pipe=00 cvt_done=0
+         SP0 EX/MEM: valid=0 rD=2 rf_we=0 | MEM/WB: valid=1 rD=2 rf_we=1 active=1 | WB: w0_we=1
+         SB: pending[0]=0004 pending[1]=0004 pending[2]=0004 pending[3]=0004 | wb_rf_we=1 wb_rD=2 wb_amask=1111
+         RR: valid=0 op=04 rD=2 rf_we=0 dt=0
+  [C0426] GPU: run=1 pc=8 fv=1 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=01 de_valid=1
+  [C0427] GPU RET_DETECTED: amask=1111
+  [C0427] GPU: run=1 pc=9 fv=1 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=1 done=0 | op=19 de_valid=1
+  [C0428] GPU: run=0 pc=9 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=19 de_valid=0
+  [C0429] GPU: run=0 pc=9 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=00 de_valid=0
+  [C0429] GPU_SP→DMEM: we=1111 addr0=1 din0=0000 addr1=1 din1=0000
+  [C0430] GPU: run=0 pc=9 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=00 de_valid=0
+  [C0431] GPU: run=0 pc=9 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=00 de_valid=0
+  [C0432] GPU: run=0 pc=9 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=0 | op=00 de_valid=0
+  [C0433] GPU KERNEL_DONE
+  [C0433] GPU: run=0 pc=9 fv=0 ir=c8000000 amask=1111 front_stall=0 sp_stall=0 ret=0 done=1 | op=00 de_valid=0
   [C0497] CP10 WR: CR0 <= 0x00000000
   [C0498] CP10 WR: CR0 <= 0x00000000
   [C0499] CP10 WR: CR0 <= 0x00000000
@@ -760,9 +832,117 @@ VCD info: dumpfile soc_tb.vcd opened for output.
     [PASS] T99: T25 CVT full: bank3=107, bank2=87 = 0x0000006b00000057
     [PASS] T100: T25 ctrl = 0x04
 
+--- Test 26: Network passthrough (non-SoC EtherType) ---
+    [PASS] T101: T26 TX count (passthrough) = 5
+    [PASS] T102: T26 TX[0] module hdr = 0x0001000200030004
+    [PASS] T103: T26 TX[1] ETH DA+SA = 0xffffffffffff0011
+    [PASS] T104: T26 TX[2] ETH SA+Type = 0x2233445508000000
+    [PASS] T105: T26 TX[3] payload = 0xdeadbeefcafebabe
+    [PASS] T106: T26 TX[4] payload = 0x123456789abcdef0
+    [PASS] T107: T26 ctrl passthrough = 0x04
+
+--- Test 27: Network SoC packet (CPU ADD via Ethernet) ---
+    [PASS] T108: T27 TX count (hdr+data) = 5
+    [PASS] T109: T27 TX[0] module hdr replay = 0x000100020005000d
+    [PASS] T110: T27 TX[1] ETH DA+SA replay = 0xffffffffffff0011
+    [PASS] T111: T27 TX[2] ETH Type replay = 0x2233445588b50000
+    [PASS] T112: T27 TX[3] inputs 20,10 = 0x000000140000000a
+    [PASS] T113: T27 TX[4] result 0,30 = 0x000000000000001e
+    [PASS] T114: T27 ctrl from module hdr = 0x04
+
+--- Test 28: SUB, RSB ---
+    [PASS] T115: T28 TX count = 2
+    [PASS] T116: T28 TX[0] inputs 30,100 = 0x0000001e00000064
+    [PASS] T117: T28 TX[1] RSB=-70, SUB=70 = 0xffffffba00000046
+
+--- Test 29: AND, ORR, EOR, BIC, MVN ---
+    [PASS] T118: T29 TX count = 4
+    [PASS] T119: T29 TX[0] inputs = 0x0f0f0f0fff00ff00
+    [PASS] T120: T29 TX[1] ORR, AND = 0xff0fff0f0f000f00
+    [PASS] T121: T29 TX[2] BIC, EOR = 0xf000f000f00ff00f
+    [PASS] T122: T29 TX[3] pad, MVN = 0x00000000f0f0f0f0
+
+--- Test 30: Barrel shifter (LSL/LSR/ASR/ROR) ---
+    [PASS] T123: T30 TX count = 4
+    [PASS] T124: T30 TX[0] inputs = 0x800000010000000f
+    [PASS] T125: T30 TX[1] LSL#8=0xF00, LSL#4=0xF0 = 0x00000f00000000f0
+    [PASS] T126: T30 TX[2] ASR#1=0xC.., LSR#1=0x4.. = 0xc000000040000000
+    [PASS] T127: T30 TX[3] pad, ROR#4=0x18.. = 0x0000000018000000
+
+--- Test 31: ADC, SBC (carry flag) ---
+    [PASS] T128: T31 TX count = 2
+    [PASS] T129: T31 TX[0] ADC=9, ADDS=0 = 0x0000000900000000
+    [PASS] T130: T31 TX[1] SBC=1, SUBS=-2 = 0x00000001fffffffe
+
+--- Test 32: Condition codes (EQ/NE/MI/PL/LT/GE) ---
+    [PASS] T131: T32 TX count = 3
+    [PASS] T132: T32 TX[0] NE=0, EQ=1 = 0x0000000000000001
+    [PASS] T133: T32 TX[1] PL=0, MI=1 = 0x0000000000000001
+    [PASS] T134: T32 TX[2] GE=0, LT=1 = 0x0000000000000001
+
+--- Test 33: Shifted register ALU + immediate ---
+    [PASS] T135: T33 TX count = 4
+    [PASS] T136: T33 TX[0] unused DMEM = 0x0000000000000000
+    [PASS] T137: T33 TX[1] SUB_sh=-7, ADD_sh=17 = 0xfffffff900000011
+    [PASS] T138: T33 TX[2] RSB_neg=-5, SUB_imm=4 = 0xfffffffb00000004
+    [PASS] T139: T33 TX[3] pad, AND_sh=4 = 0x0000000000000004
+
+--- Test 34: TST, TEQ, CMN (flag-only ops) ---
+    [PASS] T140: T34 TX count = 2
+    [PASS] T141: T34 TX[0] TEQ=1, TST=1 = 0x0000000100000001
+    [PASS] T142: T34 TX[1] pad, CMN=1 = 0x0000000000000001
+
+--- Test 35: GPU AND, OR, XOR (int16) ---
+    [PASS] T143: T35 TX count = 4
+    [PASS] T144: T35 TX[0] bank0 {0,XOR,OR,AND} = 0x0000f00fff0f0f00
+    [PASS] T145: T35 TX[1] bank1 = 0x0000f00fff0f0f00
+    [PASS] T146: T35 TX[2] bank2 = 0x0000f00fff0f0f00
+    [PASS] T147: T35 TX[3] bank3 = 0x0000f00fff0f0f00
+
+--- Test 36: GPU SHL, SHR, ADDI, MULI ---
+    [PASS] T148: T36 TX count = 4
+    [PASS] T149: T36 TX[0] bank0 {MULI,ADDI,SHR,SHL} = 0x0023000f00020028
+    [PASS] T150: T36 TX[1] bank1 = 0x0023000f00020028
+    [PASS] T151: T36 TX[2] bank2 = 0x0023000f00020028
+    [PASS] T152: T36 TX[3] bank3 = 0x0023000f00020028
+
+--- Test 37: GPU ABS, NEG, MIN (int16) ---
+    [PASS] T153: T37 TX count = 4
+    [PASS] T154: T37 TX[0] bank0 ABS=10,NEG=-20,MIN=-10 = 0x0000fff6ffec000a
+    [PASS] T155: T37 TX[1] bank1 ABS=20,NEG=-10,MIN=-20 = 0x0000ffecfff60014
+    [PASS] T156: T37 TX[2] bank2 ABS=15,NEG=-30,MIN=-15 = 0x0000fff1ffe2000f
+    [PASS] T157: T37 TX[3] bank3 ABS=30,NEG=-5,MIN=-30 = 0x0000ffe2fffb001e
+
+--- Test 38: GPU SUB.f, NEG.f, ABS.f, MIN.f (bf16) ---
+    [PASS] T158: T38 TX count = 4
+    [PASS] T159: T38 TX[0] bank0 {MIN,ABS,NEG,SUB} = 0x40404000c040c000
+    [PASS] T160: T38 TX[1] bank1 = 0x40404000c040c000
+    [PASS] T161: T38 TX[2] bank2 = 0x40404000c040c000
+    [PASS] T162: T38 TX[3] bank3 = 0x40404000c040c000
+
+--- Test 39: GPU BRA (unconditional branch) ---
+    [PASS] T163: T39 TX count = 2
+    [PASS] T164: T39 TX[0] BRA: R1=42 = 0x0000002a0000002a
+    [PASS] T165: T39 TX[1] all banks = 0x0000002a0000002a
+
+--- Test 40: GPU MOV reg, SETP, SELP ---
+    [PASS] T166: T40 TX count = 2
+    [PASS] T167: T40 TX[0] {SELP=100,MOV=100} = 0x0064006400640064
+    [PASS] T168: T40 TX[1] all banks = 0x0064006400640064
+
+--- Test 41: GPU SET + SELP (predicate) ---
+    [PASS] T169: T41 TX count = 2
+    [PASS] T170: T41 TX[0] {P0=0->BBBB, P0=1->AAAA} = 0xbbbbaaaabbbbaaaa
+    [PASS] T171: T41 TX[1] all banks = 0xbbbbaaaabbbbaaaa
+
+--- Test 42: GPU PBRA divergence + SIMT reconvergence ---
+    [PASS] T172: T42 TX count = 2
+    [PASS] T173: T42 TX[0] T1=AAAA,T0=AAAA (taken) = 0x0000aaaa0000aaaa
+    [PASS] T174: T42 TX[1] T3=BBBB,T2=BBBB (fall) = 0x0000bbbb0000bbbb
+
 ================================================================
-  *** ALL 100 CHECKS PASSED ***
-  Total checks: 100
+  *** 172 PASSED, 2 FAILED ***
+  Total checks: 174
 ================================================================
 
-../tb/soc_tb.v:2244: $finish called at 113816000 (1ps)
+../tb/soc_tb.v:3230: $finish called at 183056000 (1ps)
