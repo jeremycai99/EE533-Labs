@@ -1,0 +1,145 @@
+
+thread2_wavelet.elf:     file format elf32-littlearm
+
+
+Disassembly of section .text:
+
+00000000 <abs16>:
+   0:	e52db004 	push	{fp}		@ (str fp, [sp, #-4]!)
+   4:	e28db000 	add	fp, sp, #0
+   8:	e24dd00c 	sub	sp, sp, #12
+   c:	e50b0008 	str	r0, [fp, #-8]
+  10:	e51b3008 	ldr	r3, [fp, #-8]
+  14:	e3530000 	cmp	r3, #0
+  18:	b2633000 	rsblt	r3, r3, #0
+  1c:	e1a00003 	mov	r0, r3
+  20:	e28bd000 	add	sp, fp, #0
+  24:	e49db004 	pop	{fp}		@ (ldr fp, [sp], #4)
+  28:	e12fff1e 	bx	lr
+
+0000002c <thread2_wavelet>:
+  2c:	e92d4800 	push	{fp, lr}
+  30:	e28db004 	add	fp, sp, #4
+  34:	e24dd030 	sub	sp, sp, #48	@ 0x30
+  38:	e3a03c01 	mov	r3, #256	@ 0x100
+  3c:	e50b3010 	str	r3, [fp, #-16]
+  40:	e3a03000 	mov	r3, #0
+  44:	e50b300c 	str	r3, [fp, #-12]
+  48:	ea00000e 	b	88 <thread2_wavelet+0x5c>
+  4c:	e3a02000 	mov	r2, #0
+  50:	e51b300c 	ldr	r3, [fp, #-12]
+  54:	e1a03083 	lsl	r3, r3, #1
+  58:	e0823003 	add	r3, r2, r3
+  5c:	e1d330b0 	ldrh	r3, [r3]
+  60:	e1a03803 	lsl	r3, r3, #16
+  64:	e1a02843 	asr	r2, r3, #16
+  68:	e59f11ac 	ldr	r1, [pc, #428]	@ 21c <thread2_wavelet+0x1f0>
+  6c:	e51b300c 	ldr	r3, [fp, #-12]
+  70:	e1a03083 	lsl	r3, r3, #1
+  74:	e0813003 	add	r3, r1, r3
+  78:	e1c320b0 	strh	r2, [r3]
+  7c:	e51b300c 	ldr	r3, [fp, #-12]
+  80:	e2833001 	add	r3, r3, #1
+  84:	e50b300c 	str	r3, [fp, #-12]
+  88:	e51b300c 	ldr	r3, [fp, #-12]
+  8c:	e35300ff 	cmp	r3, #255	@ 0xff
+  90:	daffffed 	ble	4c <thread2_wavelet+0x20>
+  94:	e3a03000 	mov	r3, #0
+  98:	e50b3008 	str	r3, [fp, #-8]
+  9c:	ea000056 	b	1fc <thread2_wavelet+0x1d0>
+  a0:	e51b3010 	ldr	r3, [fp, #-16]
+  a4:	e1a030c3 	asr	r3, r3, #1
+  a8:	e50b301c 	str	r3, [fp, #-28]	@ 0xffffffe4
+  ac:	e3a03000 	mov	r3, #0
+  b0:	e50b3014 	str	r3, [fp, #-20]	@ 0xffffffec
+  b4:	e3a03000 	mov	r3, #0
+  b8:	e50b3018 	str	r3, [fp, #-24]	@ 0xffffffe8
+  bc:	e3a03000 	mov	r3, #0
+  c0:	e50b300c 	str	r3, [fp, #-12]
+  c4:	ea000030 	b	18c <thread2_wavelet+0x160>
+  c8:	e51b300c 	ldr	r3, [fp, #-12]
+  cc:	e1a03083 	lsl	r3, r3, #1
+  d0:	e59f2144 	ldr	r2, [pc, #324]	@ 21c <thread2_wavelet+0x1f0>
+  d4:	e1a03083 	lsl	r3, r3, #1
+  d8:	e0823003 	add	r3, r2, r3
+  dc:	e1d330f0 	ldrsh	r3, [r3]
+  e0:	e50b3020 	str	r3, [fp, #-32]	@ 0xffffffe0
+  e4:	e51b300c 	ldr	r3, [fp, #-12]
+  e8:	e1a03083 	lsl	r3, r3, #1
+  ec:	e2833001 	add	r3, r3, #1
+  f0:	e59f2124 	ldr	r2, [pc, #292]	@ 21c <thread2_wavelet+0x1f0>
+  f4:	e1a03083 	lsl	r3, r3, #1
+  f8:	e0823003 	add	r3, r2, r3
+  fc:	e1d330f0 	ldrsh	r3, [r3]
+ 100:	e50b3024 	str	r3, [fp, #-36]	@ 0xffffffdc
+ 104:	e51b2020 	ldr	r2, [fp, #-32]	@ 0xffffffe0
+ 108:	e51b3024 	ldr	r3, [fp, #-36]	@ 0xffffffdc
+ 10c:	e0823003 	add	r3, r2, r3
+ 110:	e1a030c3 	asr	r3, r3, #1
+ 114:	e50b3028 	str	r3, [fp, #-40]	@ 0xffffffd8
+ 118:	e51b2020 	ldr	r2, [fp, #-32]	@ 0xffffffe0
+ 11c:	e51b3024 	ldr	r3, [fp, #-36]	@ 0xffffffdc
+ 120:	e0423003 	sub	r3, r2, r3
+ 124:	e1a030c3 	asr	r3, r3, #1
+ 128:	e50b302c 	str	r3, [fp, #-44]	@ 0xffffffd4
+ 12c:	e51b002c 	ldr	r0, [fp, #-44]	@ 0xffffffd4
+ 130:	ebffffb2 	bl	0 <abs16>
+ 134:	e50b0030 	str	r0, [fp, #-48]	@ 0xffffffd0
+ 138:	e51b2014 	ldr	r2, [fp, #-20]	@ 0xffffffec
+ 13c:	e51b3030 	ldr	r3, [fp, #-48]	@ 0xffffffd0
+ 140:	e0823003 	add	r3, r2, r3
+ 144:	e50b3014 	str	r3, [fp, #-20]	@ 0xffffffec
+ 148:	e51b2030 	ldr	r2, [fp, #-48]	@ 0xffffffd0
+ 14c:	e51b3018 	ldr	r3, [fp, #-24]	@ 0xffffffe8
+ 150:	e1520003 	cmp	r2, r3
+ 154:	da000001 	ble	160 <thread2_wavelet+0x134>
+ 158:	e51b3030 	ldr	r3, [fp, #-48]	@ 0xffffffd0
+ 15c:	e50b3018 	str	r3, [fp, #-24]	@ 0xffffffe8
+ 160:	e51b3028 	ldr	r3, [fp, #-40]	@ 0xffffffd8
+ 164:	e1a03803 	lsl	r3, r3, #16
+ 168:	e1a02843 	asr	r2, r3, #16
+ 16c:	e59f10a8 	ldr	r1, [pc, #168]	@ 21c <thread2_wavelet+0x1f0>
+ 170:	e51b300c 	ldr	r3, [fp, #-12]
+ 174:	e1a03083 	lsl	r3, r3, #1
+ 178:	e0813003 	add	r3, r1, r3
+ 17c:	e1c320b0 	strh	r2, [r3]
+ 180:	e51b300c 	ldr	r3, [fp, #-12]
+ 184:	e2833001 	add	r3, r3, #1
+ 188:	e50b300c 	str	r3, [fp, #-12]
+ 18c:	e51b200c 	ldr	r2, [fp, #-12]
+ 190:	e51b301c 	ldr	r3, [fp, #-28]	@ 0xffffffe4
+ 194:	e1520003 	cmp	r2, r3
+ 198:	baffffca 	blt	c8 <thread2_wavelet+0x9c>
+ 19c:	e51b3014 	ldr	r3, [fp, #-20]	@ 0xffffffec
+ 1a0:	e1a02243 	asr	r2, r3, #4
+ 1a4:	e3a01c02 	mov	r1, #512	@ 0x200
+ 1a8:	e51b3008 	ldr	r3, [fp, #-8]
+ 1ac:	e2833010 	add	r3, r3, #16
+ 1b0:	e1a03083 	lsl	r3, r3, #1
+ 1b4:	e0813003 	add	r3, r1, r3
+ 1b8:	e1a02802 	lsl	r2, r2, #16
+ 1bc:	e1a02842 	asr	r2, r2, #16
+ 1c0:	e1c320b0 	strh	r2, [r3]
+ 1c4:	e3a02c02 	mov	r2, #512	@ 0x200
+ 1c8:	e51b3008 	ldr	r3, [fp, #-8]
+ 1cc:	e2833014 	add	r3, r3, #20
+ 1d0:	e1a03083 	lsl	r3, r3, #1
+ 1d4:	e0823003 	add	r3, r2, r3
+ 1d8:	e51b2018 	ldr	r2, [fp, #-24]	@ 0xffffffe8
+ 1dc:	e1a02802 	lsl	r2, r2, #16
+ 1e0:	e1a02842 	asr	r2, r2, #16
+ 1e4:	e1c320b0 	strh	r2, [r3]
+ 1e8:	e51b301c 	ldr	r3, [fp, #-28]	@ 0xffffffe4
+ 1ec:	e50b3010 	str	r3, [fp, #-16]
+ 1f0:	e51b3008 	ldr	r3, [fp, #-8]
+ 1f4:	e2833001 	add	r3, r3, #1
+ 1f8:	e50b3008 	str	r3, [fp, #-8]
+ 1fc:	e51b3008 	ldr	r3, [fp, #-8]
+ 200:	e3530003 	cmp	r3, #3
+ 204:	daffffa5 	ble	a0 <thread2_wavelet+0x74>
+ 208:	e1a00000 	nop			@ (mov r0, r0)
+ 20c:	e1a00000 	nop			@ (mov r0, r0)
+ 210:	e24bd004 	sub	sp, fp, #4
+ 214:	e8bd4800 	pop	{fp, lr}
+ 218:	e12fff1e 	bx	lr
+ 21c:	00000228 	.word	0x00000228

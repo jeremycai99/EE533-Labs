@@ -1,0 +1,1 @@
+-I ../rtl -I ../rtl/gpu -I ../rtl/gpu/arith -I ../rtl/gpu/component -I ../rtl/gpu/core -I ../rtl/gpu/testmem -I ../rtl/gpu/testdsp
