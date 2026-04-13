@@ -1,0 +1,1 @@
+-I ../rtl -I ../rtl/cpu -I ../rtl/cpu/alu -I ../rtl/cpu/component -I ../rtl/cpu/core  -I ../rtl/cpu/mac  -I ../rtl/cp  -I ../rtl/cpu/testmem -I ../rtl/cpu/testdsp
