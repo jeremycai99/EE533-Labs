@@ -56,5 +56,23 @@ dkms.conf
 # MacOS garbage
 .DS_Store
 
+# Python cache
+__pycache__/
+
+# Generated model artifacts
+Final/model/GPU_HW_RELU*/
+Final/model/ann_weights_bf16.npy
+Final/model/feat_idx.npy
+Final/model/scaler_mean.npy
+Final/model/scaler_std.npy
+Final/model/top32_feat_idx.npy
+Final/model/lgbm_top32_feat_idx.npy
+Final/model/ann_hw_compat_info.txt
+Final/model/ann_weights_raw_dmem_t*.hex
+
+# Local training datasets
+Final/model/iec104_train_test/
+Final/model/iec104_train_test_csvs
+
 # ignore large .vcd files
 *.vcd

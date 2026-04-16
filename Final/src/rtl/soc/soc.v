@@ -141,7 +141,7 @@ wire dma_gpu_imem_we;
 //   INTERNAL WIRES — DMA <-> GPU DMEM Port B
 // ================================================================
 wire [1:0] dma_gpu_dmem_sel;
-wire [9:0] dma_gpu_dmem_addr;
+wire [`GPU_DMEM_ADDR_WIDTH-1:0] dma_gpu_dmem_addr;
 wire [15:0] dma_gpu_dmem_din;
 wire dma_gpu_dmem_we;
 wire [15:0] dma_gpu_dmem_dout;
@@ -348,7 +348,7 @@ test_gpu_imem u_gpu_imem (
 );
 
 // ================================================================
-//   GPU DMEM — 4× 1024×16b Dual-Port Banks
+//   GPU DMEM — 4× 2048×16b Dual-Port Banks
 //     Port A: sm_core R/W (flattened bus)
 //     Port B: DMA ext R/W (muxed by dma_gpu_dmem_sel)
 // ================================================================

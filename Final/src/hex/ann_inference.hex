@@ -1,27 +1,66 @@
-// GPU IMEM — ann_inference (24 instructions)
-// ISA v2.1 | WMMA-fused | 4x4 bf16 tensor core
+// GPU IMEM - full-model hardware-owned ANN kernel (60 instructions)
+// Matches Final/src/tb/model_tb.v ann_hw_build_gpu_prog().
+// Entry PCs:
+//   [0]  linear accumulation/store
+//   [28] ReLU accumulation/store
 
-0x20000004  // [ 0] MOVI  R0, 4                         ; R0 = ADDR_W1
-0xF4400000  // [ 1] WMMA.LOAD.A  R4, R0, 0              ; {R4-R7} = W1[tid][0..3]
-0x20000000  // [ 2] MOVI  R0, 0                         ; R0 = ADDR_X
-0xF5800000  // [ 3] WMMA.LOAD.B  R8, R0, 0              ; {R8-R11} = X[tid][0..3]
-0x20000008  // [ 4] MOVI  R0, 8                         ; R0 = ADDR_B1
-0xF6C00000  // [ 5] WMMA.LOAD.C  R12, R0, 0             ; {R12-R15} = B1[tid][0..3]
-0xECC48C00  // [ 6] WMMA.MMA  R12, R4, R8, R12          ; D = W1 x X + B1  (37cyc, 64 MACs)
-0x24000000  // [ 7] MOVI  R0, 0x0000                    ; R0 = bf16(0.0) for ReLU
-0x54CC0000  // [ 8] MAX.f R12, R12, R0                  ; ReLU D[0]
-0x54DD0000  // [ 9] MAX.f R13, R13, R0                  ; ReLU D[1]
-0x54EE0000  // [10] MAX.f R14, R14, R0                  ; ReLU D[2]
-0x54FF0000  // [11] MAX.f R15, R15, R0                  ; ReLU D[3]
-0x20000014  // [12] MOVI  R0, 20                        ; R0 = ADDR_H
-0xFCC00000  // [13] WMMA.STORE  R12, R0, 0              ; DMEM[20..23] = H
-0x2000000C  // [14] MOVI  R0, 12                        ; R0 = ADDR_W2
-0xF4400000  // [15] WMMA.LOAD.A  R4, R0, 0              ; {R4-R7} = W2[tid][0..3]
-0x20000014  // [16] MOVI  R0, 20                        ; R0 = ADDR_H
-0xF5800000  // [17] WMMA.LOAD.B  R8, R0, 0              ; {R8-R11} = H[tid][0..3]
-0x20000010  // [18] MOVI  R0, 16                        ; R0 = ADDR_B2
-0xF6C00000  // [19] WMMA.LOAD.C  R12, R0, 0             ; {R12-R15} = B2[tid][0..3]
-0xECC48C00  // [20] WMMA.MMA  R12, R4, R8, R12          ; D = W2 x H + B2  (37cyc, 64 MACs)
-0x20000018  // [21] MOVI  R0, 24                        ; R0 = ADDR_Y
-0xFCC00000  // [22] WMMA.STORE  R12, R0, 0              ; DMEM[24..27] = Y
-0xC8000000  // [23] RET                                 ; End kernel
+0x200008A0  // [ 0]
+0x10100000  // [ 1]
+0x10200001  // [ 2]
+0x10300002  // [ 3]
+0x10000003  // [ 4]
+0x00000000  // [ 5]
+0x00000000  // [ 6]
+0xF4410000  // [ 7]
+0xF5820000  // [ 8]
+0xF6C30000  // [ 9]
+0x20300000  // [10]
+0xECC48C00  // [11]
+0x9800FFFF  // [12]
+0xA9003000  // [13]
+0x00000000  // [14]
+0xC0011010  // [15]
+0xB8000017  // [16]
+0x98110004  // [17]
+0x98220004  // [18]
+0xF4410000  // [19]
+0xF5820000  // [20]
+0xECC48C00  // [21]
+0xB800000C  // [22]
+0x200008A0  // [23]
+0x10100004  // [24]
+0x00000000  // [25]
+0xFCC10000  // [26]
+0xC8000000  // [27]
+0x200008A0  // [28]
+0x10100000  // [29]
+0x10200001  // [30]
+0x10300002  // [31]
+0x10000003  // [32]
+0x00000000  // [33]
+0x00000000  // [34]
+0xF4410000  // [35]
+0xF5820000  // [36]
+0xF6C30000  // [37]
+0x20300000  // [38]
+0xECC48C00  // [39]
+0x9800FFFF  // [40]
+0xA9003000  // [41]
+0x00000000  // [42]
+0xC002D02C  // [43]
+0xB8000033  // [44]
+0x98110004  // [45]
+0x98220004  // [46]
+0xF4410000  // [47]
+0xF5820000  // [48]
+0xECC48C00  // [49]
+0xB8000028  // [50]
+0x54CC3000  // [51]
+0x54DD3000  // [52]
+0x54EE3000  // [53]
+0x54FF3000  // [54]
+0x200008A0  // [55]
+0x10100004  // [56]
+0x00000000  // [57]
+0xFCC10000  // [58]
+0xC8000000  // [59]

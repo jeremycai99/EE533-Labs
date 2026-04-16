@@ -1,33 +1,12 @@
-/* file: soc_tb.v
- * SoC integration testbench — drives ONLY the NetFPGA RX/TX interface.
+/* file: model_tb.v
+ * Focused ANN model testbench — drives ONLY the NetFPGA RX/TX interface.
  * All computation runs inside soc (real CPU, CP10, DMA, GPU).
  *
- * Test 1: CPU ADD — basic packet round-trip
- * Test 2: CPU MUL — MAC unit via packet
- * Test 3: CPU MCR/MRC — CP10 scratch write/readback
- * Test 4: CPU conditional branch (CMP + BEQ taken)
- * Test 5: CPU + DMA + GPU — full heterogeneous compute pipeline
- * Test 6: Back-to-back packets (reuse IMEM, new data)
- * Test 7: CPU MLA — multiply-accumulate
- * Test 8: CPU loop — sum array of 4 elements
- * Test 9: Multiple CP10 register write/readback (CR0,CR1,CR4,CR8)
- * Test 10: NOP command skip (pkt_proc)
- * Test 11: Large DMEM load + readback (16 words)
- * Test 12: CPU conditional branch not-taken (CMP + BEQ NE path)
- * Test 13: GPU LD/ADD/ST with DMA D_UNPACK preload (full heterogeneous data path)
- * Test 14: GPU WMMA.MMA tensor core through full SoC
- * Test 15: GPU per-thread TID differentiation through SoC
- * Test 16: GPU K1 vec_add int16 (LD, D_UNPACK, 10+20=30)
- * Test 17: GPU K2 vec_sub int16 (LD, 100-30=70)
- * Test 18: GPU K3 bf16_mul (LD, 2.0x3.0=6.0)
- * Test 19: GPU K4 bf16_fma (LD, 2.0x3.0+1.0=7.0)
- * Test 20: GPU K5 relu bf16 (LD, per-bank: -1→0, 2→2, -3→0, 5→5)
- * Test 21: GPU K6 WMMA matmul (LD, per-bank identity A, D=I×2=all-2.0)
- * Test 22: Full heterogeneous pipeline (CPU pre→GPU K1×2→GPU K2+10→CPU post)
- * Test 23: CVT round-trip with different rD/rA (int→bf16→int, canary-guarded)
- * Test 24: CVT self-referencing rD==rA (deadlock diagnostic, canary-guarded)
- * Test 25: Full heterogeneous with CVT (CPU pre→GPU CVT×2→GPU CVT+10→CPU post)
- * Test 26: GPU DMEM high-address DMA round-trip at top-of-bank
+ * Test 1: ANN 2-layer WMMA inference sanity
+ * Test 2: ANN full-model staging from exported BF16 hex
+ * Test 3: ANN full-model GPU load (bank-striped)
+ * Test 4: ANN full-model tiled inference (40->96->42->4)
+ * Test 5: GPU DMEM high-address DMA round-trip at top-of-bank
  *
  * ARM encoding reference:
  *   MOV Rd, #imm8:        E3A0{Rd}{rot}{imm8}
@@ -44,12 +23,15 @@
  *   NOP:                   E1A00000
  *
  * Author: Jeremy Cai
- * Date: Mar. 5, 2026
- * Version: 6.2
+ * Date: Apr. 13, 2026
+ * Version: 1.0
  */
 
 `timescale 1ns / 1ps
 `include "soc.v"
+
+`define SOC_TB_MODULE_NAME model_tb
+`define SOC_TB_MODEL_ONLY
 
 `ifndef SOC_TB_MODULE_NAME
 `define SOC_TB_MODULE_NAME soc_tb
@@ -77,10 +59,36 @@ localparam [11:0] ANN_TILE_READBACK_BASE = 12'h030;
 localparam ANN_TILE_DUNPACK_WORDS = 6;
 localparam ANN_TILE_DPACK_WORDS = 2;
 localparam ANN_TILE_MAX_CYCLES = 20000;
-localparam [63:0] ANN_FULLMODEL_TX0_EXP = 64'h4098417241023EB6;
-localparam [63:0] ANN_FULLMODEL_TX1_EXP = 64'h405440CE3F513F8E;
-localparam [63:0] ANN_FULLMODEL_TX2_EXP = 64'h40D8419F412B3D28;
-localparam [63:0] ANN_FULLMODEL_TX3_EXP = 64'h4038417640D50000;
+localparam ANN_HW_GPU_PARAM_BASE = 12'd2208;
+localparam ANN_HW_GPU_W1_BASE = 12'd0;
+localparam ANN_HW_GPU_B1_BASE = 12'd960;
+localparam ANN_HW_GPU_W2_BASE = 12'd1056;
+localparam ANN_HW_GPU_B2_BASE = 12'd2112;
+localparam ANN_HW_GPU_W3_BASE = 12'd2156;
+localparam ANN_HW_GPU_B3_BASE = 12'd2200;
+localparam ANN_HW_GPU_X0_BASE = 12'd2240;
+localparam ANN_HW_GPU_X1_BASE = 12'd2280;
+localparam ANN_HW_GPU_X2_BASE = 12'd2380;
+localparam ANN_HW_GPU_X3_BASE = 12'd2424;
+localparam ANN_HW_GPU_WORDS_PER_BANK = 2204;
+localparam ANN_HW_PRELOAD0_WORDS_PER_BANK = 1020;
+localparam ANN_HW_PRELOAD1_WORDS_PER_BANK = 82;
+localparam ANN_HW_PRELOAD1_GPU_BASE = 12'd2040;
+localparam ANN_HW_COPY_BUF_BASE = 12'd16;
+localparam ANN_HW_GPUK_CPU_BASE = 12'd64;
+localparam ANN_HW_INPUT_CPU_BASE = 12'd128;
+localparam ANN_HW_SCHED_CPU_BASE = 12'd256;
+localparam ANN_HW_READBACK_CPU_BASE = 12'd800;
+localparam ANN_HW_SCHED_RECORD_WORDS = 13;
+localparam ANN_HW_TILE_COUNT = 36;
+localparam ANN_HW_GPU_LINEAR_PC = 0;
+localparam ANN_HW_GPU_RELU_PC = 28;
+localparam ANN_HW_DMA_WAIT_COPY_LONG = 50000;
+localparam ANN_HW_DMA_WAIT_COPY_SHORT = 5000;
+localparam ANN_HW_DMA_WAIT_PARAM = 16;
+localparam ANN_HW_DMA_WAIT_INPUT = 40;
+localparam ANN_HW_DMA_WAIT_GPU = 400;
+localparam ANN_HW_FLOW_MAX_CYCLES = 500000;
 
 // ═══════════════════════════════════════════════════════════════════
 //  Constants
@@ -123,6 +131,12 @@ soc u_soc (
 integer pass_cnt = 0, fail_cnt = 0, test_id = 0;
 integer cycle_cnt;
 integer ann_tile_launch_cnt;
+integer wait_last_cycles;
+integer ann_tile_cycle_total;
+integer ann_tile_cycle_plain_total;
+integer ann_tile_cycle_relu_total;
+integer ann_tile_cycle_plain_cnt;
+integer ann_tile_cycle_relu_cnt;
 integer ann_full_ot;
 integer ann_full_kt;
 integer ann_full_pkt;
@@ -144,18 +158,37 @@ reg [15:0] ann_l0_act [0:ANN_N_FEAT*4-1];
 reg [15:0] ann_l1_act [0:ANN_H1*4-1];
 reg [15:0] ann_l2_act [0:ANN_H2*4-1];
 reg [15:0] ann_l3_act [0:ANN_N_CLASS*4-1];
+reg [15:0] ann_ref_l1_act [0:ANN_H1*4-1];
+reg [15:0] ann_ref_l2_act [0:ANN_H2*4-1];
+reg [15:0] ann_ref_l3_act [0:ANN_N_CLASS*4-1];
 reg [15:0] ann_tile_a [0:15];
 reg [15:0] ann_tile_b [0:15];
 reg [15:0] ann_tile_c [0:15];
 reg [15:0] ann_tile_d [0:15];
+reg [15:0] ann_hw_gpu_bank0 [0:(1<<`GPU_DMEM_ADDR_WIDTH)-1];
+reg [15:0] ann_hw_gpu_bank1 [0:(1<<`GPU_DMEM_ADDR_WIDTH)-1];
+reg [15:0] ann_hw_gpu_bank2 [0:(1<<`GPU_DMEM_ADDR_WIDTH)-1];
+reg [15:0] ann_hw_gpu_bank3 [0:(1<<`GPU_DMEM_ADDR_WIDTH)-1];
+reg [31:0] ann_hw_copy_prog [0:31];
+reg [31:0] ann_hw_sched_prog [0:127];
+reg [31:0] ann_hw_gpu_prog [0:63];
+reg [31:0] ann_hw_final_dmem [0:1023];
 
 reg ann_w_t0_present, ann_w_t1_present, ann_w_t2_present, ann_w_t3_present;
+reg ann_model_use_hwrelu;
+integer ann_hwrelu_found_cnt;
+integer ann_hw_copy_prog_len;
+integer ann_hw_sched_prog_len;
+integer ann_hw_gpu_prog_len;
+integer ann_hw_final_dmem_words;
 
 initial begin : init_ann_full_assets
     ann_w_t0_present = 1'b0;
     ann_w_t1_present = 1'b0;
     ann_w_t2_present = 1'b0;
     ann_w_t3_present = 1'b0;
+    ann_model_use_hwrelu = 1'b0;
+    ann_hwrelu_found_cnt = 0;
 
     for (ann_asset_i = 0; ann_asset_i < ANN_MODEL_THREAD_DEPTH; ann_asset_i = ann_asset_i + 1) begin
         ann_w_t0[ann_asset_i] = 16'd0;
@@ -164,36 +197,80 @@ initial begin : init_ann_full_assets
         ann_w_t3[ann_asset_i] = 16'd0;
     end
 
-    ann_asset_fd = $fopen("../../model/ann_weights_dmem_t0.hex", "r");
+    ann_asset_fd = $fopen("../../model/GPU_HW_RELU/ann_weights_dmem_t0.hex", "r");
     if (ann_asset_fd != 0) begin
         $fclose(ann_asset_fd);
-        $readmemh("../../model/ann_weights_dmem_t0.hex", ann_w_t0);
+        ann_hwrelu_found_cnt = ann_hwrelu_found_cnt + 1;
+    end
+
+    ann_asset_fd = $fopen("../../model/GPU_HW_RELU/ann_weights_dmem_t1.hex", "r");
+    if (ann_asset_fd != 0) begin
+        $fclose(ann_asset_fd);
+        ann_hwrelu_found_cnt = ann_hwrelu_found_cnt + 1;
+    end
+
+    ann_asset_fd = $fopen("../../model/GPU_HW_RELU/ann_weights_dmem_t2.hex", "r");
+    if (ann_asset_fd != 0) begin
+        $fclose(ann_asset_fd);
+        ann_hwrelu_found_cnt = ann_hwrelu_found_cnt + 1;
+    end
+
+    ann_asset_fd = $fopen("../../model/GPU_HW_RELU/ann_weights_dmem_t3.hex", "r");
+    if (ann_asset_fd != 0) begin
+        $fclose(ann_asset_fd);
+        ann_hwrelu_found_cnt = ann_hwrelu_found_cnt + 1;
+    end
+
+    if (ann_hwrelu_found_cnt == 4) begin
+        $readmemh("../../model/GPU_HW_RELU/ann_weights_dmem_t0.hex", ann_w_t0);
+        $readmemh("../../model/GPU_HW_RELU/ann_weights_dmem_t1.hex", ann_w_t1);
+        $readmemh("../../model/GPU_HW_RELU/ann_weights_dmem_t2.hex", ann_w_t2);
+        $readmemh("../../model/GPU_HW_RELU/ann_weights_dmem_t3.hex", ann_w_t3);
         ann_w_t0_present = 1'b1;
-    end
-
-    ann_asset_fd = $fopen("../../model/ann_weights_dmem_t1.hex", "r");
-    if (ann_asset_fd != 0) begin
-        $fclose(ann_asset_fd);
-        $readmemh("../../model/ann_weights_dmem_t1.hex", ann_w_t1);
         ann_w_t1_present = 1'b1;
-    end
-
-    ann_asset_fd = $fopen("../../model/ann_weights_dmem_t2.hex", "r");
-    if (ann_asset_fd != 0) begin
-        $fclose(ann_asset_fd);
-        $readmemh("../../model/ann_weights_dmem_t2.hex", ann_w_t2);
         ann_w_t2_present = 1'b1;
-    end
-
-    ann_asset_fd = $fopen("../../model/ann_weights_dmem_t3.hex", "r");
-    if (ann_asset_fd != 0) begin
-        $fclose(ann_asset_fd);
-        $readmemh("../../model/ann_weights_dmem_t3.hex", ann_w_t3);
         ann_w_t3_present = 1'b1;
+        ann_model_use_hwrelu = 1'b1;
+        $display("[INFO] ANN full-model assets loaded from ../../model/GPU_HW_RELU/");
+    end else begin
+        if ((ann_hwrelu_found_cnt != 0) && (ann_hwrelu_found_cnt != 4))
+            $display("[INFO] ANN HW-ReLU asset set incomplete (%0d/4 files); falling back to ../../model/ann_weights_dmem_t[0-3].hex",
+                     ann_hwrelu_found_cnt);
+
+        ann_asset_fd = $fopen("../../model/ann_weights_dmem_t0.hex", "r");
+        if (ann_asset_fd != 0) begin
+            $fclose(ann_asset_fd);
+            $readmemh("../../model/ann_weights_dmem_t0.hex", ann_w_t0);
+            ann_w_t0_present = 1'b1;
+        end
+
+        ann_asset_fd = $fopen("../../model/ann_weights_dmem_t1.hex", "r");
+        if (ann_asset_fd != 0) begin
+            $fclose(ann_asset_fd);
+            $readmemh("../../model/ann_weights_dmem_t1.hex", ann_w_t1);
+            ann_w_t1_present = 1'b1;
+        end
+
+        ann_asset_fd = $fopen("../../model/ann_weights_dmem_t2.hex", "r");
+        if (ann_asset_fd != 0) begin
+            $fclose(ann_asset_fd);
+            $readmemh("../../model/ann_weights_dmem_t2.hex", ann_w_t2);
+            ann_w_t2_present = 1'b1;
+        end
+
+        ann_asset_fd = $fopen("../../model/ann_weights_dmem_t3.hex", "r");
+        if (ann_asset_fd != 0) begin
+            $fclose(ann_asset_fd);
+            $readmemh("../../model/ann_weights_dmem_t3.hex", ann_w_t3);
+            ann_w_t3_present = 1'b1;
+        end
+
+        if (ann_w_t0_present && ann_w_t1_present && ann_w_t2_present && ann_w_t3_present)
+            $display("[INFO] ANN full-model assets loaded from ../../model/");
     end
 
     if (!(ann_w_t0_present && ann_w_t1_present && ann_w_t2_present && ann_w_t3_present))
-        $display("[INFO] ANN full-model assets incomplete: t0=%0d t1=%0d t2=%0d t3=%0d (expected ../../model/ann_weights_dmem_t[0-3].hex from Final/src/sim)",
+        $display("[INFO] ANN full-model assets incomplete: t0=%0d t1=%0d t2=%0d t3=%0d (expected ../../model/GPU_HW_RELU/ann_weights_dmem_t[0-3].hex or ../../model/ann_weights_dmem_t[0-3].hex from Final/src/sim)",
                  ann_w_t0_present, ann_w_t1_present, ann_w_t2_present, ann_w_t3_present);
 
     ann_full_tail_nz = 0;
@@ -409,6 +486,363 @@ begin
         ann_l3_bias_at = ann_flat_bf16_at(ANN_L3_B_OFF + out_idx);
 end
 endfunction
+
+function [15:0] ann_bf16_relu;
+    input [15:0] in_word;
+begin
+    ann_bf16_relu = in_word[15] ? 16'h0000 : in_word;
+end
+endfunction
+
+function [15:0] ann_bf16_mul_ref;
+    input [15:0] a;
+    input [15:0] b;
+    reg sign_a;
+    reg sign_b;
+    reg [7:0] exp_a;
+    reg [7:0] exp_b;
+    reg [6:0] frac_a;
+    reg [6:0] frac_b;
+    reg sign_r;
+    reg is_zero_a;
+    reg is_zero_b;
+    reg is_inf_a;
+    reg is_inf_b;
+    reg is_nan_a;
+    reg is_nan_b;
+    reg is_denorm_a;
+    reg is_denorm_b;
+    reg [7:0] mant_a;
+    reg [7:0] mant_b;
+    reg [15:0] mant_prod;
+    reg [9:0] exp_sum;
+    reg prod_ovf;
+    reg [7:0] mant_norm;
+    reg [9:0] exp_norm;
+    reg guard;
+    reg round_bit;
+    reg sticky;
+    reg round_up;
+    reg [8:0] mant_rounded;
+    reg round_ovf;
+    reg [6:0] frac_final;
+    reg [9:0] exp_final;
+begin
+    sign_a = a[15];
+    exp_a = a[14:7];
+    frac_a = a[6:0];
+    sign_b = b[15];
+    exp_b = b[14:7];
+    frac_b = b[6:0];
+    sign_r = sign_a ^ sign_b;
+
+    is_zero_a = (exp_a == 8'h00) && (frac_a == 7'b0);
+    is_zero_b = (exp_b == 8'h00) && (frac_b == 7'b0);
+    is_inf_a = (exp_a == 8'hFF) && (frac_a == 7'b0);
+    is_inf_b = (exp_b == 8'hFF) && (frac_b == 7'b0);
+    is_nan_a = (exp_a == 8'hFF) && (frac_a != 7'b0);
+    is_nan_b = (exp_b == 8'hFF) && (frac_b != 7'b0);
+    is_denorm_a = (exp_a == 8'h00);
+    is_denorm_b = (exp_b == 8'h00);
+
+    mant_a = is_denorm_a ? {1'b0, frac_a} : {1'b1, frac_a};
+    mant_b = is_denorm_b ? {1'b0, frac_b} : {1'b1, frac_b};
+    mant_prod = mant_a * mant_b;
+    exp_sum = {2'b0, exp_a} + {2'b0, exp_b} - 10'd127;
+
+    prod_ovf = mant_prod[15];
+    mant_norm = prod_ovf ? mant_prod[15:8] : mant_prod[14:7];
+    exp_norm = prod_ovf ? (exp_sum + 10'd1) : exp_sum;
+
+    guard = prod_ovf ? mant_prod[7] : mant_prod[6];
+    round_bit = prod_ovf ? mant_prod[6] : mant_prod[5];
+    sticky = prod_ovf ? (|mant_prod[5:0]) : (|mant_prod[4:0]);
+
+    round_up = guard & (round_bit | sticky | mant_norm[0]);
+    mant_rounded = {1'b0, mant_norm} + {8'b0, round_up};
+    round_ovf = mant_rounded[8];
+    frac_final = round_ovf ? mant_rounded[7:1] : mant_rounded[6:0];
+    exp_final = round_ovf ? (exp_norm + 10'd1) : exp_norm;
+
+    if (is_nan_a || is_nan_b)
+        ann_bf16_mul_ref = {1'b0, 8'hFF, 7'h40};
+    else if (is_inf_a || is_inf_b) begin
+        if (is_zero_a || is_zero_b)
+            ann_bf16_mul_ref = {1'b0, 8'hFF, 7'h40};
+        else
+            ann_bf16_mul_ref = {sign_r, 8'hFF, 7'h00};
+    end else if (is_zero_a || is_zero_b)
+        ann_bf16_mul_ref = {sign_r, 15'b0};
+    else if (exp_final >= 10'd255)
+        ann_bf16_mul_ref = {sign_r, 8'hFF, 7'h00};
+    else if ((exp_final == 10'd0) || exp_final[9])
+        ann_bf16_mul_ref = {sign_r, 15'b0};
+    else
+        ann_bf16_mul_ref = {sign_r, exp_final[7:0], frac_final};
+end
+endfunction
+
+function [15:0] ann_bf16_add_ref;
+    input [15:0] a;
+    input [15:0] b;
+    reg sub;
+    reg sign_a;
+    reg sign_b;
+    reg [7:0] exp_a;
+    reg [7:0] exp_b;
+    reg [6:0] frac_a;
+    reg [6:0] frac_b;
+    reg sign_b_eff;
+    reg is_zero_a;
+    reg is_zero_b;
+    reg is_inf_a;
+    reg is_inf_b;
+    reg is_nan_a;
+    reg is_nan_b;
+    reg [7:0] mant_a;
+    reg [7:0] mant_b;
+    reg eff_sub;
+    reg a_lt_b;
+    reg sign_lg;
+    reg [7:0] exp_lg;
+    reg [7:0] mant_lg;
+    reg [7:0] mant_sm;
+    reg [7:0] exp_diff;
+    reg special;
+    reg [15:0] special_result;
+    reg [17:0] sm_ext;
+    reg [3:0] shift_amt;
+    reg [17:0] sm_shifted;
+    reg [7:0] mant_sm_al;
+    reg guard;
+    reg round_bit;
+    reg sticky;
+    reg [9:0] mant_sum;
+    reg [3:0] lead_pos;
+    reg sum_zero;
+    reg [3:0] lshift_need;
+    reg [3:0] rshift_need;
+    reg [7:0] max_lshift;
+    reg [3:0] act_lshift;
+    reg [9:0] mant_norm;
+    reg [8:0] exp_norm;
+    reg g_n;
+    reg r_n;
+    reg s_n;
+    reg round_up;
+    reg [8:0] mant_rounded;
+    reg round_ovf;
+    reg [6:0] frac_final;
+    reg [8:0] exp_final;
+begin
+    sub = 1'b0;
+    sign_a = a[15];
+    exp_a = a[14:7];
+    frac_a = a[6:0];
+    sign_b = b[15];
+    exp_b = b[14:7];
+    frac_b = b[6:0];
+    sign_b_eff = sign_b ^ sub;
+
+    is_zero_a = (exp_a == 8'h00) && (frac_a == 7'b0);
+    is_zero_b = (exp_b == 8'h00) && (frac_b == 7'b0);
+    is_inf_a = (exp_a == 8'hFF) && (frac_a == 7'b0);
+    is_inf_b = (exp_b == 8'hFF) && (frac_b == 7'b0);
+    is_nan_a = (exp_a == 8'hFF) && (frac_a != 7'b0);
+    is_nan_b = (exp_b == 8'hFF) && (frac_b != 7'b0);
+
+    mant_a = (exp_a != 8'h00) ? {1'b1, frac_a} : {1'b0, frac_a};
+    mant_b = (exp_b != 8'h00) ? {1'b1, frac_b} : {1'b0, frac_b};
+
+    eff_sub = sign_a ^ sign_b_eff;
+    a_lt_b = (exp_a < exp_b) || ((exp_a == exp_b) && (mant_a < mant_b));
+    sign_lg = a_lt_b ? sign_b_eff : sign_a;
+    exp_lg = a_lt_b ? exp_b : exp_a;
+    mant_lg = a_lt_b ? mant_b : mant_a;
+    mant_sm = a_lt_b ? mant_a : mant_b;
+    exp_diff = (a_lt_b ? exp_b : exp_a) - (a_lt_b ? exp_a : exp_b);
+
+    special = 1'b0;
+    special_result = 16'h0000;
+    if (is_nan_a || is_nan_b) begin
+        special = 1'b1;
+        special_result = {1'b0, 8'hFF, 7'h40};
+    end else if (is_inf_a && is_inf_b) begin
+        special = 1'b1;
+        special_result = eff_sub ? {1'b0, 8'hFF, 7'h40}
+                                 : {sign_a, 8'hFF, 7'h00};
+    end else if (is_inf_a) begin
+        special = 1'b1;
+        special_result = {sign_a, 8'hFF, 7'h00};
+    end else if (is_inf_b) begin
+        special = 1'b1;
+        special_result = {sign_b_eff, 8'hFF, 7'h00};
+    end else if (is_zero_a && is_zero_b) begin
+        special = 1'b1;
+        special_result = (sign_a & sign_b_eff) ? 16'h8000 : 16'h0000;
+    end else if (is_zero_a) begin
+        special = 1'b1;
+        special_result = {sign_b_eff, exp_b, frac_b};
+    end else if (is_zero_b) begin
+        special = 1'b1;
+        special_result = a;
+    end
+
+    sm_ext = {mant_sm, 10'b0};
+    shift_amt = (exp_diff > 8'd15) ? 4'd15 : exp_diff[3:0];
+    sm_shifted = sm_ext >> shift_amt;
+    mant_sm_al = sm_shifted[17:10];
+    guard = sm_shifted[9];
+    round_bit = sm_shifted[8];
+    sticky = (|sm_shifted[7:0]) | (exp_diff > 8'd15);
+
+    mant_sum = eff_sub ? ({2'b0, mant_lg} - {2'b0, mant_sm_al})
+                       : ({2'b0, mant_lg} + {2'b0, mant_sm_al});
+
+    casez (mant_sum)
+        10'b1?_????_????: lead_pos = 4'd9;
+        10'b01_????_????: lead_pos = 4'd8;
+        10'b00_1???_????: lead_pos = 4'd7;
+        10'b00_01??_????: lead_pos = 4'd6;
+        10'b00_001?_????: lead_pos = 4'd5;
+        10'b00_0001_????: lead_pos = 4'd4;
+        10'b00_0000_1???: lead_pos = 4'd3;
+        10'b00_0000_01??: lead_pos = 4'd2;
+        10'b00_0000_001?: lead_pos = 4'd1;
+        10'b00_0000_0001: lead_pos = 4'd0;
+        default:          lead_pos = 4'd0;
+    endcase
+
+    sum_zero = (mant_sum == 10'd0);
+    lshift_need = (lead_pos < 4'd7) ? (4'd7 - lead_pos) : 4'd0;
+    rshift_need = (lead_pos > 4'd7) ? (lead_pos - 4'd7) : 4'd0;
+    max_lshift = (exp_lg > 8'd1) ? (exp_lg - 8'd1) : 8'd0;
+    act_lshift = ({4'b0, lshift_need} > max_lshift) ? max_lshift[3:0] : lshift_need;
+
+    mant_norm = (rshift_need != 4'd0) ? (mant_sum >> rshift_need) :
+                (act_lshift  != 4'd0) ? (mant_sum << act_lshift)  :
+                mant_sum;
+    exp_norm = {1'b0, exp_lg} + {5'b0, rshift_need} - {5'b0, act_lshift};
+
+    g_n = (rshift_need != 4'd0) ? mant_sum[rshift_need - 4'd1] : guard;
+    r_n = (rshift_need >= 4'd2) ? mant_sum[0] :
+          (rshift_need == 4'd1) ? guard       : round_bit;
+    s_n = (rshift_need != 4'd0) ? (guard | round_bit | sticky) : sticky;
+
+    round_up = g_n & (r_n | s_n | mant_norm[0]);
+    mant_rounded = {1'b0, mant_norm[7:0]} + {8'b0, round_up};
+    round_ovf = mant_rounded[8];
+    frac_final = round_ovf ? mant_rounded[7:1] : mant_rounded[6:0];
+    exp_final = round_ovf ? (exp_norm + 9'd1) : exp_norm;
+
+    if (special)
+        ann_bf16_add_ref = special_result;
+    else if (sum_zero)
+        ann_bf16_add_ref = 16'h0000;
+    else if (exp_final >= 9'd255)
+        ann_bf16_add_ref = {sign_lg, 8'hFF, 7'h00};
+    else if ((exp_final == 9'd0) || exp_final[8])
+        ann_bf16_add_ref = {sign_lg, 15'b0};
+    else
+        ann_bf16_add_ref = {sign_lg, exp_final[7:0], frac_final};
+end
+endfunction
+
+function [63:0] ann_ref_row_pack;
+    input integer row_idx;
+begin
+    if ((row_idx < 0) || (row_idx >= ANN_N_CLASS))
+        ann_ref_row_pack = 64'd0;
+    else
+        ann_ref_row_pack = pack4_bf16(ann_ref_l3_act[row_idx*4 + 0],
+                                      ann_ref_l3_act[row_idx*4 + 1],
+                                      ann_ref_l3_act[row_idx*4 + 2],
+                                      ann_ref_l3_act[row_idx*4 + 3]);
+end
+endfunction
+
+function [63:0] ann_ref_pkt_pack;
+    input integer pkt_idx;
+begin
+    if ((pkt_idx < 0) || (pkt_idx >= 4))
+        ann_ref_pkt_pack = 64'd0;
+    else
+        ann_ref_pkt_pack = pack4_bf16(ann_ref_l3_act[0*4 + pkt_idx],
+                                      ann_ref_l3_act[1*4 + pkt_idx],
+                                      ann_ref_l3_act[2*4 + pkt_idx],
+                                      ann_ref_l3_act[3*4 + pkt_idx]);
+end
+endfunction
+
+task ann_dump_expected_and_computed_hex;
+    integer row_idx;
+begin
+    $display("    [INFO] Expected output (packed hex):");
+    for (row_idx = 0; row_idx < ANN_N_CLASS; row_idx = row_idx + 1)
+        $display("      exp row%0d: 0x%016h", row_idx, ann_ref_row_pack(row_idx));
+
+    $display("    [INFO] Computed output (packed hex):");
+    for (row_idx = 0; row_idx < ANN_N_CLASS; row_idx = row_idx + 1)
+        if (row_idx < tx_cnt)
+            $display("      got row%0d: 0x%016h", row_idx, tx_data[row_idx]);
+        else
+            $display("      got row%0d: <missing>", row_idx);
+end
+endtask
+
+task ann_dump_expected_and_computed_pkt_hex;
+    integer pkt_idx;
+begin
+    $display("    [INFO] Expected post-processed output (packet-major hex):");
+    for (pkt_idx = 0; pkt_idx < 4; pkt_idx = pkt_idx + 1)
+        $display("      exp pkt%0d: 0x%016h", pkt_idx, ann_ref_pkt_pack(pkt_idx));
+
+    $display("    [INFO] Computed post-processed output (packet-major hex):");
+    for (pkt_idx = 0; pkt_idx < 4; pkt_idx = pkt_idx + 1)
+        if (pkt_idx < tx_cnt)
+            $display("      got pkt%0d: 0x%016h", pkt_idx, tx_data[pkt_idx]);
+        else
+            $display("      got pkt%0d: <missing>", pkt_idx);
+end
+endtask
+
+task ann_compute_reference_model;
+    integer out_idx;
+    integer pkt_idx;
+    integer in_idx;
+    reg [15:0] acc_word;
+begin
+    for (out_idx = 0; out_idx < ANN_H1; out_idx = out_idx + 1)
+        for (pkt_idx = 0; pkt_idx < 4; pkt_idx = pkt_idx + 1) begin
+            acc_word = ann_l1_bias_at(out_idx);
+            for (in_idx = 0; in_idx < ANN_N_FEAT; in_idx = in_idx + 1)
+                acc_word = ann_bf16_add_ref(acc_word,
+                                            ann_bf16_mul_ref(ann_l1_weight_at(out_idx, in_idx),
+                                                             ann_input_pattern_bf16(in_idx, pkt_idx)));
+            ann_ref_l1_act[out_idx*4 + pkt_idx] = ann_bf16_relu(acc_word);
+        end
+
+    for (out_idx = 0; out_idx < ANN_H2; out_idx = out_idx + 1)
+        for (pkt_idx = 0; pkt_idx < 4; pkt_idx = pkt_idx + 1) begin
+            acc_word = ann_l2_bias_at(out_idx);
+            for (in_idx = 0; in_idx < ANN_H1; in_idx = in_idx + 1)
+                acc_word = ann_bf16_add_ref(acc_word,
+                                            ann_bf16_mul_ref(ann_l2_weight_at(out_idx, in_idx),
+                                                             ann_ref_l1_act[in_idx*4 + pkt_idx]));
+            ann_ref_l2_act[out_idx*4 + pkt_idx] = ann_bf16_relu(acc_word);
+        end
+
+    for (out_idx = 0; out_idx < ANN_N_CLASS; out_idx = out_idx + 1)
+        for (pkt_idx = 0; pkt_idx < 4; pkt_idx = pkt_idx + 1) begin
+            acc_word = ann_l3_bias_at(out_idx);
+            for (in_idx = 0; in_idx < ANN_H2; in_idx = in_idx + 1)
+                acc_word = ann_bf16_add_ref(acc_word,
+                                            ann_bf16_mul_ref(ann_l3_weight_at(out_idx, in_idx),
+                                                             ann_ref_l2_act[in_idx*4 + pkt_idx]));
+            ann_ref_l3_act[out_idx*4 + pkt_idx] = acc_word;
+        end
+end
+endtask
 
 // ── Send one bank-striped slice for DMA burst_all ─────────────
 // CPU DMEM layout matches dma_engine burst_all behavior:
@@ -683,6 +1117,14 @@ begin
     send_gpu_tail_ext(ANN_TILE_READBACK_BASE, 4, 4);
 
     wait_and_capture(ANN_TILE_MAX_CYCLES);
+    ann_tile_cycle_total = ann_tile_cycle_total + wait_last_cycles;
+    if (relu_en) begin
+        ann_tile_cycle_relu_total = ann_tile_cycle_relu_total + wait_last_cycles;
+        ann_tile_cycle_relu_cnt   = ann_tile_cycle_relu_cnt + 1;
+    end else begin
+        ann_tile_cycle_plain_total = ann_tile_cycle_plain_total + wait_last_cycles;
+        ann_tile_cycle_plain_cnt   = ann_tile_cycle_plain_cnt + 1;
+    end
 
     if (tx_cnt !== 4) begin
         $display("    [ANN-TILE-FAIL] tile launch %0d expected 4 TX words, got %0d",
@@ -810,13 +1252,716 @@ begin
 end
 endtask
 
+task ann_hw_gpu_write;
+    input [1:0] bank;
+    input integer addr;
+    input [15:0] val;
+begin
+    case (bank)
+        2'd0: ann_hw_gpu_bank0[addr] = val;
+        2'd1: ann_hw_gpu_bank1[addr] = val;
+        2'd2: ann_hw_gpu_bank2[addr] = val;
+        default: ann_hw_gpu_bank3[addr] = val;
+    endcase
+end
+endtask
+
+function [15:0] ann_hw_gpu_read;
+    input [1:0] bank;
+    input integer addr;
+begin
+    case (bank)
+        2'd0: ann_hw_gpu_read = ann_hw_gpu_bank0[addr];
+        2'd1: ann_hw_gpu_read = ann_hw_gpu_bank1[addr];
+        2'd2: ann_hw_gpu_read = ann_hw_gpu_bank2[addr];
+        default: ann_hw_gpu_read = ann_hw_gpu_bank3[addr];
+    endcase
+end
+endfunction
+
+function [31:0] ann_hw_gpu_cpu_word;
+    input integer bf16_base;
+    input integer words_per_bank;
+    input integer flat_word_idx;
+    integer bank_sel;
+    integer word_sel;
+begin
+    bank_sel = flat_word_idx / words_per_bank;
+    word_sel = flat_word_idx % words_per_bank;
+    ann_hw_gpu_cpu_word = {
+        ann_hw_gpu_read(bank_sel[1:0], bf16_base + word_sel*2 + 1),
+        ann_hw_gpu_read(bank_sel[1:0], bf16_base + word_sel*2 + 0)
+    };
+end
+endfunction
+
+function [31:0] arm_mov_imm;
+    input [3:0] rd;
+    input [7:0] imm8;
+begin
+    arm_mov_imm = 32'hE3A00000 | ({28'd0, rd} << 12) | imm8;
+end
+endfunction
+
+function [31:0] arm_ldr_imm;
+    input [3:0] rd;
+    input [3:0] rn;
+    input [11:0] off12;
+begin
+    arm_ldr_imm = 32'hE5900000 | ({28'd0, rn} << 16) | ({28'd0, rd} << 12) | off12;
+end
+endfunction
+
+function [31:0] arm_str_imm;
+    input [3:0] rd;
+    input [3:0] rn;
+    input [11:0] off12;
+begin
+    arm_str_imm = 32'hE5800000 | ({28'd0, rn} << 16) | ({28'd0, rd} << 12) | off12;
+end
+endfunction
+
+function [31:0] arm_add_imm;
+    input [3:0] rd;
+    input [3:0] rn;
+    input [7:0] imm8;
+begin
+    arm_add_imm = 32'hE2800000 | ({28'd0, rn} << 16) | ({28'd0, rd} << 12) | imm8;
+end
+endfunction
+
+function [31:0] arm_sub_imm;
+    input [3:0] rd;
+    input [3:0] rn;
+    input [7:0] imm8;
+begin
+    arm_sub_imm = 32'hE2400000 | ({28'd0, rn} << 16) | ({28'd0, rd} << 12) | imm8;
+end
+endfunction
+
+function [31:0] arm_cmp_imm;
+    input [3:0] rn;
+    input [7:0] imm8;
+begin
+    arm_cmp_imm = 32'hE3500000 | ({28'd0, rn} << 16) | imm8;
+end
+endfunction
+
+function [31:0] arm_cmp_reg;
+    input [3:0] rn;
+    input [3:0] rm;
+begin
+    arm_cmp_reg = 32'hE1500000 | ({28'd0, rn} << 16) | rm;
+end
+endfunction
+
+function [31:0] arm_add_reg;
+    input [3:0] rd;
+    input [3:0] rn;
+    input [3:0] rm;
+begin
+    arm_add_reg = 32'hE0800000 | ({28'd0, rn} << 16) | ({28'd0, rd} << 12) | rm;
+end
+endfunction
+
+function [31:0] arm_mov_shift;
+    input [3:0] rd;
+    input [3:0] rm;
+    input [1:0] shift_type;
+    input [4:0] shamt;
+begin
+    arm_mov_shift = 32'hE1A00000 | ({28'd0, rd} << 12) |
+                    ({27'd0, shamt} << 7) | ({30'd0, shift_type} << 5) | rm;
+end
+endfunction
+
+function [31:0] arm_orr_shift;
+    input [3:0] rd;
+    input [3:0] rn;
+    input [3:0] rm;
+    input [1:0] shift_type;
+    input [4:0] shamt;
+begin
+    arm_orr_shift = 32'hE1800000 | ({28'd0, rn} << 16) | ({28'd0, rd} << 12) |
+                    ({27'd0, shamt} << 7) | ({30'd0, shift_type} << 5) | rm;
+end
+endfunction
+
+function [31:0] arm_mcr;
+    input [3:0] rd;
+    input [3:0] crn;
+begin
+    arm_mcr = 32'hEE000A10 | ({28'd0, crn} << 16) | ({28'd0, rd} << 12);
+end
+endfunction
+
+function [31:0] arm_mrc;
+    input [3:0] rd;
+    input [3:0] crn;
+begin
+    arm_mrc = 32'hEE100A10 | ({28'd0, crn} << 16) | ({28'd0, rd} << 12);
+end
+endfunction
+
+function [31:0] arm_b_idx;
+    input [3:0] cond;
+    input integer from_idx;
+    input integer target_idx;
+    integer off24;
+begin
+    off24 = target_idx - from_idx - 2;
+    arm_b_idx = {cond, 3'b101, 1'b0, off24[23:0]};
+end
+endfunction
+
+function [31:0] enc_i;
+    input [4:0] op;
+    input dt;
+    input [3:0] rd;
+    input [3:0] ra;
+    input [15:0] imm;
+begin
+    enc_i = {op, dt, 2'b00, rd, ra, imm};
+end
+endfunction
+
+function [31:0] enc_setp;
+    input dt;
+    input [1:0] cmp;
+    input [1:0] pred_sel;
+    input [3:0] ra;
+    input [3:0] rb;
+begin
+    enc_setp = {`OP_SETP, dt, cmp, {2'b00, pred_sel}, ra, rb, 12'd0};
+end
+endfunction
+
+function [31:0] enc_bra;
+    input [26:0] target;
+begin
+    enc_bra = {`OP_BRA, target};
+end
+endfunction
+
+function [31:0] enc_pbra;
+    input [1:0] pred_sel;
+    input [12:0] target;
+    input [11:0] reconv;
+begin
+    enc_pbra = {`OP_PBRA, pred_sel, target, reconv};
+end
+endfunction
+
+task ann_hw_zero_gpu_image;
+    integer i;
+begin
+    for (i = 0; i < (1 << `GPU_DMEM_ADDR_WIDTH); i = i + 1) begin
+        ann_hw_gpu_bank0[i] = 16'h0000;
+        ann_hw_gpu_bank1[i] = 16'h0000;
+        ann_hw_gpu_bank2[i] = 16'h0000;
+        ann_hw_gpu_bank3[i] = 16'h0000;
+    end
+end
+endtask
+
+task ann_hw_pack_l1;
+    integer ot;
+    integer kt;
+    integer bank_sel;
+    integer col;
+    integer out_idx;
+    integer in_idx;
+    integer tile_addr;
+begin
+    for (ot = 0; ot < (ANN_H1 / 4); ot = ot + 1) begin
+        for (kt = 0; kt < (ANN_N_FEAT / 4); kt = kt + 1) begin
+            tile_addr = ANN_HW_GPU_W1_BASE + ot*40 + kt*4;
+            for (bank_sel = 0; bank_sel < 4; bank_sel = bank_sel + 1) begin
+                out_idx = ot*4 + bank_sel;
+                for (col = 0; col < 4; col = col + 1) begin
+                    in_idx = kt*4 + col;
+                    ann_hw_gpu_write(bank_sel[1:0], tile_addr + col,
+                                     ann_l1_weight_at(out_idx, in_idx));
+                end
+            end
+        end
+        for (bank_sel = 0; bank_sel < 4; bank_sel = bank_sel + 1) begin
+            out_idx = ot*4 + bank_sel;
+            for (col = 0; col < 4; col = col + 1)
+                ann_hw_gpu_write(bank_sel[1:0], ANN_HW_GPU_B1_BASE + ot*4 + col,
+                                 ann_l1_bias_at(out_idx));
+        end
+    end
+end
+endtask
+
+task ann_hw_pack_l2;
+    integer ot;
+    integer kt;
+    integer bank_sel;
+    integer col;
+    integer out_idx;
+    integer in_idx;
+    integer tile_addr;
+begin
+    for (ot = 0; ot < 11; ot = ot + 1) begin
+        for (kt = 0; kt < 24; kt = kt + 1) begin
+            tile_addr = ANN_HW_GPU_W2_BASE + ot*96 + kt*4;
+            for (bank_sel = 0; bank_sel < 4; bank_sel = bank_sel + 1) begin
+                out_idx = ot*4 + bank_sel;
+                for (col = 0; col < 4; col = col + 1) begin
+                    in_idx = kt*4 + col;
+                    ann_hw_gpu_write(bank_sel[1:0], tile_addr + col,
+                                     ann_l2_weight_at(out_idx, in_idx));
+                end
+            end
+        end
+        for (bank_sel = 0; bank_sel < 4; bank_sel = bank_sel + 1) begin
+            out_idx = ot*4 + bank_sel;
+            for (col = 0; col < 4; col = col + 1)
+                ann_hw_gpu_write(bank_sel[1:0], ANN_HW_GPU_B2_BASE + ot*4 + col,
+                                 ann_l2_bias_at(out_idx));
+        end
+    end
+end
+endtask
+
+task ann_hw_pack_l3;
+    integer kt;
+    integer bank_sel;
+    integer col;
+    integer out_idx;
+    integer in_idx;
+begin
+    for (kt = 0; kt < 11; kt = kt + 1)
+        for (bank_sel = 0; bank_sel < 4; bank_sel = bank_sel + 1) begin
+            out_idx = bank_sel;
+            for (col = 0; col < 4; col = col + 1) begin
+                in_idx = kt*4 + col;
+                ann_hw_gpu_write(bank_sel[1:0], ANN_HW_GPU_W3_BASE + kt*4 + col,
+                                 ann_l3_weight_at(out_idx, in_idx));
+            end
+        end
+
+    for (bank_sel = 0; bank_sel < 4; bank_sel = bank_sel + 1)
+        for (col = 0; col < 4; col = col + 1)
+            ann_hw_gpu_write(bank_sel[1:0], ANN_HW_GPU_B3_BASE + col,
+                             ann_l3_bias_at(bank_sel));
+end
+endtask
+
+task ann_hw_build_gpu_image;
+begin
+    ann_hw_zero_gpu_image;
+    ann_hw_pack_l1;
+    ann_hw_pack_l2;
+    ann_hw_pack_l3;
+end
+endtask
+
+task ann_hw_build_copy_prog;
+begin
+    ann_hw_copy_prog_len = 0;
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = arm_cmp_imm(4'd11, 8'd0); ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1;
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = 32'd0;                      ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1;
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = arm_mov_imm(4'd1, 8'd16);               ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 2
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = arm_mcr(4'd1, 4'd0);                    ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 3
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = arm_mov_imm(4'd0, 8'd0);                ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 4
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = arm_ldr_imm(4'd2, 4'd0, 12'd0);         ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 5
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = arm_ldr_imm(4'd3, 4'd0, 12'd4);         ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 6
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = arm_mcr(4'd2, 4'd1);                    ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 7
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = arm_mcr(4'd3, 4'd2);                    ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 8
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = arm_mov_imm(4'd4, 8'd65);               ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 9
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = arm_mcr(4'd4, 4'd3);                    ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 10
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = arm_mov_shift(4'd6, 4'd3, `SHIFT_LSL, 5'd2); ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 11
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = arm_add_imm(4'd6, 4'd6, 8'd16);         ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 12
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = arm_mrc(4'd5, 4'd9);                    ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 13
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = arm_cmp_reg(4'd5, 4'd6);                ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 14
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = arm_b_idx(4'h1, 15, 13);                ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 15
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = ARM_HALT;                                ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 16
+    ann_hw_copy_prog[ann_hw_copy_prog_len] = ARM_HALT;                                ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1; // 17
+    ann_hw_copy_prog[1] = arm_b_idx(4'h1, 1, ann_hw_copy_prog_len - 2);
+    if (ann_hw_copy_prog_len[0]) begin
+        ann_hw_copy_prog[ann_hw_copy_prog_len] = ARM_NOP;
+        ann_hw_copy_prog_len = ann_hw_copy_prog_len + 1;
+    end
+end
+endtask
+
+task ann_hw_build_gpu_prog;
+begin
+    ann_hw_gpu_prog_len = 0;
+    // Linear kernel entry @ 0, ReLU kernel entry @ 28.
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_movi_dt(1'b0, 4'd0, ANN_HW_GPU_PARAM_BASE); ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 0
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_LD, 1'b0, 4'd1, 4'd0, 16'd0);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 1
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_LD, 1'b0, 4'd2, 4'd0, 16'd1);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 2
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_LD, 1'b0, 4'd3, 4'd0, 16'd2);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 3
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_LD, 1'b0, 4'd0, 4'd0, 16'd3);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 4
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = 32'd0;                                            ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 5
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = 32'd0;                                            ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 6
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_load(2'd0, 4'd4, 4'd1, 16'd0);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 7
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_load(2'd1, 4'd8, 4'd2, 16'd0);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 8
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_load(2'd2, 4'd12, 4'd3, 16'd0);        ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 9
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_movi_dt(1'b0, 4'd3, 16'd0);                  ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 10
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_mma(4'd12, 4'd4, 4'd8, 4'd12);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 11
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_ADDI, 1'b0, 4'd0, 4'd0, 16'hFFFF);    ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 12
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_setp(1'b0, `COMP_NE, 2'd0, 4'd0, 4'd3);     ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 13
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = 32'd0;                                            ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 14
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_pbra(2'd0, 13'd17, 12'd16);                  ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 15
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_bra(27'd23);                                  ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 16
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_ADDI, 1'b0, 4'd1, 4'd1, 16'd4);        ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 17
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_ADDI, 1'b0, 4'd2, 4'd2, 16'd4);        ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 18
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_load(2'd0, 4'd4, 4'd1, 16'd0);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 19
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_load(2'd1, 4'd8, 4'd2, 16'd0);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 20
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_mma(4'd12, 4'd4, 4'd8, 4'd12);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 21
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_bra(27'd12);                                  ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 22
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_movi_dt(1'b0, 4'd0, ANN_HW_GPU_PARAM_BASE); ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 23
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_LD, 1'b0, 4'd1, 4'd0, 16'd4);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 24
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = 32'd0;                                            ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 25
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_store(4'd12, 4'd1, 16'd0);             ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 26
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = {`OP_RET, 27'd0};                                ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 27
+
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_movi_dt(1'b0, 4'd0, ANN_HW_GPU_PARAM_BASE); ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 28
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_LD, 1'b0, 4'd1, 4'd0, 16'd0);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 29
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_LD, 1'b0, 4'd2, 4'd0, 16'd1);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 30
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_LD, 1'b0, 4'd3, 4'd0, 16'd2);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 31
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_LD, 1'b0, 4'd0, 4'd0, 16'd3);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 32
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = 32'd0;                                            ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 33
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = 32'd0;                                            ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 34
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_load(2'd0, 4'd4, 4'd1, 16'd0);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 35
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_load(2'd1, 4'd8, 4'd2, 16'd0);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 36
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_load(2'd2, 4'd12, 4'd3, 16'd0);        ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 37
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_movi_dt(1'b0, 4'd3, 16'd0);                  ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 38
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_mma(4'd12, 4'd4, 4'd8, 4'd12);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 39
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_ADDI, 1'b0, 4'd0, 4'd0, 16'hFFFF);    ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 40
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_setp(1'b0, `COMP_NE, 2'd0, 4'd0, 4'd3);     ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 41
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = 32'd0;                                            ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 42
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_pbra(2'd0, 13'd45, 12'd44);                  ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 43
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_bra(27'd51);                                  ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 44
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_ADDI, 1'b0, 4'd1, 4'd1, 16'd4);        ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 45
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_ADDI, 1'b0, 4'd2, 4'd2, 16'd4);        ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 46
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_load(2'd0, 4'd4, 4'd1, 16'd0);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 47
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_load(2'd1, 4'd8, 4'd2, 16'd0);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 48
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_mma(4'd12, 4'd4, 4'd8, 4'd12);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 49
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_bra(27'd40);                                  ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 50
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_r(`OP_MAX, 1'b1, 4'd12, 4'd12, 4'd3);       ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 51
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_r(`OP_MAX, 1'b1, 4'd13, 4'd13, 4'd3);       ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 52
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_r(`OP_MAX, 1'b1, 4'd14, 4'd14, 4'd3);       ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 53
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_r(`OP_MAX, 1'b1, 4'd15, 4'd15, 4'd3);       ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 54
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_movi_dt(1'b0, 4'd0, ANN_HW_GPU_PARAM_BASE); ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 55
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_i(`OP_LD, 1'b0, 4'd1, 4'd0, 16'd4);         ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 56
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = 32'd0;                                            ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 57
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = enc_wmma_store(4'd12, 4'd1, 16'd0);             ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 58
+    ann_hw_gpu_prog[ann_hw_gpu_prog_len] = {`OP_RET, 27'd0};                                ann_hw_gpu_prog_len = ann_hw_gpu_prog_len + 1; // 59
+end
+endtask
+
+task ann_hw_write_sched_record;
+    input integer rec_idx;
+    input [31:0] entry_pc;
+    input [15:0] a_base;
+    input [15:0] b_base;
+    input [15:0] c_base;
+    input [15:0] k_count;
+    input [15:0] out_base;
+    integer base_idx;
+    integer bank_sel;
+    reg [31:0] word0;
+    reg [31:0] word1;
+    reg [31:0] word2;
+begin
+    base_idx = ANN_HW_SCHED_CPU_BASE + rec_idx*ANN_HW_SCHED_RECORD_WORDS;
+    word0 = {b_base, a_base};
+    word1 = {k_count, c_base};
+    word2 = {16'h0000, out_base};
+    ann_hw_final_dmem[base_idx + 0] = entry_pc;
+    for (bank_sel = 0; bank_sel < 4; bank_sel = bank_sel + 1) begin
+        ann_hw_final_dmem[base_idx + 1 + bank_sel*3 + 0] = word0;
+        ann_hw_final_dmem[base_idx + 1 + bank_sel*3 + 1] = word1;
+        ann_hw_final_dmem[base_idx + 1 + bank_sel*3 + 2] = word2;
+    end
+end
+endtask
+
+function [31:0] ann_hw_input_cpu_word;
+    input integer flat_word_idx;
+    integer bank_sel;
+    integer word_sel;
+    integer feat_lo;
+    integer feat_hi;
+    integer addr_lo;
+    integer addr_hi;
+    reg [15:0] v_lo;
+    reg [15:0] v_hi;
+begin
+    bank_sel = flat_word_idx / 20;
+    word_sel = flat_word_idx % 20;
+    addr_lo = word_sel*2;
+    addr_hi = word_sel*2 + 1;
+    feat_lo = (addr_lo / 4) * 4 + bank_sel;
+    feat_hi = (addr_hi / 4) * 4 + bank_sel;
+    v_lo = ann_input_pattern_bf16(feat_lo, addr_lo % 4);
+    v_hi = ann_input_pattern_bf16(feat_hi, addr_hi % 4);
+    ann_hw_input_cpu_word = {v_hi, v_lo};
+end
+endfunction
+
+task ann_hw_build_sched_prog;
+    integer i;
+    integer rec_idx;
+    integer ot;
+begin
+    ann_hw_sched_prog_len = 0;
+    for (i = 0; i < 1024; i = i + 1)
+        ann_hw_final_dmem[i] = 32'd0;
+
+    ann_hw_final_dmem[0]  = ANN_HW_DMA_WAIT_PARAM;
+    ann_hw_final_dmem[1]  = ANN_HW_DMA_WAIT_INPUT;
+    ann_hw_final_dmem[2]  = ANN_HW_DMA_WAIT_GPU;
+    ann_hw_final_dmem[3]  = ANN_HW_GPUK_CPU_BASE;
+    ann_hw_final_dmem[4]  = ANN_HW_INPUT_CPU_BASE;
+    ann_hw_final_dmem[5]  = ANN_HW_SCHED_CPU_BASE * 4;
+    ann_hw_final_dmem[6]  = ANN_HW_READBACK_CPU_BASE;
+    ann_hw_final_dmem[7]  = ANN_HW_GPU_PARAM_BASE;
+    ann_hw_final_dmem[8]  = ANN_HW_GPU_X0_BASE;
+    ann_hw_final_dmem[9]  = ANN_HW_GPU_X3_BASE;
+    ann_hw_final_dmem[10] = ann_hw_gpu_prog_len;
+    ann_hw_final_dmem[11] = 20;
+    ann_hw_final_dmem[12] = 3;
+    ann_hw_final_dmem[13] = 2;
+    ann_hw_final_dmem[14] = ANN_HW_SCHED_RECORD_WORDS;
+    ann_hw_final_dmem[15] = ANN_HW_TILE_COUNT;
+
+    for (i = 0; i < ann_hw_gpu_prog_len; i = i + 1)
+        ann_hw_final_dmem[ANN_HW_GPUK_CPU_BASE + i] = ann_hw_gpu_prog[i];
+
+    for (i = 0; i < 80; i = i + 1)
+        ann_hw_final_dmem[ANN_HW_INPUT_CPU_BASE + i] = ann_hw_input_cpu_word(i);
+
+    rec_idx = 0;
+    for (ot = 0; ot < 24; ot = ot + 1) begin
+        ann_hw_write_sched_record(rec_idx, ANN_HW_GPU_RELU_PC,
+                                  ANN_HW_GPU_W1_BASE + ot*40,
+                                  ANN_HW_GPU_X0_BASE,
+                                  ANN_HW_GPU_B1_BASE + ot*4,
+                                  10,
+                                  ANN_HW_GPU_X1_BASE + ot*4);
+        rec_idx = rec_idx + 1;
+    end
+    for (ot = 0; ot < 11; ot = ot + 1) begin
+        ann_hw_write_sched_record(rec_idx, ANN_HW_GPU_RELU_PC,
+                                  ANN_HW_GPU_W2_BASE + ot*96,
+                                  ANN_HW_GPU_X1_BASE,
+                                  ANN_HW_GPU_B2_BASE + ot*4,
+                                  24,
+                                  ANN_HW_GPU_X2_BASE + ot*4);
+        rec_idx = rec_idx + 1;
+    end
+    ann_hw_write_sched_record(rec_idx, ANN_HW_GPU_LINEAR_PC,
+                              ANN_HW_GPU_W3_BASE,
+                              ANN_HW_GPU_X2_BASE,
+                              ANN_HW_GPU_B3_BASE,
+                              11,
+                              ANN_HW_GPU_X3_BASE);
+
+    ann_hw_final_dmem_words = ANN_HW_READBACK_CPU_BASE + 8;
+
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_cmp_imm(4'd11, 8'd0); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 0
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = 32'd0;                     ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 1
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_imm(4'd0, 8'd0);  ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 2
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd1, 4'd0, 12'd12); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 3
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd1, 4'd0);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 4
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_imm(4'd2, 8'd0);          ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 5
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd2, 4'd1);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 6
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd2, 4'd0, 12'd40); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 7
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd2, 4'd2);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 8
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_imm(4'd3, 8'd5);          ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 9
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd3, 4'd3);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 10
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd6, 4'd0, 12'd12); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 11
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_add_reg(4'd6, 4'd6, 4'd2);   ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 12
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mrc(4'd5, 4'd9);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 13
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_cmp_reg(4'd5, 4'd6);          ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 14
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_b_idx(4'h1, 15, 13);          ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 15
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd1, 4'd0, 12'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 16
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd1, 4'd0);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 17
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd2, 4'd0, 12'd32); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 18
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd2, 4'd1);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 19
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd2, 4'd0, 12'd44); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 20
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd2, 4'd2);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 21
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_imm(4'd3, 8'd65);         ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 22
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd3, 4'd3);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 23
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd6, 4'd2, `SHIFT_LSL, 5'd2); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 24
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_add_reg(4'd6, 4'd6, 4'd1);   ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 25
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mrc(4'd5, 4'd9);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 26
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_cmp_reg(4'd5, 4'd6);          ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 27
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_b_idx(4'h1, 28, 26);          ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 28
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_imm(4'd1, 8'd15);         ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 29
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd1, 4'd7);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 30
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd5, 4'd0, 12'd20); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 31
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd6, 4'd0, 12'd60); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 32
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd1, 4'd5, 12'd0);  ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 33
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd1, 4'd4);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 34
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd4, 4'd5, `SHIFT_LSR, 5'd2); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 35
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_add_imm(4'd1, 4'd4, 8'd1);   ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 36
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd1, 4'd0);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 37
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd2, 4'd0, 12'd28); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 38
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd2, 4'd1);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 39
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd2, 4'd0, 12'd48); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 40
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd2, 4'd2);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 41
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_imm(4'd3, 8'd65);         ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 42
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd3, 4'd3);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 43
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd7, 4'd2, `SHIFT_LSL, 5'd2); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 44
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_add_reg(4'd7, 4'd7, 4'd1);   ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 45
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mrc(4'd12, 4'd9);             ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 46
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_cmp_reg(4'd12, 4'd7);         ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 47
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_b_idx(4'h1, 48, 46);          ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 48
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_imm(4'd2, 8'd1);          ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 49
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd2, 4'd5);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 50
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mrc(4'd12, 4'd6);             ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 51
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_cmp_imm(4'd12, 8'd5);         ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 52
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_b_idx(4'h1, 53, 51);          ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 53
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_add_imm(4'd5, 4'd5, 8'd52);   ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 54
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_sub_imm(4'd6, 4'd6, 8'd1);    ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 55
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_cmp_imm(4'd6, 8'd0);          ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 56
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_b_idx(4'h1, 57, 33);          ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 57
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd1, 4'd0, 12'd36); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 58
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd1, 4'd0);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 59
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd2, 4'd0, 12'd24); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 60
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd2, 4'd1);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 61
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd2, 4'd0, 12'd52); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 62
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd2, 4'd2);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 63
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_imm(4'd3, 8'd67);         ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 64
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mcr(4'd3, 4'd3);              ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 65
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd7, 4'd2, `SHIFT_LSL, 5'd2); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 66
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd1, 4'd0, 12'd24); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 67
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_add_reg(4'd7, 4'd7, 4'd1);   ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 68
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mrc(4'd12, 4'd9);             ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 69
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_cmp_reg(4'd12, 4'd7);         ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 70
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_b_idx(4'h1, 71, 69);          ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 71
+
+    // CPU post-process: transpose class-major logits to packet-major packed words in-place.
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd0, 4'd1, `SHIFT_LSL, 5'd2); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 72
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd4, 4'd0, 12'd0);   ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 73
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd5, 4'd0, 12'd4);   ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 74
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd6, 4'd0, 12'd8);   ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 75
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd7, 4'd0, 12'd12);  ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 76
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd8, 4'd0, 12'd16);  ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 77
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd9, 4'd0, 12'd20);  ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 78
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd10, 4'd0, 12'd24); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 79
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_ldr_imm(4'd11, 4'd0, 12'd28); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 80
+
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd12, 4'd4, `SHIFT_LSL, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 81
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd12, 4'd12, `SHIFT_LSR, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 82
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_orr_shift(4'd12, 4'd12, 4'd6, `SHIFT_LSL, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 83
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_str_imm(4'd12, 4'd0, 12'd0);  ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 84
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd12, 4'd8, `SHIFT_LSL, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 85
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd12, 4'd12, `SHIFT_LSR, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 86
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_orr_shift(4'd12, 4'd12, 4'd10, `SHIFT_LSL, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 87
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_str_imm(4'd12, 4'd0, 12'd4);  ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 88
+
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd12, 4'd4, `SHIFT_LSR, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 89
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd14, 4'd6, `SHIFT_LSR, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 90
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_orr_shift(4'd12, 4'd12, 4'd14, `SHIFT_LSL, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 91
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_str_imm(4'd12, 4'd0, 12'd8);  ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 92
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd12, 4'd8, `SHIFT_LSR, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 93
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd14, 4'd10, `SHIFT_LSR, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 94
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_orr_shift(4'd12, 4'd12, 4'd14, `SHIFT_LSL, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 95
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_str_imm(4'd12, 4'd0, 12'd12); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 96
+
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd12, 4'd5, `SHIFT_LSL, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 97
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd12, 4'd12, `SHIFT_LSR, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 98
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_orr_shift(4'd12, 4'd12, 4'd7, `SHIFT_LSL, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 99
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_str_imm(4'd12, 4'd0, 12'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 100
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd12, 4'd9, `SHIFT_LSL, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 101
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd12, 4'd12, `SHIFT_LSR, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 102
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_orr_shift(4'd12, 4'd12, 4'd11, `SHIFT_LSL, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 103
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_str_imm(4'd12, 4'd0, 12'd20); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 104
+
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd12, 4'd5, `SHIFT_LSR, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 105
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd14, 4'd7, `SHIFT_LSR, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 106
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_orr_shift(4'd12, 4'd12, 4'd14, `SHIFT_LSL, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 107
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_str_imm(4'd12, 4'd0, 12'd24); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 108
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd12, 4'd9, `SHIFT_LSR, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 109
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_mov_shift(4'd14, 4'd11, `SHIFT_LSR, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 110
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_orr_shift(4'd12, 4'd12, 4'd14, `SHIFT_LSL, 5'd16); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 111
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = arm_str_imm(4'd12, 4'd0, 12'd28); ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 112
+
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = ARM_HALT;                          ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 113
+    ann_hw_sched_prog[ann_hw_sched_prog_len] = ARM_HALT;                          ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1; // 114
+    ann_hw_sched_prog[1] = arm_b_idx(4'h1, 1, ann_hw_sched_prog_len - 2);
+    if (ann_hw_sched_prog_len[0]) begin
+        ann_hw_sched_prog[ann_hw_sched_prog_len] = ARM_NOP;
+        ann_hw_sched_prog_len = ann_hw_sched_prog_len + 1;
+    end
+end
+endtask
+
+task send_ann_hw_prog_imem;
+    input integer prog_sel;
+    input [7:0] ctrl;
+    integer i;
+    integer prog_len;
+begin
+    prog_len = (prog_sel == 0) ? ann_hw_copy_prog_len : ann_hw_sched_prog_len;
+    rx(cmd(4'h1, 12'h000, prog_len / 2, 32'h0), ctrl);
+    for (i = 0; i < prog_len; i = i + 2) begin
+        if (prog_sel == 0)
+            rx({ann_hw_copy_prog[i+1], ann_hw_copy_prog[i]}, 8'h00);
+        else
+            rx({ann_hw_sched_prog[i+1], ann_hw_sched_prog[i]}, 8'h00);
+    end
+end
+endtask
+
+task send_ann_hw_copy_consts;
+    input [15:0] gpu_dst;
+    input [15:0] words_per_bank;
+    input [31:0] wait_count;
+    input [7:0] ctrl;
+begin
+    rx(cmd(4'h2, 12'h000, 16'd2, 32'h0), ctrl);
+    rx({{16'd0, words_per_bank}, {16'd0, gpu_dst}}, 8'h00);
+    rx({32'h00000000, wait_count}, 8'h00);
+end
+endtask
+
+task send_ann_hw_weight_chunk;
+    input integer bf16_base;
+    input integer words_per_bank;
+    input [7:0] ctrl;
+    integer flat_word_idx;
+    integer load_dw_count;
+begin
+    load_dw_count = 2 * words_per_bank;
+    rx(cmd(4'h2, ANN_HW_COPY_BUF_BASE, load_dw_count[15:0], 32'h0), ctrl);
+    for (flat_word_idx = 0; flat_word_idx < (4*words_per_bank); flat_word_idx = flat_word_idx + 2)
+        rx({ann_hw_gpu_cpu_word(bf16_base, words_per_bank, flat_word_idx + 1),
+            ann_hw_gpu_cpu_word(bf16_base, words_per_bank, flat_word_idx + 0)}, 8'h00);
+end
+endtask
+
+task send_ann_hw_final_dmem;
+    input [7:0] ctrl;
+    integer i;
+begin
+    rx(cmd(4'h2, 12'h000, (ann_hw_final_dmem_words / 2), 32'h0), ctrl);
+    for (i = 0; i < ann_hw_final_dmem_words; i = i + 2)
+        rx({ann_hw_final_dmem[i+1], ann_hw_final_dmem[i]}, 8'h00);
+end
+endtask
+
 // ── Wait for pkt_proc to activate then return to idle ────────
 // Captures all TX output during execution.
 task wait_and_capture;
     input integer max_cyc;
     integer c;
+    integer txi;
 begin
     tx_cnt = 0; c = 0;
+    for (txi = 0; txi < 32; txi = txi + 1) begin
+        tx_data[txi] = 64'd0;
+        tx_ctrl[txi] = 8'd0;
+    end
     // Wait for pkt_proc to start
     while (!u_soc.pp_active && c < max_cyc) begin tick; c = c + 1; end
     // Run until idle, capture TX
@@ -835,7 +1980,16 @@ begin
         $display("    PCs: %08h %08h %08h %08h",
                  u_soc.u_cpu_mt.pc_thread[0], u_soc.u_cpu_mt.pc_thread[1],
                  u_soc.u_cpu_mt.pc_thread[2], u_soc.u_cpu_mt.pc_thread[3]);
+        $display("    DMA: busy=%b src=%0d dst=%0d len=%0d cur=%0d ctrl=%02h",
+                 u_soc.u_dma.dma_busy,
+                 u_soc.u_cp10.cr0_dma_src, u_soc.u_cp10.cr1_dma_dst,
+                 u_soc.u_cp10.cr2_dma_len, u_soc.u_dma.cpu_ptr,
+                 u_soc.u_cp10.cr3_dma_ctrl);
+        $display("    GPU: active=%b done=%b pc=%0d",
+                 u_soc.gpu_active_r, u_soc.u_cp10.gpu_done_flag,
+                 u_soc.u_cp10.cr4_gpu_pc);
     end
+    wait_last_cycles = c;
     repeat (5) tick;
 end
 endtask
@@ -3850,7 +5004,555 @@ initial begin
 `endif
 
     // ────────────────────────────────────────────────────────────
-    //  Test 26: GPU DMEM high-address DMA round-trip
+    //  Test ANN: 2-Layer WMMA Inference — WITH TRACE
+    //
+    //  Signal paths from soc.v:
+    //    GPU IMEM:  u_soc.u_gpu_imem.mem[N]
+    //    GPU DMEM:  u_soc.GPU_DMEM_BANK[B].u_gpu_dmem.mem[N]
+    //    CPU DMEM:  u_soc.u_cpu_dmem.mem[N]
+    //  If internal RAM array is not '.mem', replace with '.ram' etc.
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test ANN: 2-layer WMMA inference (Y=16.0) ---");
+        cycle_cnt = 0;
+
+        // ── ARM IMEM (53 DW pairs = 106 instrs) ─────────────
+        // Layout: DMEM[0..23]=GPU IMEM, [24..79]=GPU data, [80..87]=readback
+        // Phase 1: D_IMEM  (DMEM[0..23]→GPU IMEM, 24 words)
+        // Phase 2: D_UNPACK(DMEM[24..79]→GPU DMEM, 14/bank, burst_all)
+        // Phase 3: GPU launch (pc=0, mask=0xF)
+        // Phase 4: D_PACK  (GPU DMEM[24..27]→DMEM[80..], 2/bank)
+        rx(cmd(4'h1, 12'h000, 16'd79, 32'h0), 8'h20);
+
+        // Phase 1: D_IMEM — DMEM[0..23] → GPU IMEM[0..23]
+        rx({32'hEE000A10, 32'hE3A00000}, 8'h00); // [0]MOV R0,#0;  [1]MCR CR0=R0(src=0)
+        rx({32'hE3A01018, 32'hEE010A10}, 8'h00); // [2]MCR CR1=R0(dst=0); [3]MOV R1,#24
+        rx({32'hE3A02005, 32'hEE021A10}, 8'h00); // [4]MCR CR2=R1(len=24); [5]MOV R2,#5
+        rx({ARM_NOP,      32'hEE032A10}, 8'h00); // [6]MCR CR3=R2→D_IMEM; [7]NOP
+        send_nop_pairs(8);                         // [8..23] wait D_IMEM (24w×2cyc=48)
+
+        // Phase 2: D_UNPACK — DMEM[24..79] → GPU DMEM, burst_all
+        rx({32'hEE000A10, 32'hE3A00018}, 8'h00); // [24]MOV R0,#24; [25]MCR CR0(src=24)
+        rx({32'hEE011A10, 32'hE3A01000}, 8'h00); // [26]MOV R1,#0;  [27]MCR CR1(dst=0)
+        rx({32'hEE022A10, 32'hE3A0200E}, 8'h00); // [28]MOV R2,#14; [29]MCR CR2(len=14)
+        rx({32'hEE033A10, 32'hE3A03041}, 8'h00); // [30]MOV R3,#65; [31]MCR CR3→D_UNPACK
+        send_nop_pairs(25);                        // [32..81] wait D_UNPACK (14×4banks×3cyc=168)
+
+        // Phase 3: GPU launch
+        rx({32'hEE040A10, 32'hE3A00000}, 8'h00); // [82]MOV R0,#0;  [83]MCR CR4(pc=0)
+        rx({32'hEE071A10, 32'hE3A0100F}, 8'h00); // [84]MOV R1,#15; [85]MCR CR7(mask=0xF)
+        rx({32'hEE052A10, 32'hE3A02001}, 8'h00); // [86]MOV R2,#1;  [87]MCR CR5→launch
+        send_nop_pairs(25);                        // [88..137] wait GPU 2×WMMA+ReLU (~130cyc)
+
+        // Phase 4: D_PACK — GPU DMEM[24..27] → CPU DMEM[80..]
+        rx({32'hEE000A10, 32'hE3A00018}, 8'h00); // [138]MOV R0,#24; [139]MCR CR0(src=24)
+        rx({32'hEE011A10, 32'hE3A01050}, 8'h00); // [140]MOV R1,#80; [141]MCR CR1(dst=80)
+        rx({32'hEE022A10, 32'hE3A02002}, 8'h00); // [142]MOV R2,#2;  [143]MCR CR2(len=2)
+        rx({32'hEE033A10, 32'hE3A03043}, 8'h00); // [144]MOV R3,#67; [145]MCR CR3→D_PACK
+        send_nop_pairs(5);                         // [146..155] wait D_PACK
+        rx({ARM_NOP, ARM_HALT}, 8'h00);           // [156]NOP; [157]B.
+
+        // ── GPU IMEM (24 instrs = 12 DW pairs) ──────────────
+        rx(cmd(4'h2, 12'h000, 16'd12, 32'h0), 8'h00);
+        rx({32'hF4400000, 32'h20000004}, 8'h00); // [1]WMMA.LOAD.A; [0]MOVI R0,4
+        rx({32'hF5800000, 32'h20000000}, 8'h00); // [3]WMMA.LOAD.B; [2]MOVI R0,0
+        rx({32'hF6C00000, 32'h20000008}, 8'h00); // [5]WMMA.LOAD.C; [4]MOVI R0,8
+        rx({32'h24000000, 32'hECC48C00}, 8'h00); // [7]MOVI.bf16 R0,0; [6]WMMA.MMA
+        rx({32'h54DD0000, 32'h54CC0000}, 8'h00); // [9]MAX R13; [8]MAX R12 (ReLU)
+        rx({32'h54FF0000, 32'h54EE0000}, 8'h00); // [11]MAX R15; [10]MAX R14 (ReLU)
+        rx({32'hFCC00000, 32'h20000014}, 8'h00); // [13]WMMA.STORE; [12]MOVI R0,20
+        rx({32'hF4400000, 32'h2000000C}, 8'h00); // [15]WMMA.LOAD.A; [14]MOVI R0,12
+        rx({32'hF5800000, 32'h20000014}, 8'h00); // [17]WMMA.LOAD.B; [16]MOVI R0,20
+        rx({32'hF6C00000, 32'h20000010}, 8'h00); // [19]WMMA.LOAD.C; [18]MOVI R0,16
+        rx({32'h20000018, 32'hECC48C00}, 8'h00); // [21]MOVI R0,24; [20]WMMA.MMA
+        rx({32'hC8000000, 32'hFCC00000}, 8'h00); // [23]RET; [22]WMMA.STORE
+
+        // ── GPU DMEM data (28 DW pairs at CPU DMEM[24]) ──────
+        // Per bank: X=1.0(4w), W1=1.0(4w), B1=0(4w), W2=1.0(4w),
+        //           B2=0(4w), H=0(4w), Y=0(4w) = 14 CPU words/bank
+        rx(cmd(4'h2, 12'h018, 16'd28, 32'h0), 8'h00);
+        // Bank 0
+        rx({32'h3F803F80, 32'h3F803F80}, 8'h00); // X[0..3]=1.0
+        rx({32'h3F803F80, 32'h3F803F80}, 8'h00); // W1[0..3]=1.0
+        rx(64'h0, 8'h00);                         // B1=0
+        rx({32'h3F803F80, 32'h3F803F80}, 8'h00); // W2[0..3]=1.0
+        rx(64'h0, 8'h00); rx(64'h0, 8'h00); rx(64'h0, 8'h00); // B2,H,Y=0
+        // Bank 1
+        rx({32'h3F803F80, 32'h3F803F80}, 8'h00);
+        rx({32'h3F803F80, 32'h3F803F80}, 8'h00);
+        rx(64'h0, 8'h00);
+        rx({32'h3F803F80, 32'h3F803F80}, 8'h00);
+        rx(64'h0, 8'h00); rx(64'h0, 8'h00); rx(64'h0, 8'h00);
+        // Bank 2
+        rx({32'h3F803F80, 32'h3F803F80}, 8'h00);
+        rx({32'h3F803F80, 32'h3F803F80}, 8'h00);
+        rx(64'h0, 8'h00);
+        rx({32'h3F803F80, 32'h3F803F80}, 8'h00);
+        rx(64'h0, 8'h00); rx(64'h0, 8'h00); rx(64'h0, 8'h00);
+        // Bank 3
+        rx({32'h3F803F80, 32'h3F803F80}, 8'h00);
+        rx({32'h3F803F80, 32'h3F803F80}, 8'h00);
+        rx(64'h0, 8'h00);
+        rx({32'h3F803F80, 32'h3F803F80}, 8'h00);
+        rx(64'h0, 8'h00); rx(64'h0, 8'h00); rx(64'h0, 8'h00);
+
+        // ── Readback zeros at DMEM[80] + commands ────────────
+        rx(cmd(4'h2, 12'h050, 16'd4, 32'h0), 8'h00);
+        rx(64'h0, 8'h00); rx(64'h0, 8'h00);
+        rx(64'h0, 8'h00); rx(64'h0, 8'h00);
+        rx(cmd(4'h3, 12'h000, 16'd0, 32'h0), 8'h00);   // CPU_START
+        rx(cmd(4'h4, 12'h050, 16'd4, 32'h0), 8'h00);   // READBACK from DMEM[80]
+        rx(cmd(4'h5, 12'h000, 16'd0, 32'h0), 8'h00);   // SEND_PKT
+        rx_end;
+
+        wait_and_capture(20000);
+
+        // ════════════════════════════════════════════════════════
+        //  TRACE — uses actual soc.v hierarchy
+        // ════════════════════════════════════════════════════════
+
+        $display("\n==== ANN TRACE: GPU IMEM (24 instrs) ====");
+        $display("  [0]  %08X  [1]  %08X  [2]  %08X  [3]  %08X",
+            u_soc.u_gpu_imem.mem[0],  u_soc.u_gpu_imem.mem[1],
+            u_soc.u_gpu_imem.mem[2],  u_soc.u_gpu_imem.mem[3]);
+        $display("  [4]  %08X  [5]  %08X  [6]  %08X  [7]  %08X",
+            u_soc.u_gpu_imem.mem[4],  u_soc.u_gpu_imem.mem[5],
+            u_soc.u_gpu_imem.mem[6],  u_soc.u_gpu_imem.mem[7]);
+        $display("  [8]  %08X  [9]  %08X  [10] %08X  [11] %08X",
+            u_soc.u_gpu_imem.mem[8],  u_soc.u_gpu_imem.mem[9],
+            u_soc.u_gpu_imem.mem[10], u_soc.u_gpu_imem.mem[11]);
+        $display("  [12] %08X  [13] %08X  [14] %08X  [15] %08X",
+            u_soc.u_gpu_imem.mem[12], u_soc.u_gpu_imem.mem[13],
+            u_soc.u_gpu_imem.mem[14], u_soc.u_gpu_imem.mem[15]);
+        $display("  [16] %08X  [17] %08X  [18] %08X  [19] %08X",
+            u_soc.u_gpu_imem.mem[16], u_soc.u_gpu_imem.mem[17],
+            u_soc.u_gpu_imem.mem[18], u_soc.u_gpu_imem.mem[19]);
+        $display("  [20] %08X  [21] %08X  [22] %08X  [23] %08X",
+            u_soc.u_gpu_imem.mem[20], u_soc.u_gpu_imem.mem[21],
+            u_soc.u_gpu_imem.mem[22], u_soc.u_gpu_imem.mem[23]);
+
+        // ── Bank 0 ──
+        $display("\n==== ANN TRACE: GPU DMEM Bank 0 ====");
+        $display("  X:  %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[0],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[1],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[2],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[3]);
+        $display("  W1: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[4],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[5],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[6],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[7]);
+        $display("  B1: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[8],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[9],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[10],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[11]);
+        $display("  W2: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[12],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[13],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[14],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[15]);
+        $display("  B2: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[16],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[17],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[18],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[19]);
+        $display("  H:  %04X %04X %04X %04X  (exp 4080)",
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[20],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[21],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[22],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[23]);
+        $display("  Y:  %04X %04X %04X %04X  (exp 4180)",
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[24],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[25],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[26],
+            u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[27]);
+
+        // ── Bank 1 ──
+        $display("\n==== ANN TRACE: GPU DMEM Bank 1 ====");
+        $display("  X:  %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[0],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[1],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[2],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[3]);
+        $display("  W1: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[4],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[5],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[6],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[7]);
+        $display("  B1: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[8],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[9],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[10],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[11]);
+        $display("  W2: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[12],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[13],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[14],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[15]);
+        $display("  B2: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[16],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[17],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[18],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[19]);
+        $display("  H:  %04X %04X %04X %04X  (exp 4080)",
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[20],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[21],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[22],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[23]);
+        $display("  Y:  %04X %04X %04X %04X  (exp 4180)",
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[24],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[25],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[26],
+            u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[27]);
+
+        // ── Bank 2 ──
+        $display("\n==== ANN TRACE: GPU DMEM Bank 2 ====");
+        $display("  X:  %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[0],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[1],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[2],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[3]);
+        $display("  W1: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[4],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[5],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[6],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[7]);
+        $display("  B1: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[8],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[9],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[10],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[11]);
+        $display("  W2: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[12],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[13],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[14],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[15]);
+        $display("  B2: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[16],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[17],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[18],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[19]);
+        $display("  H:  %04X %04X %04X %04X  (exp 4080)",
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[20],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[21],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[22],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[23]);
+        $display("  Y:  %04X %04X %04X %04X  (exp 4180)",
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[24],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[25],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[26],
+            u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[27]);
+
+        // ── Bank 3 ──
+        $display("\n==== ANN TRACE: GPU DMEM Bank 3 ====");
+        $display("  X:  %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[0],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[1],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[2],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[3]);
+        $display("  W1: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[4],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[5],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[6],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[7]);
+        $display("  B1: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[8],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[9],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[10],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[11]);
+        $display("  W2: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[12],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[13],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[14],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[15]);
+        $display("  B2: %04X %04X %04X %04X",
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[16],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[17],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[18],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[19]);
+        $display("  H:  %04X %04X %04X %04X  (exp 4080)",
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[20],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[21],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[22],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[23]);
+        $display("  Y:  %04X %04X %04X %04X  (exp 4180)",
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[24],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[25],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[26],
+            u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[27]);
+
+        // ── CPU DMEM D_PACK target ──
+        $display("\n==== ANN TRACE: CPU DMEM [80..87] (D_PACK target) ====");
+        $display("  [80] %08X  [81] %08X  [82] %08X  [83] %08X",
+            u_soc.u_cpu_dmem.mem[80], u_soc.u_cpu_dmem.mem[81],
+            u_soc.u_cpu_dmem.mem[82], u_soc.u_cpu_dmem.mem[83]);
+        $display("  [84] %08X  [85] %08X  [86] %08X  [87] %08X",
+            u_soc.u_cpu_dmem.mem[84], u_soc.u_cpu_dmem.mem[85],
+            u_soc.u_cpu_dmem.mem[86], u_soc.u_cpu_dmem.mem[87]);
+
+        // ── TX output ──
+        $display("\n==== ANN TRACE: TX output ====");
+        $display("  tx_cnt = %0d", tx_cnt);
+        $display("  TX[0] = %016X", tx_data[0]);
+        $display("  TX[1] = %016X", tx_data[1]);
+        $display("  TX[2] = %016X", tx_data[2]);
+        $display("  TX[3] = %016X", tx_data[3]);
+        $display("");
+
+        // ── Checks ───────────────────────────────────────────
+        checkN(tx_cnt, 4, "ANN TX count");
+        check64(tx_data[0], {32'h41804180, 32'h41804180}, "ANN bank0: Y=16.0");
+        check64(tx_data[1], {32'h41804180, 32'h41804180}, "ANN bank1: Y=16.0");
+        check64(tx_data[2], {32'h41804180, 32'h41804180}, "ANN bank2: Y=16.0");
+        check64(tx_data[3], {32'h41804180, 32'h41804180}, "ANN bank3: Y=16.0");
+        check8(tx_ctrl[0], 8'h20, "ANN ctrl");
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test ANN Full-Model Staging: packetize external BF16 hex
+    //
+    //  Goal for the full-model path is to stop hand-writing every
+    //  64-bit LOAD_DMEM payload. This staging test proves soc_tb can
+    //  read exported BF16 weight files and inject them through the
+    //  normal pkt_proc path.
+    //
+    //  This first step keeps the scope narrow and validates a single
+    //  thread-file staging path before the 4-bank burst_all load below.
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test ANN full-model staging: thread1 weight slice ---");
+        cycle_cnt = 0;
+
+        if (!ann_thread_present(2'd1)) begin
+            $display("    [SKIP] Missing ANN weight files (checked ../../model/GPU_HW_RELU/ and ../../model/)");
+        end else begin
+            send_ann_thread_slice_dmem(2'd1, ANN_STAGE_BASE_ADDR, 0, 8, 8'h24);
+            rx(cmd(4'h4, ANN_STAGE_BASE_ADDR, 16'd2, 32'h0), 8'h00);
+            rx(cmd(4'h5, 12'h000, 16'd0, 32'h0), 8'h00);
+            rx_end;
+
+            wait_and_capture(MAX_CYCLES);
+
+            checkN(tx_cnt, 2, "ANN full-stage TX count");
+            check64(tx_data[0], ann_pack_dw(2'd1, 0), "ANN full-stage TX[0]");
+            check64(tx_data[1], ann_pack_dw(2'd1, 4), "ANN full-stage TX[1]");
+            check8(tx_ctrl[0], 8'h24, "ANN full-stage ctrl");
+        end
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test ANN Full-Model GPU load: first slice into all 4 banks
+    //
+    //  Uses the real heterogeneous path:
+    //    CPU DMEM -> DMA D_UNPACK(burst_all) -> GPU DMEM -> DMA D_PACK
+    //
+    //  Current scope is a smoke test for model-weight transport, not
+    //  full inference. It verifies that the first 4 BF16 weights from
+    //  thread files t0..t3 land in GPU bank0..3 respectively.
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test ANN full-model GPU load: bank-striped slice ---");
+        cycle_cnt = 0;
+
+        if (!(ann_thread_present(2'd0) && ann_thread_present(2'd1) &&
+              ann_thread_present(2'd2) && ann_thread_present(2'd3))) begin
+            $display("    [SKIP] Missing ANN weight files (checked ../../model/GPU_HW_RELU/ and ../../model/)");
+        end else begin
+            send_gpu_arm(8'h26, 8'd4, 8'd0, 8'd2);
+            send_gpu_imem({32'h00000000, 32'hC8000000},
+                          64'h0, 64'h0, 64'h0, 64'h0, 64'h0, 64'h0, 64'h0);
+            send_ann_burstall_slice_dmem(12'h010, 0, 8, 8'h00);
+            send_gpu_tail(4);
+
+            wait_and_capture(MAX_CYCLES);
+
+            checkN(tx_cnt, 4, "ANN full-load TX count");
+            check64(tx_data[0], ann_pack_dw(2'd0, 0), "ANN full-load bank0");
+            check64(tx_data[1], ann_pack_dw(2'd1, 0), "ANN full-load bank1");
+            check64(tx_data[2], ann_pack_dw(2'd2, 0), "ANN full-load bank2");
+            check64(tx_data[3], ann_pack_dw(2'd3, 0), "ANN full-load bank3");
+            check8(tx_ctrl[0], 8'h26, "ANN full-load ctrl");
+        end
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test ANN Full-Model Tiled Inference
+    //
+    //  Dataflow fit to current RTL:
+    //    - Host/testbench keeps full activations and outer tile loops.
+    //    - Each packet drives the real pkt_proc -> CPU -> CP10 -> DMA -> GPU.
+    //    - GPU executes one 4x4 WMMA tile update per launch.
+    //    - Hidden layers use ReLU on the final K-tile.
+    //
+    //  Assumed weight layout follows train_ann.py comments:
+    //    W1(96x40), B1(96), W2(42x96), B2(42), W3(4x42), B3(4)
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test ANN full-model tiled inference (40->96->42->4) ---");
+        cycle_cnt = 0;
+        ann_tile_launch_cnt = 0;
+        ann_tile_cycle_total = 0;
+        ann_tile_cycle_plain_total = 0;
+        ann_tile_cycle_relu_total = 0;
+        ann_tile_cycle_plain_cnt = 0;
+        ann_tile_cycle_relu_cnt = 0;
+
+        if (!(ann_thread_present(2'd0) && ann_thread_present(2'd1) &&
+              ann_thread_present(2'd2) && ann_thread_present(2'd3))) begin
+            $display("    [SKIP] Missing ANN weight files (checked ../../model/GPU_HW_RELU/ and ../../model/)");
+        end else begin
+            ann_compute_reference_model();
+            ann_init_tiled_inputs();
+
+            // Layer 1: 40 -> 96, output tiles of 4 rows, K tiles of 4 cols.
+            for (ann_full_ot = 0; ann_full_ot < ANN_H1; ann_full_ot = ann_full_ot + 4) begin
+                for (ann_full_kt = 0; ann_full_kt < ANN_N_FEAT; ann_full_kt = ann_full_kt + 4) begin
+                    fill_ann_l1_tile(ann_full_ot, ann_full_kt);
+                    run_ann_wmma_tile((ann_full_kt + 4) >= ANN_N_FEAT, 8'h2A);
+                    store_ann_l1_tile(ann_full_ot);
+                end
+            end
+
+            // Layer 2: 96 -> 42.
+            for (ann_full_ot = 0; ann_full_ot < 44; ann_full_ot = ann_full_ot + 4) begin
+                for (ann_full_kt = 0; ann_full_kt < ANN_H1; ann_full_kt = ann_full_kt + 4) begin
+                    fill_ann_l2_tile(ann_full_ot, ann_full_kt);
+                    run_ann_wmma_tile((ann_full_kt + 4) >= ANN_H1, 8'h2A);
+                    store_ann_l2_tile(ann_full_ot);
+                end
+            end
+
+            // Layer 3: 42 -> 4, no activation.
+            for (ann_full_kt = 0; ann_full_kt < 44; ann_full_kt = ann_full_kt + 4) begin
+                fill_ann_l3_tile(0, ann_full_kt);
+                run_ann_wmma_tile(1'b0, 8'h2A);
+                store_ann_l3_tile(0);
+            end
+
+            $display("    [INFO] ANN tiled launches = %0d", ann_tile_launch_cnt);
+            $display("    [INFO] ANN tiled cycles (end-to-end wait) = %0d", ann_tile_cycle_total);
+            $display("    [INFO] ANN active cycles (pp_active only) = %0d", cycle_cnt);
+            if (ann_tile_cycle_plain_cnt != 0)
+                $display("    [INFO] Plain tiles: %0d launches, %0d cycles total, avg %0d",
+                         ann_tile_cycle_plain_cnt, ann_tile_cycle_plain_total,
+                         ann_tile_cycle_plain_total / ann_tile_cycle_plain_cnt);
+            if (ann_tile_cycle_relu_cnt != 0)
+                $display("    [INFO] ReLU tiles : %0d launches, %0d cycles total, avg %0d",
+                         ann_tile_cycle_relu_cnt, ann_tile_cycle_relu_total,
+                         ann_tile_cycle_relu_total / ann_tile_cycle_relu_cnt);
+            $display("    [INFO] Asset source = %0s", ann_model_use_hwrelu ? "GPU_HW_RELU" : "model root");
+            $display("    [INFO] Expected logits rows:");
+            for (ann_full_row = 0; ann_full_row < ANN_N_CLASS; ann_full_row = ann_full_row + 1)
+                $display("      exp row%0d: %04h %04h %04h %04h",
+                         ann_full_row,
+                         ann_ref_l3_act[ann_full_row*4 + 0], ann_ref_l3_act[ann_full_row*4 + 1],
+                         ann_ref_l3_act[ann_full_row*4 + 2], ann_ref_l3_act[ann_full_row*4 + 3]);
+            $display("    [INFO] Final logits rows:");
+            for (ann_full_row = 0; ann_full_row < ANN_N_CLASS; ann_full_row = ann_full_row + 1)
+                $display("      row%0d: %04h %04h %04h %04h",
+                         ann_full_row,
+                         ann_l3_act[ann_full_row*4 + 0], ann_l3_act[ann_full_row*4 + 1],
+                         ann_l3_act[ann_full_row*4 + 2], ann_l3_act[ann_full_row*4 + 3]);
+            ann_dump_expected_and_computed_hex();
+
+            checkN(tx_cnt, 4, "ANN full tiled TX count");
+            check64(tx_data[0], ann_ref_row_pack(0), "ANN full tiled row0");
+            check64(tx_data[1], ann_ref_row_pack(1), "ANN full tiled row1");
+            check64(tx_data[2], ann_ref_row_pack(2), "ANN full tiled row2");
+            check64(tx_data[3], ann_ref_row_pack(3), "ANN full tiled row3");
+            check8(tx_ctrl[0], 8'h2A, "ANN full tiled ctrl");
+        end
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 26: ANN full-model hardware-owned flow
+    //
+    //  Flow:
+    //    pkt_proc LOAD_IMEM(copy)  -> CPU copies packed weight image chunk 0
+    //    pkt_proc LOAD_IMEM(copy)  -> CPU copies packed weight image chunk 1
+    //    pkt_proc LOAD_IMEM(sched) -> CPU loads GPU IMEM, loads input tile bank-image,
+    //                                 loops over 36 schedule records, launches GPU,
+    //                                 then D_PACKs final logits back to CPU DMEM.
+    //
+    //  The testbench only injects the packet and checks final logits.
+    //  It no longer owns the ANN tile loop.
+    // ────────────────────────────────────────────────────────────
+    begin
+        $display("\n--- Test 26: ANN full-model hardware-owned flow ---");
+        cycle_cnt = 0;
+
+        if (!(ann_thread_present(2'd0) && ann_thread_present(2'd1) &&
+              ann_thread_present(2'd2) && ann_thread_present(2'd3))) begin
+            $display("    [SKIP] Missing ANN weight files (checked ../../model/GPU_HW_RELU/ and ../../model/)");
+        end else begin
+            u_soc.u_cpu_mt.u_rf.mem_r1[6'h0B] = 32'd0;
+            u_soc.u_cpu_mt.u_rf.mem_r2[6'h0B] = 32'd0;
+            u_soc.u_cpu_mt.u_rf.mem_r3[6'h0B] = 32'd0;
+            u_soc.u_cpu_mt.u_rf.mem_r4[6'h0B] = 32'd0;
+            u_soc.u_cpu_mt.u_rf.mem_r1[6'h1B] = 32'd1;
+            u_soc.u_cpu_mt.u_rf.mem_r2[6'h1B] = 32'd1;
+            u_soc.u_cpu_mt.u_rf.mem_r3[6'h1B] = 32'd1;
+            u_soc.u_cpu_mt.u_rf.mem_r4[6'h1B] = 32'd1;
+            u_soc.u_cpu_mt.u_rf.mem_r1[6'h2B] = 32'd1;
+            u_soc.u_cpu_mt.u_rf.mem_r2[6'h2B] = 32'd1;
+            u_soc.u_cpu_mt.u_rf.mem_r3[6'h2B] = 32'd1;
+            u_soc.u_cpu_mt.u_rf.mem_r4[6'h2B] = 32'd1;
+            u_soc.u_cpu_mt.u_rf.mem_r1[6'h3B] = 32'd1;
+            u_soc.u_cpu_mt.u_rf.mem_r2[6'h3B] = 32'd1;
+            u_soc.u_cpu_mt.u_rf.mem_r3[6'h3B] = 32'd1;
+            u_soc.u_cpu_mt.u_rf.mem_r4[6'h3B] = 32'd1;
+            ann_compute_reference_model();
+            ann_hw_build_gpu_image();
+            ann_hw_build_copy_prog();
+            ann_hw_build_gpu_prog();
+            ann_hw_build_sched_prog();
+
+            send_ann_hw_prog_imem(0, 8'h2B);
+            send_ann_hw_copy_consts(16'd0, ANN_HW_PRELOAD0_WORDS_PER_BANK, ANN_HW_DMA_WAIT_COPY_LONG, 8'h00);
+            send_ann_hw_weight_chunk(0, ANN_HW_PRELOAD0_WORDS_PER_BANK, 8'h00);
+            rx(cmd(4'h3, 12'h000, 16'd0, 32'h0), 8'h00);
+
+            send_ann_hw_copy_consts(ANN_HW_PRELOAD1_GPU_BASE,
+                                    ANN_HW_PRELOAD1_WORDS_PER_BANK,
+                                    ANN_HW_DMA_WAIT_COPY_SHORT, 8'h00);
+            send_ann_hw_weight_chunk(ANN_HW_PRELOAD1_GPU_BASE,
+                                     ANN_HW_PRELOAD1_WORDS_PER_BANK, 8'h00);
+            rx(cmd(4'h3, 12'h000, 16'd0, 32'h0), 8'h00);
+
+            send_ann_hw_prog_imem(1, 8'h00);
+            send_ann_hw_final_dmem(8'h00);
+            rx(cmd(4'h3, 12'h000, 16'd0, 32'h0), 8'h00);
+            rx(cmd(4'h4, ANN_HW_READBACK_CPU_BASE, 16'd4, 32'h0), 8'h00);
+            rx(cmd(4'h5, 12'h000, 16'd0, 32'h0), 8'h00);
+            rx_end;
+
+            wait_and_capture(ANN_HW_FLOW_MAX_CYCLES);
+
+            $display("    [INFO] HW flow: preload words/bank = %0d + %0d",
+                     ANN_HW_PRELOAD0_WORDS_PER_BANK, ANN_HW_PRELOAD1_WORDS_PER_BANK);
+            $display("    [INFO] HW flow: GPU kernel instructions = %0d", ann_hw_gpu_prog_len);
+            $display("    [INFO] HW flow: CPU scheduler instructions = %0d", ann_hw_sched_prog_len);
+            $display("    [INFO] HW flow active cycles = %0d", cycle_cnt);
+            ann_dump_expected_and_computed_pkt_hex();
+
+            checkN(tx_cnt, 4, "ANN HW TX count");
+            check64(tx_data[0], ann_ref_pkt_pack(0), "ANN HW pkt0");
+            check64(tx_data[1], ann_ref_pkt_pack(1), "ANN HW pkt1");
+            check64(tx_data[2], ann_ref_pkt_pack(2), "ANN HW pkt2");
+            check64(tx_data[3], ann_ref_pkt_pack(3), "ANN HW pkt3");
+            check8(tx_ctrl[0], 8'h2B, "ANN HW ctrl");
+        end
+        settle;
+    end
+
+    // ────────────────────────────────────────────────────────────
+    //  Test 27: GPU DMEM high-address DMA round-trip
     //
     //  Goal:
     //    Prove the expanded 11-bit GPU DMEM address path works at the
@@ -3864,7 +5566,7 @@ initial begin
     //    pkt_proc READBACK: CPU[32]
     // ────────────────────────────────────────────────────────────
     begin
-        $display("\n--- Test 26: GPU DMEM high-address DMA round-trip ---");
+        $display("\n--- Test 27: GPU DMEM high-address DMA round-trip ---");
         cycle_cnt = 0;
 
         rx(cmd(4'h1, 12'h000, 16'd15, 32'h0), 8'h28);

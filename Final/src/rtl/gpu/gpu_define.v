@@ -71,7 +71,7 @@
 `define GPU_IMEM_ADDR_WIDTH 8 // 256 instructions
 `define GPU_IMEM_DATA_WIDTH 32 // 32-bit instruction width
 
-`define GPU_DMEM_ADDR_WIDTH 10 // 1024 entries of data memory
+`define GPU_DMEM_ADDR_WIDTH 12 // 4096 entries of data memory
 `define GPU_DMEM_DATA_WIDTH 16 // 16-bit data width for GPU DMEM per thread
 
 //GPU PC width definition

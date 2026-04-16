@@ -15,6 +15,8 @@ Revision history:
 `ifndef DMA_ENGINE_V
 `define DMA_ENGINE_V
 
+`include "gpu_define.v"
+
 module dma_engine (
     input wire clk,
     input wire rst_n,
@@ -46,7 +48,7 @@ module dma_engine (
 
     // GPU DMEM ext Port B (bank-selected externally)
     output reg [1:0] gpu_dmem_sel,
-    output reg [9:0] gpu_dmem_addr,
+    output reg [`GPU_DMEM_ADDR_WIDTH-1:0] gpu_dmem_addr,
     output reg [15:0] gpu_dmem_din,
     output reg gpu_dmem_we,
     input wire [15:0] gpu_dmem_dout
@@ -67,6 +69,10 @@ module dma_engine (
     localparam S_PACK_WR      = 4'd9;
     localparam S_BANK_NEXT    = 4'd10;
     localparam S_DONE         = 4'd11;
+
+    localparam [`GPU_DMEM_ADDR_WIDTH-1:0] GPU_DMEM_ADDR_ZERO = {`GPU_DMEM_ADDR_WIDTH{1'b0}};
+    localparam [`GPU_DMEM_ADDR_WIDTH-1:0] GPU_DMEM_ADDR_ONE  = {{(`GPU_DMEM_ADDR_WIDTH-1){1'b0}}, 1'b1};
+    localparam [`GPU_DMEM_ADDR_WIDTH-1:0] GPU_DMEM_ADDR_TWO  = {{(`GPU_DMEM_ADDR_WIDTH-2){1'b0}}, 2'd2};
 
     reg [3:0] state;
 
@@ -101,7 +107,7 @@ module dma_engine (
             gpu_imem_din <= 32'd0;
             gpu_imem_we <= 1'b0;
             gpu_dmem_sel <= 2'd0;
-            gpu_dmem_addr <= 10'd0;
+            gpu_dmem_addr <= GPU_DMEM_ADDR_ZERO;
             gpu_dmem_din <= 16'd0;
             gpu_dmem_we <= 1'b0;
             cpu_ptr <= 32'd0;
@@ -174,7 +180,7 @@ module dma_engine (
                         gpu_ptr <= dma_src_addr;
                         gpu_base_r <= dma_src_addr;
                         gpu_dmem_sel <= dma_bank;
-                        gpu_dmem_addr <= dma_src_addr[9:0];
+                        gpu_dmem_addr <= dma_src_addr[`GPU_DMEM_ADDR_WIDTH-1:0];
                         state <= S_PACK_RD_LO;
                     end
                 end
@@ -213,14 +219,14 @@ module dma_engine (
 
             S_UNPACK_WR_LO: begin
                 cpu_data_r <= cpu_dmem_dout;
-                gpu_dmem_addr <= gpu_ptr[9:0];
+                gpu_dmem_addr <= gpu_ptr[`GPU_DMEM_ADDR_WIDTH-1:0];
                 gpu_dmem_din <= cpu_dmem_dout[15:0];
                 gpu_dmem_we <= 1'b1;
                 state <= S_UNPACK_WR_HI;
             end
 
             S_UNPACK_WR_HI: begin
-                gpu_dmem_addr <= gpu_ptr[9:0] + 10'd1;
+                gpu_dmem_addr <= gpu_ptr[`GPU_DMEM_ADDR_WIDTH-1:0] + GPU_DMEM_ADDR_ONE;
                 gpu_dmem_din <= cpu_data_r[31:16];
                 gpu_dmem_we <= 1'b1;
                 cpu_ptr <= cpu_ptr + 32'd1;
@@ -244,7 +250,7 @@ module dma_engine (
 
             S_PACK_RD_HI: begin
                 gpu_lo_r <= gpu_dmem_dout;
-                gpu_dmem_addr <= gpu_ptr[9:0] + 10'd1;
+                gpu_dmem_addr <= gpu_ptr[`GPU_DMEM_ADDR_WIDTH-1:0] + GPU_DMEM_ADDR_ONE;
                 state <= S_PACK_WAIT;
             end
 
@@ -262,7 +268,7 @@ module dma_engine (
                 if (words_left == 16'd1) begin
                     state <= S_BANK_NEXT;
                 end else begin
-                    gpu_dmem_addr <= gpu_ptr[9:0] + 10'd2;
+                    gpu_dmem_addr <= gpu_ptr[`GPU_DMEM_ADDR_WIDTH-1:0] + GPU_DMEM_ADDR_TWO;
                     state <= S_PACK_RD_LO;
                 end
             end
@@ -291,7 +297,7 @@ module dma_engine (
                         cpu_dmem_addr <= cpu_ptr[11:0];
                         state <= S_UNPACK_RD;
                     end else begin
-                        gpu_dmem_addr <= gpu_base_r[9:0];
+                        gpu_dmem_addr <= gpu_base_r[`GPU_DMEM_ADDR_WIDTH-1:0];
                         state <= S_PACK_RD_LO;
                     end
                 end else begin

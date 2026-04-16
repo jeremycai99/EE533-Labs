@@ -1,0 +1,154 @@
+[INFO] ANN full-model assets loaded from ../../model/GPU_HW_RELU/
+VCD info: dumpfile model_tb.vcd opened for output.
+
+================================================================
+  ANN Model Testbench
+  Drives NetFPGA RX/TX only — focused ANN model verification
+================================================================
+
+
+--- Test ANN: 2-layer WMMA inference (Y=16.0) ---
+
+==== ANN TRACE: GPU IMEM (24 instrs) ====
+  [0]  20000004  [1]  f4400000  [2]  20000000  [3]  f5800000
+  [4]  20000008  [5]  f6c00000  [6]  ecc48c00  [7]  24000000
+  [8]  54cc0000  [9]  54dd0000  [10] 54ee0000  [11] 54ff0000
+  [12] 20000014  [13] fcc00000  [14] 2000000c  [15] f4400000
+  [16] 20000014  [17] f5800000  [18] 20000010  [19] f6c00000
+  [20] ecc48c00  [21] 20000018  [22] fcc00000  [23] c8000000
+
+==== ANN TRACE: GPU DMEM Bank 0 ====
+  X:  3f80 3f80 3f80 3f80
+  W1: 3f80 3f80 3f80 3f80
+  B1: 0000 0000 0000 0000
+  W2: 3f80 3f80 3f80 3f80
+  B2: 0000 0000 0000 0000
+  H:  4080 4080 4080 4080  (exp 4080)
+  Y:  4180 4180 4180 4180  (exp 4180)
+
+==== ANN TRACE: GPU DMEM Bank 1 ====
+  X:  3f80 3f80 3f80 3f80
+  W1: 3f80 3f80 3f80 3f80
+  B1: 0000 0000 0000 0000
+  W2: 3f80 3f80 3f80 3f80
+  B2: 0000 0000 0000 0000
+  H:  4080 4080 4080 4080  (exp 4080)
+  Y:  4180 4180 4180 4180  (exp 4180)
+
+==== ANN TRACE: GPU DMEM Bank 2 ====
+  X:  3f80 3f80 3f80 3f80
+  W1: 3f80 3f80 3f80 3f80
+  B1: 0000 0000 0000 0000
+  W2: 3f80 3f80 3f80 3f80
+  B2: 0000 0000 0000 0000
+  H:  4080 4080 4080 4080  (exp 4080)
+  Y:  4180 4180 4180 4180  (exp 4180)
+
+==== ANN TRACE: GPU DMEM Bank 3 ====
+  X:  3f80 3f80 3f80 3f80
+  W1: 3f80 3f80 3f80 3f80
+  B1: 0000 0000 0000 0000
+  W2: 3f80 3f80 3f80 3f80
+  B2: 0000 0000 0000 0000
+  H:  4080 4080 4080 4080  (exp 4080)
+  Y:  4180 4180 4180 4180  (exp 4180)
+
+==== ANN TRACE: CPU DMEM [80..87] (D_PACK target) ====
+  [80] 41804180  [81] 41804180  [82] 41804180  [83] 41804180
+  [84] 41804180  [85] 41804180  [86] 41804180  [87] 41804180
+
+==== ANN TRACE: TX output ====
+  tx_cnt = 4
+  TX[0] = 4180418041804180
+  TX[1] = 4180418041804180
+  TX[2] = 4180418041804180
+  TX[3] = 4180418041804180
+
+    [PASS] T1: ANN TX count = 4
+    [PASS] T2: ANN bank0: Y=16.0 = 0x4180418041804180
+    [PASS] T3: ANN bank1: Y=16.0 = 0x4180418041804180
+    [PASS] T4: ANN bank2: Y=16.0 = 0x4180418041804180
+    [PASS] T5: ANN bank3: Y=16.0 = 0x4180418041804180
+    [PASS] T6: ANN ctrl = 0x20
+
+--- Test ANN full-model staging: thread1 weight slice ---
+    [PASS] T7: ANN full-stage TX count = 2
+    [PASS] T8: ANN full-stage TX[0] = 0xbced3ec3bec4bf67
+    [PASS] T9: ANN full-stage TX[1] = 0x3e9b3e8bbdd0befe
+    [PASS] T10: ANN full-stage ctrl = 0x24
+
+--- Test ANN full-model GPU load: bank-striped slice ---
+    [PASS] T11: ANN full-load TX count = 4
+    [PASS] T12: ANN full-load bank0 = 0xbe503ec1be9f3e2c
+    [PASS] T13: ANN full-load bank1 = 0xbced3ec3bec4bf67
+    [PASS] T14: ANN full-load bank2 = 0xbf523f213f5cbfb1
+    [PASS] T15: ANN full-load bank3 = 0xbf7e3fb93f533f88
+    [PASS] T16: ANN full-load ctrl = 0x26
+
+--- Test ANN full-model tiled inference (40->96->42->4) ---
+    [INFO] ANN tiled launches = 515
+    [INFO] ANN tiled cycles (end-to-end wait) = 490795
+    [INFO] ANN active cycles (pp_active only) = 490280
+    [INFO] Plain tiles: 480 launches, 457440 cycles total, avg 953
+    [INFO] ReLU tiles : 35 launches, 33355 cycles total, avg 953
+    [INFO] Asset source = GPU_HW_RELU
+    [INFO] Expected logits rows:
+      exp row0: c0d5 417c 43b1 4392
+      exp row1: 4184 c225 c29c 3f16
+      exp row2: c1f0 4012 c363 c340
+      exp row3: c1e4 c086 c337 c32b
+    [INFO] Final logits rows:
+      row0: c0d5 417c 43b1 4392
+      row1: 4184 c225 c29c 3f16
+      row2: c1f0 4012 c363 c340
+      row3: c1e4 c086 c337 c32b
+    [INFO] Expected output (packed hex):
+      exp row0: 0x439243b1417cc0d5
+      exp row1: 0x3f16c29cc2254184
+      exp row2: 0xc340c3634012c1f0
+      exp row3: 0xc32bc337c086c1e4
+    [INFO] Computed output (packed hex):
+      got row0: 0x439243b1417cc0d5
+      got row1: 0x3f16c29cc2254184
+      got row2: 0xc340c3634012c1f0
+      got row3: 0xc32bc337c086c1e4
+    [PASS] T17: ANN full tiled TX count = 4
+    [PASS] T18: ANN full tiled row0 = 0x439243b1417cc0d5
+    [PASS] T19: ANN full tiled row1 = 0x3f16c29cc2254184
+    [PASS] T20: ANN full tiled row2 = 0xc340c3634012c1f0
+    [PASS] T21: ANN full tiled row3 = 0xc32bc337c086c1e4
+    [PASS] T22: ANN full tiled ctrl = 0x2a
+
+--- Test 26: ANN full-model hardware-owned flow ---
+    [INFO] HW flow: preload words/bank = 1020 + 82
+    [INFO] HW flow: GPU kernel instructions = 60
+    [INFO] HW flow: CPU scheduler instructions = 116
+    [INFO] HW flow active cycles = 77616
+    [INFO] Expected post-processed output (packet-major hex):
+      exp pkt0: 0xc1e4c1f04184c0d5
+      exp pkt1: 0xc0864012c225417c
+      exp pkt2: 0xc337c363c29c43b1
+      exp pkt3: 0xc32bc3403f164392
+    [INFO] Computed post-processed output (packet-major hex):
+      got pkt0: 0xc1e4c1f04184c0d5
+      got pkt1: 0xc0864012c225417c
+      got pkt2: 0xc337c363c29c43b1
+      got pkt3: 0xc32bc3403f164392
+    [PASS] T23: ANN HW TX count = 4
+    [PASS] T24: ANN HW pkt0 = 0xc1e4c1f04184c0d5
+    [PASS] T25: ANN HW pkt1 = 0xc0864012c225417c
+    [PASS] T26: ANN HW pkt2 = 0xc337c363c29c43b1
+    [PASS] T27: ANN HW pkt3 = 0xc32bc3403f164392
+    [PASS] T28: ANN HW ctrl = 0x2b
+
+--- Test 27: GPU DMEM high-address DMA round-trip ---
+    [PASS] T29: T26 TX count = 1
+    [PASS] T30: T26 top-of-bank DMA round-trip = 0x00000000beefcafe
+    [PASS] T31: T26 ctrl = 0x28
+
+================================================================
+  *** ALL 31 CHECKS PASSED ***
+  Total checks: 31
+================================================================
+
+../tb/model_tb.v:5625: $finish called at 6142176000 (1ps)

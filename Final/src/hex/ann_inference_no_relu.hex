@@ -1,0 +1,21 @@
+// GPU IMEM - ann_inference linear tile kernel (16 instructions)
+// Used for:
+//   - intermediate K tiles in hidden layers
+//   - final output layer tile (42 -> 4 logits)
+
+0x20000000  // [ 0] MOVI       R0, 0        ; ADDR_A
+0xF4400000  // [ 1] WMMA.LOAD  A, R4,  R0, 0
+0x20000004  // [ 2] MOVI       R0, 4        ; ADDR_B
+0xF5800000  // [ 3] WMMA.LOAD  B, R8,  R0, 0
+0x20000008  // [ 4] MOVI       R0, 8        ; ADDR_C
+0xF6C00000  // [ 5] WMMA.LOAD  C, R12, R0, 0
+0xECC48C00  // [ 6] WMMA.MMA   R12, R4, R8, R12
+0x2000000C  // [ 7] MOVI       R0, 12       ; ADDR_D
+0xFCC00000  // [ 8] WMMA.STORE R12, R0, 0
+0xC8000000  // [ 9] RET
+0xE1A00000  // [10] NOP / pad
+0xE1A00000  // [11] NOP / pad
+0xE1A00000  // [12] NOP / pad
+0xE1A00000  // [13] NOP / pad
+0xE1A00000  // [14] NOP / pad
+0xE1A00000  // [15] NOP / pad
