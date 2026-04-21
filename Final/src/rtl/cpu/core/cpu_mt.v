@@ -61,6 +61,7 @@ module cpu_mt (
     output wire [3:0] cp_reg_o,
     output wire [31:0] cp_wr_data_o,
     input wire [31:0] cp_rd_data_i,
+    output wire [1:0] cp_tid_o,  // v3.2: expose thread ID for CR10 MRC
     output wire cpu_done
 );
 
@@ -623,6 +624,7 @@ alu u_alu (
 assign cp_wen_o = cp_wen_ex2;
 assign cp_ren_o = cp_ren_ex2;
 assign cp_reg_o = base_reg_ex2;
+assign cp_tid_o = tid_ex2;   // v3.2: per-MRC thread ID for CR10
 assign cp_wr_data_o = rd_data_ex2;
 
 /* Branch */

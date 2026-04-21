@@ -283,8 +283,10 @@ cpu_mt u_cpu_mt (
     // CP10
     .cp_wen_o(cp_wen), .cp_ren_o(cp_ren), .cp_reg_o(cp_reg),
     .cp_wr_data_o(cp_wr_data), .cp_rd_data_i(cp_rd_data),
+    .cp_tid_o(cp_tid),
     .cpu_done(cpu_done_w)
 );
+wire [1:0] cp_tid;
 
 // ================================================================
 //   CP10 — Compute Coprocessor Register File
@@ -303,7 +305,8 @@ cp10_regfile u_cp10 (
     .gpu_kernel_start(gpu_kernel_start_w), .gpu_reset_n(gpu_reset_n_w),
     .gpu_entry_pc(gpu_entry_pc_w), .gpu_thread_mask(gpu_thread_mask_w),
     .gpu_scratch(gpu_scratch_w),
-    .gpu_kernel_done(gpu_kernel_done_w), .gpu_active(gpu_active_r)
+    .gpu_kernel_done(gpu_kernel_done_w), .gpu_active(gpu_active_r),
+    .cpu_tid(cp_tid)
 );
 
 // ================================================================

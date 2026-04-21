@@ -1,783 +1,1309 @@
 #!/usr/bin/perl -w
-# model_test — socreg.pl v3.0 + model_tb.v ANN inference fused in.
-# Base: socreg.pl (40 NetFPGA SoC HW tests, skips T2/T7 MUL).
-# New : t_ann() — translates model_tb.v "Test ANN: 2-layer WMMA inference (Y=16.0)"
-#                from rx()/cmd()/send_nop_pairs() Verilog drives into MMIO iw() calls.
-# All encodings verified against soc_tb.v v6.0 / model_tb.v v1.0.
+# model_test — full ANN model HW test (40→96→42→4)
+#
+# Mirrors model_tb.v "HW scheduler" (T5) — the on-SoC scheduler program runs
+# the 36-tile outer loop + DMA + GPU kicks. Thread 0 is gated-in via the new
+# CR10 MRC (CPU thread-ID read) so only one thread executes the scheduler;
+# threads 1..3 halt immediately.  Previously relied on a sim-only regfile
+# poke; v2.0 uses the CR10 TID path (requires cp10_regfile.v + cpu_mt.v +
+# soc.v changes shipped together).
+#
+# Large injection packets are split into multiple <60 DW packets so each
+# fits inside the SoC's MMIO scratch buffer.  Each sub-packet just does a
+# LOAD_DMEM (or LOAD_IMEM) with no CPU_START, so pkt_proc drains back to
+# IDLE between packets and the CPU DMEM retains the cumulative data.
+# A final packet triggers CPU_START + READBACK + SEND_PKT.
+#
+# Weight layout follows train_ann_hw_relu.py: W1(96×40), B1(96),
+# W2(42×96), B2(42), W3(4×42), B3(4).  Flattened as ANN_WEIGHT_LINEAR_COUNT
+# = 8182 BF16 values, striped across 4 thread hex files (2048 each).
+#
+# Expected output (packet-major BF16, from model_tb sim pass log):
+#   pkt0: 0xC1E4_C1F0_4184_C0D5
+#   pkt1: 0xC086_4012_C225_417C
+#   pkt2: 0xC337_C363_C29C_43B1
+#   pkt3: 0xC32B_C340_3F16_4392
+
 use strict;
-use Time::HiRes qw(usleep gettimeofday tv_interval);
+use Time::HiRes qw(usleep);
 
-my $SW_DATA_HI  = 0x2000200; my $SW_DATA_LO  = 0x2000204;
-my $SW_CTRL     = 0x2000208; my $SW_CMD       = 0x200020c;
-my $HW_ST       = 0x2000210;
-my $HW_W0H      = 0x2000214; my $HW_W0L      = 0x2000218;
-my $HW_W1H      = 0x200021c; my $HW_W1L      = 0x2000220;
-my $NOP = 0xE1A00000; my $HALT = 0xEAFFFFFE;
-my ($pass,$fail,$txn,$err) = (0,0,0,0);
-my ($ps,$wc,$V) = (0,0,1);
+# ══════════════════════════════════════════════════════════════
+#  SoC MMIO map
+# ══════════════════════════════════════════════════════════════
+my $SW_DATA_HI = 0x2000200; my $SW_DATA_LO = 0x2000204;
+my $SW_CTRL    = 0x2000208; my $SW_CMD     = 0x200020c;
+my $HW_ST      = 0x2000210;
+my $HW_W0H     = 0x2000214; my $HW_W0L     = 0x2000218;
+my $HW_W1H     = 0x200021c; my $HW_W1L     = 0x2000220;
+my $CMD_ENABLE = 0x02;
+my $CMD_CLEAR  = 0x04;
+my $CMD_DRAIN  = 0x08;
 
-sub rw { my($a,$v)=@_; $v&=0xFFFFFFFF; $txn++; system(sprintf("regwrite 0x%08x 0x%08x >/dev/null 2>&1",$a,$v)); }
-sub rr { my($a)=@_; $txn++; my @o=`regread 0x${\sprintf("%08x",$a)} 2>/dev/null`; for(@o){return hex($1) if/:\s+(0x[0-9a-f]+)/i} $err++; return 0; }
-sub ds { my($s,$l)=@_; printf("    [%s] st=%08x rdy=%d buf=%d dr=%d drd=%d txa=%d txd=%d txw=%d pkt=%d\n",$l,$s,($s>>7)&1,($s>>8)&0x3F,($s>>4)&1,($s>>5)&1,($s>>3)&1,($s>>2)&1,($s>>16)&0x3F,$s&3) if $V; }
-sub rs { my $s=rr($HW_ST); ds($s,$_[0]||"st"); $s }
-sub ic { rw($SW_CMD,0x06); usleep(10000); rw($SW_CMD,0x02); usleep(1000); $ps=0; $wc=0; }
-sub iw { my($h,$l,$c)=@_; rw($SW_DATA_HI,$h); rw($SW_DATA_LO,$l); rw($SW_CTRL,$c); $ps^=1; rw($SW_CMD,0x02|$ps); usleep(500); $wc++; }
-sub id { printf("  [DRAIN] %d words\n",$wc); rw($SW_CMD,0x0A|$ps); usleep(1000); for(0..19){usleep(5000);my$s=rr($HW_ST);last if($s>>5)&1} }
-sub np { iw($NOP,$NOP,0); }
-sub cw { my($o,$a,$n,$p)=@_; ((($o&0xF)<<28)|(($a&0xFFF)<<16)|($n&0xFFFF), $p&0xFFFFFFFF) }
-sub pt { my($n,$ms)=@_; $n||=200; $ms||=50; for(0..$n-1){usleep($ms*1000);my$s=rr($HW_ST);if(($s>>2)&1){printf("  [POLL] done @ %d\n",$_+1);return 1}} print "  [TIMEOUT]\n"; 0 }
-sub cr { my@w; for my$r($HW_W0H,$HW_W0L,$HW_W1H,$HW_W1L){push@w,rr($r)} printf("  TX[0]=%08X_%08X TX[1]=%08X_%08X\n",@w); @w }
-sub c4 { my($l,$d,$g0,$g1,$g2,$g3,$e0,$e1,$e2,$e3)=@_;
-  if(!$d){print "  [FAIL] $l timeout\n";$fail++;return}
-  for([0,$g0,$g1,$e0,$e1],[1,$g2,$g3,$e2,$e3]){my($i,$gh,$gl,$eh,$el)=@$_;
-    if($gh==$eh&&$gl==$el){printf("  [PASS] $l TX[%d]={%X,%X}\n",$i,$gh,$gl);$pass++}
-    else{printf("  [FAIL] $l TX[%d]={%X,%X} exp {%X,%X}\n",$i,$gh,$gl,$eh,$el);$fail++}}}
-sub banner { print "\n" . "=" x 60 . "\n  $_[0]\n" . "=" x 60 . "\n\n" }
+# ══════════════════════════════════════════════════════════════
+#  ANN constants (mirror model_tb localparams)
+# ══════════════════════════════════════════════════════════════
+my $ANN_N_FEAT              = 40;
+my $ANN_H1                  = 96;
+my $ANN_H2                  = 42;
+my $ANN_N_CLASS             = 4;
+my $ANN_MODEL_THREAD_DEPTH  = 2048;
+my $ANN_WEIGHT_LINEAR_COUNT = 8182;
+my $ANN_L1_W_OFF = 0;
+my $ANN_L1_B_OFF = $ANN_L1_W_OFF + $ANN_H1 * $ANN_N_FEAT;           # 3840
+my $ANN_L2_W_OFF = $ANN_L1_B_OFF + $ANN_H1;                          # 3936
+my $ANN_L2_B_OFF = $ANN_L2_W_OFF + $ANN_H2 * $ANN_H1;                # 7968
+my $ANN_L3_W_OFF = $ANN_L2_B_OFF + $ANN_H2;                          # 8010
+my $ANN_L3_B_OFF = $ANN_L3_W_OFF + $ANN_N_CLASS * $ANN_H2;           # 8178
 
-# ── Compact GPU ARM template ──────────────────────────────────
-# Generates LOAD_IMEM + ARM program for: D_IMEM(16) → [D_UNPACK] → GPU → D_PACK
-# D_IMEM always transfers 16 words (matching send_gpu_imem count=8 DWs)
-sub gpu_arm {
-  my($ctrl,$du,$dsrc,$dlen,$gnop)=@_;  # dunpack_len(0=skip), dpack_src, dpack_len, gpu_nop_pairs
-  my $has_u = $du>0 ? 1 : 0;
-  my $dws = 4 + $has_u*4 + 3+$gnop + 6;
-  my @c=cw(1,0,$dws,0); iw($c[0],$c[1],$ctrl);
-  # D_IMEM: CR0=0,CR1=0,CR2=16,CR3=5
-  iw(0xEE000A10,0xE3A00000,0); iw(0xE3A01010,0xEE010A10,0);
-  iw(0xE3A02005,0xEE021A10,0); iw($NOP,0xEE032A10,0);
-  if($has_u){ # D_UNPACK: CR0=16,CR1=0,CR2=du,CR3=65
-    iw(0xEE000A10,0xE3A00010,0); iw(0xEE011A10,0xE3A01000,0);
-    iw(0xEE022A10,0xE3A02000|($du&0xFF),0); iw(0xEE033A10,0xE3A03041,0);
-  }
-  # GPU launch: CR4=0,CR7=15,CR5=1
-  iw(0xEE040A10,0xE3A00000,0); iw(0xEE071A10,0xE3A0100F,0);
-  iw(0xEE052A10,0xE3A02001,0);
-  for(1..$gnop){np()}
-  # D_PACK: CR0=src,CR1=32,CR2=dlen,CR3=67
-  iw(0xEE000A10,0xE3A00000|($dsrc&0xFF),0); iw(0xEE011A10,0xE3A01020,0);
-  iw(0xEE022A10,0xE3A02000|($dlen&0xFF),0); iw(0xEE033A10,0xE3A03043,0);
-  np(); iw($NOP,$HALT,0);
+my $ANN_HW_GPU_PARAM_BASE   = 2208;
+my $ANN_HW_GPU_W1_BASE      = 0;
+my $ANN_HW_GPU_B1_BASE      = 960;
+my $ANN_HW_GPU_W2_BASE      = 1056;
+my $ANN_HW_GPU_B2_BASE      = 2112;
+my $ANN_HW_GPU_W3_BASE      = 2156;
+my $ANN_HW_GPU_B3_BASE      = 2200;
+my $ANN_HW_GPU_X0_BASE      = 2240;
+my $ANN_HW_GPU_X1_BASE      = 2280;
+my $ANN_HW_GPU_X2_BASE      = 2380;
+my $ANN_HW_GPU_X3_BASE      = 2424;
+my $ANN_HW_PRELOAD0_WPB     = 1020;
+my $ANN_HW_PRELOAD1_WPB     = 82;
+my $ANN_HW_PRELOAD1_GPU_BASE = 2040;
+my $ANN_HW_COPY_BUF_BASE    = 16;
+my $ANN_HW_GPUK_CPU_BASE    = 64;
+my $ANN_HW_INPUT_CPU_BASE   = 128;
+my $ANN_HW_SCHED_CPU_BASE   = 256;
+my $ANN_HW_READBACK_CPU_BASE = 800;
+my $ANN_HW_SCHED_RECORD_WORDS = 13;
+my $ANN_HW_TILE_COUNT       = 36;
+my $ANN_HW_GPU_LINEAR_PC    = 0;
+my $ANN_HW_GPU_RELU_PC      = 28;
+my $ANN_HW_DMA_WAIT_PARAM   = 16;
+my $ANN_HW_DMA_WAIT_INPUT   = 40;
+my $ANN_HW_DMA_WAIT_GPU     = 400;
+my $ANN_HW_DMA_WAIT_COPY_LONG  = 50000;
+my $ANN_HW_DMA_WAIT_COPY_SHORT = 5000;
+
+my $NOP     = 0xE1A00000;
+my $HALT    = 0xEAFFFFFE;
+my $SHIFT_LSL = 0b00;
+my $SHIFT_LSR = 0b01;
+my $SHIFT_ASR = 0b10;
+
+# Chunk size for multi-packet LOAD: DW count per sub-packet, well below
+# the SoC MMIO scratch buffer (observed ceiling ~64 DWs/packet).
+my $CHUNK_DW = 40;
+
+my $MODEL_DIR = "sw/model";     # override with MODEL_DIR env var
+$MODEL_DIR = $ENV{MODEL_DIR} if exists $ENV{MODEL_DIR};
+
+# ══════════════════════════════════════════════════════════════
+#  State
+# ══════════════════════════════════════════════════════════════
+my ($pass, $fail, $txn, $err) = (0, 0, 0, 0);
+my ($ps, $wc, $V) = (0, 0, 1);
+my @weights = ([], [], [], []);   # per-thread BF16 weights
+my @gpu_bank = ([], [], [], []);   # per-bank GPU DMEM image (16-bit words)
+my @copy_prog;                     # ARM instrs (32b)
+my @gpu_prog;                      # GPU instrs (32b)
+my @sched_prog;                    # ARM instrs (32b)
+my @final_dmem;                    # CPU DMEM image (32b words)
+my $copy_prog_len  = 0;
+my $gpu_prog_len   = 0;
+my $sched_prog_len = 0;
+my $final_dmem_words = 0;
+
+# ══════════════════════════════════════════════════════════════
+#  MMIO primitives
+# ══════════════════════════════════════════════════════════════
+sub rw { my($a,$v)=@_; $v &= 0xFFFFFFFF; $txn++;
+    system(sprintf("regwrite 0x%08x 0x%08x >/dev/null 2>&1",$a,$v)); }
+sub rr { my($a)=@_; $txn++;
+    my @o=`regread 0x${\sprintf("%08x",$a)} 2>/dev/null`;
+    for(@o){return hex($1) if/:\s+(0x[0-9a-f]+)/i}
+    $err++; return 0; }
+sub dump_st { my ($lbl) = @_; my $s = rr($HW_ST);
+    printf("    [%-12s] ST=%08X rdy=%d buf=%2d dr=%d drd=%d txa=%d txd=%d txw=%2d pkt=%d\n",
+        $lbl, $s, ($s>>7)&1, ($s>>8)&0x3F, ($s>>4)&1, ($s>>5)&1,
+        ($s>>3)&1, ($s>>2)&1, ($s>>16)&0x3F, $s&3) if $V;
+    return $s; }
+sub ic  { rw($SW_CMD, $CMD_CLEAR | $CMD_ENABLE); usleep(10000);
+          rw($SW_CMD, $CMD_ENABLE);              usleep(1000);
+          $ps = 0; $wc = 0; }
+sub hard_reset {
+    rw($SW_CMD, $CMD_DRAIN | $CMD_ENABLE); usleep(20000);
+    rw($SW_CMD, 0);                         usleep(5000);
+    rw($SW_CMD, $CMD_CLEAR);                usleep(20000);
+    rw($SW_CMD, 0);                         usleep(5000);
+    rw($SW_CMD, $CMD_CLEAR | $CMD_ENABLE);  usleep(20000);
+    rw($SW_CMD, $CMD_ENABLE);               usleep(5000);
+    $ps = 0; $wc = 0;
+    dump_st("reset");
+}
+sub iw { my($h,$l,$c) = @_;
+    rw($SW_DATA_HI, $h); rw($SW_DATA_LO, $l); rw($SW_CTRL, $c);
+    $ps ^= 1; rw($SW_CMD, $CMD_ENABLE | $ps); usleep(500); $wc++; }
+sub id {
+    printf("  [DRAIN wc=%d]\n", $wc) if $V;
+    rw($SW_CMD, $CMD_DRAIN | $CMD_ENABLE | $ps); usleep(1000);
+    for my $i (0..29) { usleep(5000); my $s = rr($HW_ST);
+        return if ($s>>5) & 1; }
+    print "  [DRAIN] WARN drd not asserted\n"; }
+sub np { iw($NOP, $NOP, 0); }
+sub cw { my($o,$a,$n,$p) = @_;
+    ((($o&0xF)<<28) | (($a&0xFFF)<<16) | ($n&0xFFFF), $p & 0xFFFFFFFF) }
+sub pt { my($n,$ms) = @_; $n ||= 600; $ms ||= 50;
+    my $start_st = rr($HW_ST);
+    printf("  [POLL] start ST=0x%08X (pkt=%d drd=%d txd=%d)\n",
+        $start_st, $start_st & 3, ($start_st>>5)&1, ($start_st>>2)&1);
+    my $last_st = $start_st;
+    for my $i (0..$n-1) { usleep($ms*1000); my $s = rr($HW_ST);
+        if (($s>>2)&1) { printf("  [POLL] done @ %d (ST=0x%08X)\n", $i+1, $s); return 1 }
+        # Every ~5s, dump a status snapshot so we can see if pkt_proc is making progress
+        if (($i+1) % (int(5000/$ms) || 1) == 0 || $s != $last_st) {
+            printf("    [poll-%4d  %4dms] ST=0x%08X  pkt=%d drd=%d txa=%d txd=%d buf=%d txw=%d\n",
+                $i+1, ($i+1)*$ms, $s, $s & 3, ($s>>5)&1, ($s>>3)&1,
+                ($s>>2)&1, ($s>>8)&0x3F, ($s>>16)&0x3F);
+            $last_st = $s;
+        }
+    }
+    print "  [POLL] TIMEOUT\n"; 0 }
+sub cr { my @w; for my $r ($HW_W0H,$HW_W0L,$HW_W1H,$HW_W1L) { push @w, rr($r) }
+    printf("  TX[0]=%08X_%08X TX[1]=%08X_%08X\n", @w); @w }
+sub banner { print "\n" . "=" x 64 . "\n  $_[0]\n" . "=" x 64 . "\n\n" }
+sub phase  { printf("  ── %s ──\n", $_[0]) if $V }
+
+# ══════════════════════════════════════════════════════════════
+#  ARM instruction encoders (port of model_tb arm_* functions)
+# ══════════════════════════════════════════════════════════════
+sub arm_mov_imm   { my ($rd,$imm) = @_;
+    0xE3A00000 | (($rd & 0xF) << 12) | ($imm & 0xFF) }
+sub arm_ldr_imm   { my ($rd,$rn,$off) = @_;
+    0xE5900000 | (($rn & 0xF) << 16) | (($rd & 0xF) << 12) | ($off & 0xFFF) }
+sub arm_str_imm   { my ($rd,$rn,$off) = @_;
+    0xE5800000 | (($rn & 0xF) << 16) | (($rd & 0xF) << 12) | ($off & 0xFFF) }
+sub arm_add_imm   { my ($rd,$rn,$imm) = @_;
+    0xE2800000 | (($rn & 0xF) << 16) | (($rd & 0xF) << 12) | ($imm & 0xFF) }
+sub arm_sub_imm   { my ($rd,$rn,$imm) = @_;
+    0xE2400000 | (($rn & 0xF) << 16) | (($rd & 0xF) << 12) | ($imm & 0xFF) }
+sub arm_cmp_imm   { my ($rn,$imm) = @_;
+    0xE3500000 | (($rn & 0xF) << 16) | ($imm & 0xFF) }
+sub arm_cmp_reg   { my ($rn,$rm) = @_;
+    0xE1500000 | (($rn & 0xF) << 16) | ($rm & 0xF) }
+sub arm_add_reg   { my ($rd,$rn,$rm) = @_;
+    0xE0800000 | (($rn & 0xF) << 16) | (($rd & 0xF) << 12) | ($rm & 0xF) }
+sub arm_mov_shift { my ($rd,$rm,$st,$sh) = @_;
+    0xE1A00000 | (($rd & 0xF) << 12) | (($sh & 0x1F) << 7) | (($st & 0x3) << 5) | ($rm & 0xF) }
+sub arm_orr_shift { my ($rd,$rn,$rm,$st,$sh) = @_;
+    0xE1800000 | (($rn & 0xF) << 16) | (($rd & 0xF) << 12)
+              | (($sh & 0x1F) << 7) | (($st & 0x3) << 5) | ($rm & 0xF) }
+sub arm_mcr       { my ($rd,$crn) = @_;
+    0xEE000A10 | (($crn & 0xF) << 16) | (($rd & 0xF) << 12) }
+sub arm_mrc       { my ($rd,$crn) = @_;
+    0xEE100A10 | (($crn & 0xF) << 16) | (($rd & 0xF) << 12) }
+sub arm_b_idx     { my ($cond,$from,$target) = @_;
+    my $off24 = ($target - $from - 2) & 0xFFFFFF;
+    (($cond & 0xF) << 28) | (0b101 << 25) | (0 << 24) | $off24 }
+
+# ══════════════════════════════════════════════════════════════
+#  GPU instruction encoders
+# ══════════════════════════════════════════════════════════════
+#   opcode[31:27], dt[26], imm[25:24], rd[23:20], ra[19:16], rb[15:12], offset[11:0] for R
+#   opcode[31:27], dt[26], imm[25:24], rd[23:20], ra[19:16], imm16[15:0]             for I
+my $OP_ADDI    = 0b10011;
+my $OP_LD      = 0b00010;
+my $OP_MOVI    = 0b00100;
+my $OP_SETP    = 0b10101;
+my $OP_BRA     = 0b10111;
+my $OP_PBRA    = 0b11000;
+my $OP_RET     = 0b11001;
+my $OP_MAX     = 0b01010;
+my $WMMA_MMA   = 0b11101;
+my $WMMA_LOAD  = 0b11110;
+my $WMMA_STORE = 0b11111;
+my $COMP_NE    = 0b01;
+
+sub enc_r { my ($op,$dt,$rd,$ra,$rb) = @_;
+    (($op & 0x1F) << 27) | (($dt & 1) << 26) | (($rd & 0xF) << 20)
+    | (($ra & 0xF) << 16) | (($rb & 0xF) << 12) }
+sub enc_i { my ($op,$dt,$rd,$ra,$imm) = @_;
+    (($op & 0x1F) << 27) | (($dt & 1) << 26) | (($rd & 0xF) << 20)
+    | (($ra & 0xF) << 16) | ($imm & 0xFFFF) }
+sub enc_movi_dt { my ($dt,$rd,$imm) = @_;
+    enc_i($OP_MOVI, $dt, $rd, 0, $imm) }
+sub enc_wmma_load  { my ($sel,$rd,$ra,$off) = @_;
+    (($WMMA_LOAD & 0x1F) << 27) | (1 << 26) | (($sel & 3) << 24)
+    | (($rd & 0xF) << 20) | (($ra & 0xF) << 16) | ($off & 0xFFFF) }
+sub enc_wmma_store { my ($rd,$ra,$off) = @_;
+    (($WMMA_STORE & 0x1F) << 27) | (1 << 26) | (0 << 24)
+    | (($rd & 0xF) << 20) | (($ra & 0xF) << 16) | ($off & 0xFFFF) }
+sub enc_wmma_mma   { my ($rd,$ra,$rb,$rc) = @_;
+    (($WMMA_MMA & 0x1F) << 27) | (1 << 26) | (0 << 24)
+    | (($rd & 0xF) << 20) | (($ra & 0xF) << 16) | (($rb & 0xF) << 12)
+    | (($rc & 0xF) << 8) }
+sub enc_setp { my ($dt,$cmp,$psel,$ra,$rb) = @_;
+    (($OP_SETP & 0x1F) << 27) | (($dt & 1) << 26) | (($cmp & 3) << 24)
+    | ((($psel & 3) & 0x3) << 16) | (($ra & 0xF) << 20) | (($rb & 0xF) << 12) }
+sub enc_bra  { my ($target) = @_;
+    (($OP_BRA & 0x1F) << 27) | ($target & 0x07FFFFFF) }
+sub enc_pbra { my ($psel,$target,$reconv) = @_;
+    (($OP_PBRA & 0x1F) << 27) | (($psel & 3) << 25)
+    | (($target & 0x1FFF) << 12) | ($reconv & 0xFFF) }
+
+# ══════════════════════════════════════════════════════════════
+#  BF16 helpers
+# ══════════════════════════════════════════════════════════════
+sub pack4_bf16 {
+    my ($v0,$v1,$v2,$v3) = @_;
+    # returns [HI32, LO32]
+    my $lo = (($v1 & 0xFFFF) << 16) | ($v0 & 0xFFFF);
+    my $hi = (($v3 & 0xFFFF) << 16) | ($v2 & 0xFFFF);
+    [$hi & 0xFFFFFFFF, $lo & 0xFFFFFFFF]
+}
+sub pack2_u16 {
+    my ($lo16,$hi16) = @_;
+    (($hi16 & 0xFFFF) << 16) | ($lo16 & 0xFFFF)
 }
 
-# ── Tail: zero readback + 3 action commands ───────────────────
-sub tail { my($ra,$rc)=@_;  # readback_addr, readback_dw_count
-  my@c=cw(2,$ra,$rc,0); iw($c[0],$c[1],0);
-  for(1..$rc){iw(0,0,0)}
-  @c=cw(3,0,0,0);     iw($c[0],$c[1],0);
-  @c=cw(4,$ra,$rc,0); iw($c[0],$c[1],0);
-  @c=cw(5,0,0,0);     iw($c[0],$c[1],0);
+# Load 4 thread weight files from $MODEL_DIR.
+#
+# Expected layout:
+#   $MODEL_DIR/ann_weights_dmem_t0.hex
+#   $MODEL_DIR/ann_weights_dmem_t1.hex
+#   $MODEL_DIR/ann_weights_dmem_t2.hex
+#   $MODEL_DIR/ann_weights_dmem_t3.hex
+#
+# File format: 2048 lines, one BF16 value per line, 4 hex digits (no 0x prefix).
+# Files are the same ones model_tb.v reads from Final/model/GPU_HW_RELU/.
+sub load_weights {
+    die "MODEL_DIR '$MODEL_DIR' does not exist\n" unless -d $MODEL_DIR;
+    for my $t (0..3) {
+        my $f = "$MODEL_DIR/ann_weights_dmem_t$t.hex";
+        open(my $fh, "<", $f)
+            or die "Can't open $f: $!\nExpected 4 hex files (t0..t3) in $MODEL_DIR\n";
+        my @w;
+        while (my $ln = <$fh>) {
+            $ln =~ s/\s+//g; next if $ln eq "" || $ln =~ /^#/;
+            push @w, hex($ln);
+        }
+        close $fh;
+        push @w, 0 while @w < $ANN_MODEL_THREAD_DEPTH;
+        die sprintf("%s has %d entries (expected %d)\n", $f, scalar(@w), $ANN_MODEL_THREAD_DEPTH)
+            if @w != $ANN_MODEL_THREAD_DEPTH;
+        $weights[$t] = \@w;
+    }
+    printf("  [ASSET] loaded 4 × %d BF16 weights from %s\n",
+        $ANN_MODEL_THREAD_DEPTH, $MODEL_DIR) if $V;
 }
 
-# ══════════════════════════════════════════════════════════════
-#  T1: CPU ADD (10+20=30)
-# ══════════════════════════════════════════════════════════════
-sub t1 { banner("T1: CPU ADD (10+20=30)"); ic(); my@c;
-  @c=cw(1,0,3,0); iw($c[0],$c[1],0x04);
-  iw(0xE5901000,0xE3A00000,0); iw(0xE0813002,0xE5902004,0); iw($HALT,0xE5803008,0);
-  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0x00000014,0x0000000A,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T1",pt(),cr(),0x14,0x0A,0,0x1E); }
+sub flat_bf16 { my ($idx) = @_;
+    return 0 if $idx < 0 || $idx >= 4*$ANN_MODEL_THREAD_DEPTH;
+    my $t = int($idx / $ANN_MODEL_THREAD_DEPTH);
+    my $o = $idx % $ANN_MODEL_THREAD_DEPTH;
+    $weights[$t][$o] & 0xFFFF
+}
 
-# T3: CPU MCR/MRC CP10
-sub t3 { banner("T3: CPU MCR/MRC CP10 (CR8=42)"); ic(); my@c;
-  @c=cw(1,0,3,0); iw($c[0],$c[1],0x02);
-  iw(0xEE081A10,0xE3A0102A,0); iw(0xE3A00000,0xEE182A10,0); iw($HALT,0xE5802000,0);
-  @c=cw(2,0,1,0); iw($c[0],$c[1],0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,1,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); my@r=cr(); c4("T3",pt(),@r,0,0x2A,0,0); }
+sub l1_w  { my ($o,$i) = @_;
+    ($o<0||$o>=$ANN_H1||$i<0||$i>=$ANN_N_FEAT) ? 0
+        : flat_bf16($ANN_L1_W_OFF + $o*$ANN_N_FEAT + $i) }
+sub l1_b  { my ($o) = @_;
+    ($o<0||$o>=$ANN_H1) ? 0 : flat_bf16($ANN_L1_B_OFF + $o) }
+sub l2_w  { my ($o,$i) = @_;
+    ($o<0||$o>=$ANN_H2||$i<0||$i>=$ANN_H1) ? 0
+        : flat_bf16($ANN_L2_W_OFF + $o*$ANN_H1 + $i) }
+sub l2_b  { my ($o) = @_;
+    ($o<0||$o>=$ANN_H2) ? 0 : flat_bf16($ANN_L2_B_OFF + $o) }
+sub l3_w  { my ($o,$i) = @_;
+    ($o<0||$o>=$ANN_N_CLASS||$i<0||$i>=$ANN_H2) ? 0
+        : flat_bf16($ANN_L3_W_OFF + $o*$ANN_H2 + $i) }
+sub l3_b  { my ($o) = @_;
+    ($o<0||$o>=$ANN_N_CLASS) ? 0 : flat_bf16($ANN_L3_B_OFF + $o) }
 
-# T4: CPU CMP+BEQ taken
-sub t4 { banner("T4: CPU CMP+BEQ (R1==5 -> EQ path, R2=2)"); ic(); my@c;
-  @c=cw(1,0,5,0); iw($c[0],$c[1],0x10);
-  iw(0xE5901000,0xE3A00000,0); iw(0x0A000001,0xE3510005,0); iw(0xEA000000,0xE3A02001,0);
-  iw(0xE5802004,0xE3A02002,0); iw($NOP,$HALT,0);
-  @c=cw(2,0,1,0); iw($c[0],$c[1],0); iw(0,5,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,1,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T4",pt(),cr(),2,5,0,0); }
+# Per-bank GPU DMEM write (matches ann_hw_gpu_write in model_tb)
+sub gpu_bank_write { my ($bank,$addr,$val) = @_;
+    $gpu_bank[$bank][$addr] = $val & 0xFFFF }
+sub gpu_bank_read  { my ($bank,$addr) = @_;
+    my $v = $gpu_bank[$bank][$addr];
+    defined($v) ? $v : 0 }
 
-# T5: GPU round-trip (100+200=300)
-sub t5 { banner("T5: GPU round-trip (100+200=300)"); ic(); my@c;
-  @c=cw(1,0,33,0); iw($c[0],$c[1],0x20);
-  iw(0xEE000A10,0xE3A00000,0); iw(0xE3A01008,0xEE010A10,0);
-  iw(0xE3A02005,0xEE021A10,0); iw($NOP,0xEE032A10,0);
-  for(1..4){np()} iw(0xEE040A10,$NOP,0);
-  iw(0xEE073A10,0xE3A0300F,0); iw(0xEE054A10,0xE3A04001,0);
-  for(1..12){np()} iw(0xEE000A10,$NOP,0);
-  iw(0xEE015A10,0xE3A05020,0); iw(0xEE026A10,0xE3A06001,0); iw(0xEE037A10,0xE3A07043,0);
-  for(1..5){np()} iw($NOP,$HALT,0);
-  @c=cw(2,0,4,0); iw($c[0],$c[1],0);
-  iw(0x202000C8,0x20100064,0); iw(0x20400000,0x30312000,0);
-  iw(0x20500000,0x08340000,0); iw(0xC8000000,0x08540001,0);
-  @c=cw(2,0x020,2,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0x020,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T5",pt(300),cr(),0x012C,0x012C,0x012C,0x012C); }
+sub gpu_image_zero {
+    for my $b (0..3) {
+        for my $i (0..4095) { $gpu_bank[$b][$i] = 0 }
+    }
+}
 
-# T6A: Back-to-back A (100+200=300)
-sub t6a { banner("T6A: Back-to-back A (100+200=300)"); ic(); my@c;
-  @c=cw(1,0,3,0); iw($c[0],$c[1],0x04);
-  iw(0xE5901000,0xE3A00000,0); iw(0xE0813002,0xE5902004,0); iw($HALT,0xE5803008,0);
-  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0xC8,0x64,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T6A",pt(),cr(),0xC8,0x64,0,0x12C); }
+# Weight packing — exact port of ann_hw_pack_l1/l2/l3
+sub pack_l1 {
+    for my $ot (0 .. ($ANN_H1/4 - 1)) {
+        for my $kt (0 .. ($ANN_N_FEAT/4 - 1)) {
+            my $tile_addr = $ANN_HW_GPU_W1_BASE + $ot*40 + $kt*4;
+            for my $bank (0..3) {
+                my $o = $ot*4 + $bank;
+                for my $col (0..3) {
+                    my $i = $kt*4 + $col;
+                    gpu_bank_write($bank, $tile_addr + $col, l1_w($o, $i));
+                }
+            }
+        }
+        for my $bank (0..3) {
+            my $o = $ot*4 + $bank;
+            for my $col (0..3) {
+                gpu_bank_write($bank, $ANN_HW_GPU_B1_BASE + $ot*4 + $col, l1_b($o));
+            }
+        }
+    }
+}
+sub pack_l2 {
+    for my $ot (0..10) {
+        for my $kt (0..23) {
+            my $tile_addr = $ANN_HW_GPU_W2_BASE + $ot*96 + $kt*4;
+            for my $bank (0..3) {
+                my $o = $ot*4 + $bank;
+                for my $col (0..3) {
+                    my $i = $kt*4 + $col;
+                    gpu_bank_write($bank, $tile_addr + $col, l2_w($o, $i));
+                }
+            }
+        }
+        for my $bank (0..3) {
+            my $o = $ot*4 + $bank;
+            for my $col (0..3) {
+                gpu_bank_write($bank, $ANN_HW_GPU_B2_BASE + $ot*4 + $col, l2_b($o));
+            }
+        }
+    }
+}
+sub pack_l3 {
+    for my $kt (0..10) {
+        for my $bank (0..3) {
+            my $o = $bank;
+            for my $col (0..3) {
+                my $i = $kt*4 + $col;
+                gpu_bank_write($bank, $ANN_HW_GPU_W3_BASE + $kt*4 + $col, l3_w($o, $i));
+            }
+        }
+    }
+    for my $bank (0..3) {
+        for my $col (0..3) {
+            gpu_bank_write($bank, $ANN_HW_GPU_B3_BASE + $col, l3_b($bank));
+        }
+    }
+}
+sub build_gpu_image { gpu_image_zero(); pack_l1(); pack_l2(); pack_l3(); }
 
-# T6B: Back-to-back B (1000+2000=3000) - reuses IMEM from T6A
-sub t6b { banner("T6B: Back-to-back B (1000+2000=3000)"); ic(); my@c;
-  # Reload IMEM for standalone safety
-  @c=cw(1,0,3,0); iw($c[0],$c[1],0x40);
-  iw(0xE5901000,0xE3A00000,0); iw(0xE0813002,0xE5902004,0); iw($HALT,0xE5803008,0);
-  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0x7D0,0x3E8,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T6B",pt(),cr(),0x7D0,0x3E8,0,0xBB8); }
+# GPU image → CPU DMEM packed word. Port of ann_hw_gpu_cpu_word.
+sub gpu_cpu_word { my ($bf16_base,$words_per_bank,$flat_idx) = @_;
+    my $bank = int($flat_idx / $words_per_bank);
+    my $wsel = $flat_idx % $words_per_bank;
+    my $lo = gpu_bank_read($bank & 3, $bf16_base + $wsel*2 + 0);
+    my $hi = gpu_bank_read($bank & 3, $bf16_base + $wsel*2 + 1);
+    pack2_u16($lo, $hi)
+}
 
-# T8: CPU loop sum [10,20,30,40]=100
-sub t8 { banner("T8: CPU loop sum (10+20+30+40=100)"); ic(); my@c;
-  @c=cw(1,0,7,0); iw($c[0],$c[1],0x04);
-  iw(0xE3A01000,0xE3A00000,0); iw(0xE3A03010,0xE3A02000,0);
-  iw(0xAA000003,0xE1520003,0); iw(0xE0811004,0xE7904002,0);
-  iw(0xEAFFFFF9,0xE2822004,0); iw($HALT,0xE5801010,0); iw($NOP,$NOP,0);
-  @c=cw(2,0,3,0); iw($c[0],$c[1],0);
-  iw(0x14,0x0A,0); iw(0x28,0x1E,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,3,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T8",pt(),cr(),0x14,0x0A,0x28,0x1E); }
-  # Note: TX[2]={0,100} not captured by HW snoop (only TX[0..1])
-
-# T9: Multiple CP10 registers
-sub t9 { banner("T9: CP10 multi-reg (CR0..CR8)"); ic(); my@c;
-  @c=cw(1,0,9,0); iw($c[0],$c[1],0x02);
-  iw(0xEE001A10,0xE3A01C05,0); iw(0xEE012A10,0xE3A02C06,0);
-  iw(0xEE043A10,0xE3A030FF,0); iw(0xEE084A10,0xE3A04C01,0);
-  iw(0xEE116A10,0xEE105A10,0); iw(0xEE188A10,0xEE147A10,0);
-  iw(0xE5805000,0xE3A00000,0); iw(0xE5807008,0xE5806004,0); iw($HALT,0xE580800C,0);
-  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T9",pt(),cr(),0x600,0x500,0x100,0xFF); }
-
-# T10: NOP command skip
-sub t10 { banner("T10: NOP command skip"); ic(); my@c;
-  @c=cw(1,0,3,0); iw($c[0],$c[1],0x08);
-  iw(0xE5901000,0xE3A00000,0); iw(0xE0813002,0xE5902004,0); iw($HALT,0xE5803008,0);
-  @c=cw(0,0,0,0); iw($c[0],$c[1],0); @c=cw(0,0,0,0); iw($c[0],$c[1],0);
-  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(3,7,0); iw(0,0,0);
-  @c=cw(0,0,0,0); iw($c[0],$c[1],0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T10",pt(),cr(),3,7,0,0x0A); }
-
-# T11: Large DMEM load
-sub t11 { banner("T11: Large DMEM (16 words)"); ic(); my@c;
-  @c=cw(1,0,4,0); iw($c[0],$c[1],0x01);
-  iw(0xE5901000,0xE3A00000,0); iw(0xE0813002,0xE5902004,0); iw($HALT,0xE5803020,0); iw($NOP,$NOP,0);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x2000,0x1000,0); iw(0xDEAD,0xDEAD,0); iw(0xDEAD,0xDEAD,0); iw(0xDEAD,0xDEAD,0);
-  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,5,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T11",pt(),cr(),0x2000,0x1000,0xDEAD,0xDEAD); }
-  # TX[2..4] not captured by HW snoop
-
-# T12: CPU BEQ not-taken (NE path)
-sub t12 { banner("T12: CPU BEQ not-taken (R1=99!=5)"); ic(); my@c;
-  @c=cw(1,0,5,0); iw($c[0],$c[1],0x10);
-  iw(0xE5901000,0xE3A00000,0); iw(0x0A000001,0xE3510005,0); iw(0xEA000000,0xE3A02001,0);
-  iw(0xE5802004,0xE3A02002,0); iw($NOP,$HALT,0);
-  @c=cw(2,0,1,0); iw($c[0],$c[1],0); iw(0,0x63,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,1,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T12",pt(),cr(),1,0x63,0,0); }
-
-# ══════════════════════════════════════════════════════════════
-#  GPU Kernel Tests (using compact ARM template)
-# ══════════════════════════════════════════════════════════════
-
-# T13: GPU LD/ADD/ST with D_UNPACK
-sub t13 { banner("T13: GPU LD/ADD/ST + D_UNPACK"); ic(); my@c;
-  gpu_arm(0x04, 2, 0, 2, 4);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x10100000,0x20000000,0); iw(0x30312000,0x10200001,0);
-  iw(0x20400000,0x08300002,0); iw(0xC8000000,0x08400003,0);
-  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(2,0x010,4,0); iw($c[0],$c[1],0);
-  iw(0,0x00C80064,0); iw(0,0x00C80064,0); iw(0,0x00C80064,0); iw(0,0x00C80064,0);
-  tail(0x020,4);
-  id(); c4("T13",pt(300),cr(),0x012C,0x00C80064,0x012C,0x00C80064); }
-
-# T14: GPU WMMA.MMA (1*1+0=4.0, bf16 0x4080)
-sub t14 { banner("T14: GPU WMMA.MMA (all 1.0, D=4.0)"); ic(); my@c;
-  gpu_arm(0x20, 0, 0, 2, 15);  # no D_UNPACK, 15 NOP pairs for WMMA
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x20103F80,0x20003F80,0); iw(0x20303F80,0x20203F80,0);
-  iw(0x20503F80,0x20403F80,0); iw(0x20703F80,0x20603F80,0);
-  iw(0x20900000,0x20800000,0); iw(0x20B00000,0x20A00000,0);
-  iw(0x20000000,0xECC04800,0); iw(0xC8000000,0xFCC00000,0);
-  tail(0x020,4);
-  id(); c4("T14",pt(300),cr(),0x40804080,0x40804080,0x40804080,0x40804080); }
-
-# T15: GPU per-thread TID (100+TID)
-sub t15 { banner("T15: GPU TID (100+TID per bank)"); ic(); my@c;
-  gpu_arm(0x08, 0, 0, 1, 4);  # no D_UNPACK
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x20100064,0x1C000000,0); iw(0x20300000,0x30201000,0);
-  iw(0x20400000,0x08230000,0); iw(0xC8000000,0x08430001,0);
-  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  tail(0x020,2);
-  id(); c4("T15",pt(300),cr(),0x65,0x64,0x67,0x66); }
-
-# T16: GPU K1 vec_add (10+20=30)
-sub t16 { banner("T16: GPU vec_add int16 (10+20=30)"); ic(); my@c;
-  gpu_arm(0x04, 1, 0, 1, 4);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x10100000,0x20000000,0); iw(0x30312000,0x10200001,0);
-  iw(0x20400000,0x08300000,0); iw(0xC8000000,0x08400001,0);
-  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
-  iw(0x0014000A,0x0014000A,0); iw(0x0014000A,0x0014000A,0);
-  tail(0x020,2);
-  id(); c4("T16",pt(300),cr(),0x1E,0x1E,0x1E,0x1E); }
-
-# T17: GPU K2 vec_sub (100-30=70)
-sub t17 { banner("T17: GPU vec_sub int16 (100-30=70)"); ic(); my@c;
-  gpu_arm(0x04, 1, 0, 1, 4);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x10100000,0x20000000,0); iw(0x38312000,0x10200001,0);
-  iw(0x20400000,0x08300000,0); iw(0xC8000000,0x08400001,0);
-  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
-  iw(0x001E0064,0x001E0064,0); iw(0x001E0064,0x001E0064,0);
-  tail(0x020,2);
-  id(); c4("T17",pt(300),cr(),0x46,0x46,0x46,0x46); }
-
-# T18: GPU K3 bf16_mul (2.0*3.0=6.0=0x40C0)
-sub t18 { banner("T18: GPU bf16_mul (2*3=6.0)"); ic(); my@c;
-  gpu_arm(0x04, 1, 0, 1, 4);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x14100000,0x20000000,0); iw(0x44312000,0x14200001,0);
-  iw(0x20400000,0x0C300000,0); iw(0xC8000000,0x08400001,0);
-  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
-  iw(0x40404000,0x40404000,0); iw(0x40404000,0x40404000,0);
-  tail(0x020,2);
-  id(); c4("T18",pt(300),cr(),0x40C0,0x40C0,0x40C0,0x40C0); }
-
-# T19: GPU K4 bf16_fma (2*3+1=7.0=0x40E0)
-sub t19 { banner("T19: GPU bf16_fma (2*3+1=7.0)"); ic(); my@c;
-  gpu_arm(0x04, 2, 0, 1, 4);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x14100000,0x20000000,0); iw(0x14300002,0x14200001,0);
-  iw(0x0C300000,0x4C312000,0); iw(0xC8000000,0x08000001,0);
-  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(2,0x010,4,0); iw($c[0],$c[1],0);
-  iw(0x00003F80,0x40404000,0); iw(0x00003F80,0x40404000,0);
-  iw(0x00003F80,0x40404000,0); iw(0x00003F80,0x40404000,0);
-  tail(0x020,2);
-  id(); c4("T19",pt(300),cr(),0x40E0,0x40E0,0x40E0,0x40E0); }
-
-# T20: GPU K5 relu bf16 (per-bank: -1->0, 2->2, -3->0, 5->5)
-sub t20 { banner("T20: GPU relu bf16 (per-bank)"); ic(); my@c;
-  gpu_arm(0x04, 1, 0, 1, 4);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x14100000,0x20000000,0); iw(0x54312000,0x20200000,0);
-  iw(0x08000001,0x0C300000,0); iw(0xC8000000,0x00000000,0);
-  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
-  iw(0x00004000,0x0000BF80,0); iw(0x000040A0,0x0000C040,0);
-  tail(0x020,2);
-  id(); c4("T20",pt(300),cr(),0x4000,0,0x40A0,0); }
-
-# T21: GPU K6 WMMA matmul (I * 2.0 = 2.0)
-sub t21 { banner("T21: GPU WMMA (I*2.0=2.0)"); ic(); my@c;
-  gpu_arm(0x20, 4, 0, 2, 8);  # dunpack=4, dpack=2, 8 NOP for WMMA
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x20100004,0x20000000,0); iw(0xF4810000,0xF4400000,0);
-  iw(0x20D00000,0x20C00000,0); iw(0x20F00000,0x20E00000,0);
-  iw(0x20000000,0xECC48C00,0); iw(0xC8000000,0xFCC00000,0);
-  iw(0,0,0); iw(0,0,0);
-  # Per-bank data: A=identity row, B=all-2.0
-  @c=cw(2,0x010,8,0); iw($c[0],$c[1],0);
-  iw(0,0x00003F80,0); iw(0x40004000,0x40004000,0);  # bank0: A={1,0,0,0}
-  iw(0,0x3F800000,0); iw(0x40004000,0x40004000,0);  # bank1: A={0,1,0,0}
-  iw(0x00003F80,0,0); iw(0x40004000,0x40004000,0);  # bank2: A={0,0,1,0}
-  iw(0x3F800000,0,0); iw(0x40004000,0x40004000,0);  # bank3: A={0,0,0,1}
-  tail(0x020,4);
-  id(); c4("T21",pt(300),cr(),0x40004000,0x40004000,0x40004000,0x40004000); }
-
-# ══════════════════════════════════════════════════════════════
-#  T22: Full Heterogeneous (int, +5 -> x2 -> +10 -> +7)
-# ══════════════════════════════════════════════════════════════
-sub t22 { banner("T22: Full heterogeneous int pipeline\n  [10,20,30,40]+5->x2->+10->+7=[47,67,87,107]"); ic(); my@c;
-  # Compact ARM: 42 DWs
-  @c=cw(1,0,42,0); iw($c[0],$c[1],0x04);
-  # Phase 1: CPU +5 (7 DW)
-  iw(0xE5901000,0xE3A00040,0); iw(0xE5801000,0xE2811005,0);
-  iw(0xE2811005,0xE5901004,0); iw(0xE5901008,0xE5801004,0);
-  iw(0xE5801008,0xE2811005,0); iw(0xE2811005,0xE590100C,0); iw($NOP,0xE580100C,0);
-  # Phase 2: D_IMEM 16 words (4 DW)
-  iw(0xEE000A10,0xE3A00000,0); iw(0xE3A01010,0xEE010A10,0);
-  iw(0xE3A02005,0xEE021A10,0); iw($NOP,0xEE032A10,0);
-  # Phase 3: D_UNPACK (4 DW)
-  iw(0xEE000A10,0xE3A00010,0); iw(0xEE011A10,0xE3A01000,0);
-  iw(0xEE022A10,0xE3A02001,0); iw(0xEE033A10,0xE3A03041,0);
-  # Phase 4: GPU K1 pc=0 (3+4=7 DW)
-  iw(0xEE040A10,0xE3A00000,0); iw(0xEE071A10,0xE3A0100F,0);
-  iw(0xEE052A10,0xE3A02001,0); for(1..4){np()}
-  # Phase 5: GPU K2 pc=8 (3+4=7 DW)
-  iw(0xEE040A10,0xE3A00008,0); iw(0xEE071A10,0xE3A0100F,0);
-  iw(0xEE052A10,0xE3A02001,0); for(1..4){np()}
-  # Phase 6: D_PACK (4 DW)
-  iw(0xEE000A10,0xE3A00000,0); iw(0xEE011A10,0xE3A01018,0);
-  iw(0xEE022A10,0xE3A02001,0); iw(0xEE033A10,0xE3A03043,0);
-  # Phase 7: CPU +7 (8+1=9 DW incl NOP pair for D_PACK margin)
-  np();
-  iw(0xE3A02080,0xE3A00060,0); iw(0xE2811007,0xE5901000,0);
-  iw(0xE5901004,0xE5821000,0); iw(0xE5821004,0xE2811007,0);
-  iw(0xE2811007,0xE5901008,0); iw(0xE590100C,0xE5821008,0);
-  iw(0xE582100C,0xE2811007,0); iw($NOP,$HALT,0);
-  # K1 int x2: LD->ADD R,R->ST
-  @c=cw(2,0,4,0); iw($c[0],$c[1],0);
-  iw(0x10100000,0x20000000,0); iw(0x08200000,0x30211000,0);
-  iw(0x08300001,0x20300000,0); iw(0xC8000000,0x00000000,0);
-  # K2 int +10: LD->MOVI 10->ADD->ST
-  @c=cw(2,8,4,0); iw($c[0],$c[1],0);
-  iw(0x10100000,0x20000000,0); iw(0x30312000,0x2020000A,0);
-  iw(0x20400000,0x08300000,0); iw(0xC8000000,0x08400001,0);
-  # Input [10,20,30,40]
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0); iw(0x14,0x0A,0); iw(0x28,0x1E,0);
-  # Zero readback
-  @c=cw(2,0x020,2,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0x020,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T22",pt(400),cr(),0x43,0x2F,0x6B,0x57); }
-
-# T23: CVT round-trip (different regs, 15->bf16->15)
-sub t23 { banner("T23: CVT round-trip (R1->R2->R3, expect 15)"); ic(); my@c;
-  gpu_arm(0x04, 1, 0, 1, 4);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x2010000F,0x20000000,0); iw(0x28320000,0x2C210000,0);
-  iw(0x20400000,0x08300000,0); iw(0xC8000000,0x08400001,0);
-  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
-  iw(0xBEEF,0xBEEF,0); iw(0xBEEF,0xBEEF,0);
-  tail(0x020,2);
-  id(); c4("T23",pt(300),cr(),0xF,0xF,0xF,0xF); }
-
-# T24: CVT self-ref rD==rA (deadlock test)
-sub t24 { banner("T24: CVT self-ref rD==rA (15 or 0xBEEF if deadlock)"); ic(); my@c;
-  gpu_arm(0x04, 1, 0, 1, 4);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x2010000F,0x20000000,0); iw(0x28110000,0x2C110000,0);
-  iw(0x20200000,0x08100000,0); iw(0xC8000000,0x08200001,0);
-  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
-  iw(0xBEEF,0xBEEF,0); iw(0xBEEF,0xBEEF,0);
-  tail(0x020,2);
-  id(); c4("T24",pt(300),cr(),0xF,0xF,0xF,0xF); }
-
-# T25: Full heterogeneous CVT pipeline
-sub t25 { banner("T25: Full heterogeneous CVT pipeline\n  [10,20,30,40]+5->CVTx2->CVT+10->+7=[47,67,87,107]"); ic(); my@c;
-  @c=cw(1,0,42,0); iw($c[0],$c[1],0x04);
-  # Phase 1-7 same as T22
-  iw(0xE5901000,0xE3A00040,0); iw(0xE5801000,0xE2811005,0);
-  iw(0xE2811005,0xE5901004,0); iw(0xE5901008,0xE5801004,0);
-  iw(0xE5801008,0xE2811005,0); iw(0xE2811005,0xE590100C,0); iw($NOP,0xE580100C,0);
-  iw(0xEE000A10,0xE3A00000,0); iw(0xE3A01010,0xEE010A10,0);
-  iw(0xE3A02005,0xEE021A10,0); iw($NOP,0xEE032A10,0);
-  iw(0xEE000A10,0xE3A00010,0); iw(0xEE011A10,0xE3A01000,0);
-  iw(0xEE022A10,0xE3A02001,0); iw(0xEE033A10,0xE3A03041,0);
-  iw(0xEE040A10,0xE3A00000,0); iw(0xEE071A10,0xE3A0100F,0);
-  iw(0xEE052A10,0xE3A02001,0); for(1..4){np()}
-  iw(0xEE040A10,0xE3A00008,0); iw(0xEE071A10,0xE3A0100F,0);
-  iw(0xEE052A10,0xE3A02001,0); for(1..4){np()}
-  iw(0xEE000A10,0xE3A00000,0); iw(0xEE011A10,0xE3A01018,0);
-  iw(0xEE022A10,0xE3A02001,0); iw(0xEE033A10,0xE3A03043,0);
-  np();
-  iw(0xE3A02080,0xE3A00060,0); iw(0xE2811007,0xE5901000,0);
-  iw(0xE5901004,0xE5821000,0); iw(0xE5821004,0xE2811007,0);
-  iw(0xE2811007,0xE5901008,0); iw(0xE590100C,0xE5821008,0);
-  iw(0xE582100C,0xE2811007,0); iw($NOP,$HALT,0);
-  # K1 CVT x2
-  @c=cw(2,0,4,0); iw($c[0],$c[1],0);
-  iw(0x10100000,0x20000000,0); iw(0x20304000,0x2C210000,0);
-  iw(0x28540000,0x44423000,0); iw(0xC8000000,0x08500000,0);
-  # K2 CVT +10
-  @c=cw(2,8,4,0); iw($c[0],$c[1],0);
-  iw(0x10100000,0x20000000,0); iw(0x20304120,0x2C210000,0);
-  iw(0x28540000,0x34423000,0); iw(0xC8000000,0x08500000,0);
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0); iw(0x14,0x0A,0); iw(0x28,0x1E,0);
-  @c=cw(2,0x020,2,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0x020,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T25",pt(400),cr(),0x43,0x2F,0x6B,0x57); }
-
-# ══════════════════════════════════════════════════════════════
-#  Network Mode Tests
-# ══════════════════════════════════════════════════════════════
-
-# T26: Network passthrough (EtherType=0x0800)
-sub t26 { banner("T26: Network passthrough (non-SoC)"); ic();
-  iw(0x00010002,0x00030004,0x04); iw(0xFFFFFFFF,0xFFFF0011,0);
-  iw(0x22334455,0x08000000,0);    iw(0xDEADBEEF,0xCAFEBABE,0);
-  iw(0x12345678,0x9ABCDEF0,0);
-  id(); c4("T26",pt(),cr(),0x00010002,0x00030004,0xFFFFFFFF,0xFFFF0011); }
-
-# T27: Network SoC (EtherType=0x88B5, CPU ADD)
-sub t27 { banner("T27: Network SoC packet (10+20=30)"); ic(); my@c;
-  iw(0x00010002,0x0005000D,0x04); iw(0xFFFFFFFF,0xFFFF0011,0);
-  iw(0x22334455,0x88B50000,0);
-  @c=cw(1,0,3,0); iw($c[0],$c[1],0);
-  iw(0xE5901000,0xE3A00000,0); iw(0xE0813002,0xE5902004,0); iw($HALT,0xE5803008,0);
-  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0x14,0x0A,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T27",pt(),cr(),0x00010002,0x0005000D,0xFFFFFFFF,0xFFFF0011); }
-  # Note: readback at TX[3..4] not captured by HW snoop
-
-# ══════════════════════════════════════════════════════════════
-#  ARM ISA Coverage (T28-T34)
-# ══════════════════════════════════════════════════════════════
-
-# T28: SUB, RSB
-sub t28 { banner("T28: SUB(100-30=70), RSB(30-100=-70)"); ic(); my@c;
-  @c=cw(1,0,4,0); iw($c[0],$c[1],0x04);
-  iw(0xE5901000,0xE3A00000,0); iw(0xE0413002,0xE5902004,0);
-  iw(0xE5803008,0xE0614002,0); iw($HALT,0xE580400C,0);
-  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0x1E,0x64,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T28",pt(),cr(),0x1E,0x64,0xFFFFFFBA,0x46); }
-
-# T29: AND, ORR, EOR, BIC, MVN
-sub t29 { banner("T29: AND/ORR/EOR/BIC/MVN"); ic(); my@c;
-  @c=cw(1,0,7,0); iw($c[0],$c[1],0x04);
-  iw(0xE5901000,0xE3A00000,0); iw(0xE0013002,0xE5902004,0);
-  iw(0xE0215002,0xE1814002,0); iw(0xE1E07002,0xE1C16002,0);
-  iw(0xE580400C,0xE5803008,0); iw(0xE5806014,0xE5805010,0); iw($HALT,0xE5807018,0);
-  @c=cw(2,0,4,0); iw($c[0],$c[1],0);
-  iw(0x0F0F0F0F,0xFF00FF00,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,4,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T29",pt(),cr(),0x0F0F0F0F,0xFF00FF00,0xFF0FFF0F,0x0F000F00); }
-
-# T30: Barrel shifter LSL/LSR/ASR/ROR
-sub t30 { banner("T30: Barrel shifter (LSL/LSR/ASR/ROR)"); ic(); my@c;
-  @c=cw(1,0,7,0); iw($c[0],$c[1],0x04);
-  iw(0xE5901000,0xE3A00000,0); iw(0xE1A03401,0xE1A02201,0);
-  iw(0xE1A050A4,0xE5904004,0); iw(0xE1A07264,0xE1A060C4,0);
-  iw(0xE580300C,0xE5802008,0); iw(0xE5806014,0xE5805010,0); iw($HALT,0xE5807018,0);
-  @c=cw(2,0,4,0); iw($c[0],$c[1],0);
-  iw(0x80000001,0x0F,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,4,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T30",pt(),cr(),0x80000001,0x0F,0xF00,0xF0); }
-
-# T31: ADC, SBC (carry chain)
-sub t31 { banner("T31: ADDS/ADC/SUBS/SBC"); ic(); my@c;
-  @c=cw(1,0,8,0); iw($c[0],$c[1],0x04);
-  iw(0xE3A01000,0xE3A00000,0); iw(0xE3A02001,0xE1E01001,0);
-  iw(0xE3A04005,0xE0913002,0); iw(0xE0A46005,0xE3A05003,0);
-  iw(0xE0C48005,0xE0557004,0); iw(0xE5806004,0xE5803000,0);
-  iw(0xE580800C,0xE5807008,0); iw($NOP,$HALT,0);
-  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T31",pt(),cr(),9,0,1,0xFFFFFFFE); }
-
-# T32: Condition codes EQ/NE/MI/PL/LT/GE
-sub t32 { banner("T32: Condition codes (EQ/NE/MI/PL/LT/GE)"); ic(); my@c;
-  @c=cw(1,0,13,0); iw($c[0],$c[1],0x04);
-  iw(0xE3A03000,0xE3A00000,0); iw(0xE3A05000,0xE3A04000,0);
-  iw(0xE3A07000,0xE3A06000,0); iw(0xE3A0100A,0xE3A08000,0);
-  iw(0xE1510002,0xE3A0200A,0); iw(0x13A04001,0x03A03001,0);
-  iw(0xE1510002,0xE3A01005,0); iw(0x53A06001,0x43A05001,0);
-  iw(0xA3A08001,0xB3A07001,0); iw(0xE5804004,0xE5803000,0);
-  iw(0xE580600C,0xE5805008,0); iw(0xE5808014,0xE5807010,0); iw($NOP,$HALT,0);
-  @c=cw(2,0,3,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,3,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T32",pt(),cr(),0,1,0,1); }
-
-# T33: Shifted register ALU + immediate
-sub t33 { banner("T33: Shifted reg ALU + immediate"); ic(); my@c;
-  @c=cw(1,0,7,0); iw($c[0],$c[1],0x04);
-  iw(0xE3A01005,0xE3A00000,0); iw(0xE0813102,0xE3A02003,0);
-  iw(0xE2415001,0xE0414102,0); iw(0xE0017102,0xE2616000,0);
-  iw(0xE580400C,0xE5803008,0); iw(0xE5806014,0xE5805010,0); iw($HALT,0xE5807018,0);
-  @c=cw(2,0,4,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,4,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T33",pt(),cr(),0,0,0xFFFFFFF9,0x11); }
-
-# T34: TST, TEQ, CMN
-sub t34 { banner("T34: TST/TEQ/CMN (flag-only ops)"); ic(); my@c;
-  @c=cw(1,0,10,0); iw($c[0],$c[1],0x04);
-  iw(0xE3A03000,0xE3A00000,0); iw(0xE3A05000,0xE3A04000,0);
-  iw(0xE3A02005,0xE3A01003,0); iw(0x13A03001,0xE1110002,0);
-  iw(0xE3A020FF,0xE3A010FF,0); iw(0x03A04001,0xE1310002,0);
-  iw(0xE1E02002,0xE3A01001,0); iw(0x43A05001,0xE1710002,0);
-  iw(0xE5804004,0xE5803000,0); iw($HALT,0xE5805008,0);
-  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0);
-  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
-  id(); c4("T34",pt(),cr(),1,1,0,1); }
-
-# ══════════════════════════════════════════════════════════════
-#  GPU ISA Coverage (T35-T42)
-# ══════════════════════════════════════════════════════════════
-
-# T35: AND, OR, XOR (int16)
-sub t35 { banner("T35: GPU AND/OR/XOR"); ic(); my@c;
-  gpu_arm(0x04, 1, 0, 2, 4);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x10100000,0x20000000,0); iw(0x70312000,0x10200001,0);
-  iw(0x80512000,0x78412000,0); iw(0x08400001,0x08300000,0);
-  iw(0x20600000,0x08500002,0); iw(0xC8000000,0x08600003,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
-  iw(0x0F0FFF00,0x0F0FFF00,0); iw(0x0F0FFF00,0x0F0FFF00,0);
-  tail(0x020,4);
-  id(); c4("T35",pt(300),cr(),0x0000F00F,0xFF0F0F00,0x0000F00F,0xFF0F0F00); }
-  # TX[0]=bank0 {XOR=F00F,OR=FF0F,AND=0F00,0} → HW captures {DMEM[1],DMEM[0]} wait...
-  # Actually nw=4: TX[0]={DMEM[3],DMEM[2],DMEM[1],DMEM[0]}=64'h0000F00FFF0F0F00
-  # HW snoop: W0H=0000F00F, W0L=FF0F0F00
-
-# T36: SHL, SHR, ADDI, MULI
-sub t36 { banner("T36: GPU SHL/SHR/ADDI/MULI (input=5)"); ic(); my@c;
-  gpu_arm(0x04, 1, 0, 2, 4);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x10100000,0x20000000,0); iw(0x90310001,0x88210003,0);
-  iw(0xA0510007,0x9841000A,0); iw(0x08300001,0x08200000,0);
-  iw(0x08500003,0x08400002,0); iw(0xC8000000,0x00000000,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
-  iw(0x00000005,0x00000005,0); iw(0x00000005,0x00000005,0);
-  tail(0x020,4);
-  id(); c4("T36",pt(300),cr(),0x0023000F,0x00020028,0x0023000F,0x00020028); }
-
-# T37: ABS, NEG, MIN (per-bank)
-sub t37 { banner("T37: GPU ABS/NEG/MIN (per-bank)"); ic(); my@c;
-  gpu_arm(0x04, 1, 0, 2, 4);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x10100000,0x20000000,0); iw(0x60310000,0x10200001,0);
-  iw(0x58512000,0x68420000,0); iw(0x08400001,0x08300000,0);
-  iw(0x20600000,0x08500002,0); iw(0xC8000000,0x08600003,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
-  iw(0x000AFFEC,0x0014FFF6,0); iw(0x0005FFE2,0x001EFFF1,0);
-  tail(0x020,4);
-  # TX[0]=bank0: {0,MIN=-10=FFF6,NEG=-20=FFEC,ABS=10=000A}
-  id(); c4("T37",pt(300),cr(),0x0000FFF6,0xFFEC000A,0x0000FFEC,0xFFF60014); }
-
-# T38: SUB.f, NEG.f, ABS.f, MIN.f
-sub t38 { banner("T38: GPU SUB.f/NEG.f/ABS.f/MIN.f"); ic(); my@c;
-  gpu_arm(0x04, 1, 0, 2, 4);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x14100000,0x20000000,0); iw(0x3C312000,0x14200001,0);
-  iw(0x64530000,0x6C410000,0); iw(0x0C400001,0x5C612000,0);
-  iw(0x0C500002,0x0C300000,0); iw(0xC8000000,0x0C600003,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
-  iw(0x40A04040,0x40A04040,0); iw(0x40A04040,0x40A04040,0);
-  tail(0x020,4);
-  # {MIN=4040,ABS=4000,NEG=C040,SUB=C000}
-  id(); c4("T38",pt(300),cr(),0x40404000,0xC040C000,0x40404000,0xC040C000); }
-
-# T39: BRA (unconditional branch, skip canary)
-sub t39 { banner("T39: GPU BRA (skip canary, R1=42)"); ic(); my@c;
-  gpu_arm(0x04, 1, 0, 1, 4);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x2010002A,0x20000000,0); iw(0x20100063,0xB8000005,0);
-  iw(0x08100000,0x20100058,0); iw(0x08200001,0x20200000,0);
-  iw(0xC8000000,0x00000000,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
-  iw(0xBEEF,0xBEEF,0); iw(0xBEEF,0xBEEF,0);
-  tail(0x020,2);
-  id(); c4("T39",pt(300),cr(),0x2A,0x2A,0x2A,0x2A); }
-
-# T40: MOV reg, SETP LT, SELP
-sub t40 { banner("T40: GPU MOV/SETP/SELP (100<200 -> SELP=100)"); ic(); my@c;
-  gpu_arm(0x04, 1, 0, 1, 4);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x10100000,0x20000000,0); iw(0x18310000,0x10200001,0);
-  iw(0x00000000,0xAA012000,0); iw(0x00000000,0x00000000,0);
-  iw(0x08300000,0xB0412000,0); iw(0xC8000000,0x08400001,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
-  iw(0x00C80064,0x00C80064,0); iw(0x00C80064,0x00C80064,0);
-  tail(0x020,2);
-  id(); c4("T40",pt(300),cr(),0x00640064,0x00640064,0x00640064,0x00640064); }
-
-# T41: SET + SELP
-sub t41 { banner("T41: GPU SET+SELP (P0=1->AAAA, P0=0->BBBB)"); ic(); my@c;
-  gpu_arm(0x04, 1, 0, 1, 4);
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x2010AAAA,0x20000000,0); iw(0xD0000001,0x2020BBBB,0);
-  iw(0x00000000,0x00000000,0); iw(0xB0312000,0x00000000,0);
-  iw(0x00000000,0xD0000000,0); iw(0x00000000,0x00000000,0);
-  iw(0x08300000,0xB0412000,0); iw(0xC8000000,0x08400001,0);
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
-  iw(0xDEAD,0xDEAD,0); iw(0xDEAD,0xDEAD,0);
-  tail(0x020,2);
-  id(); c4("T41",pt(300),cr(),0xBBBBAAAA,0xBBBBAAAA,0xBBBBAAAA,0xBBBBAAAA); }
-
-# T42: PBRA divergence + SIMT reconvergence
-sub t42 { banner("T42: GPU PBRA diverge+reconverge\n  T0,T1->AAAA (taken), T2,T3->BBBB (fall)"); ic(); my@c;
-  gpu_arm(0x04, 1, 0, 1, 6);  # 6 NOP for PBRA diverge timing
-  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
-  iw(0x1C100000,0x20000000,0); iw(0xAA013000,0x20300002,0);
-  iw(0xC000900C,0x00000000,0); iw(0x08200000,0x2020BBBB,0);
-  iw(0x2020AAAA,0xB800000C,0); iw(0x00000000,0x08200000,0);
-  iw(0x08300001,0x20300000,0); iw(0x00000000,0xC8000000,0);
-  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
-  iw(0xDEAD,0xDEAD,0); iw(0xDEAD,0xDEAD,0);
-  tail(0x020,2);
-  id(); c4("T42",pt(400),cr(),0xAAAA,0xAAAA,0xBBBB,0xBBBB); }
-
-# ══════════════════════════════════════════════════════════════
-#  T_ANN: 2-layer WMMA inference (Y=16.0)
-#  Translated from model_tb.v "Test ANN: 2-layer WMMA inference"
-#
-#  Compute (per bank): H = ReLU(X · W1 + B1); Y = H · W2 + B2
-#  Inputs: X=W1=W2=[1,1,1,1] (bf16 1.0=0x3F80), B1=B2=0
-#  Layer1 dot = 4×(1×1) = 4.0 → ReLU = 4.0  (bf16 0x4080)
-#  Layer2 dot = 4×(4×1) = 16.0                (bf16 0x4180)
-#
-#  Layout (CPU DMEM):
-#    [0..23]  ARM-uploaded GPU IMEM image (24 instrs, 12 DWs)
-#    [24..79] GPU DMEM stage (14 words/bank × 4 banks via D_UNPACK burst_all)
-#    [80..87] readback area (D_PACK target, 2 words/bank × 4 banks)
-#
-#  Per-bank GPU DMEM map after D_UNPACK:
-#    [ 0.. 3]=X[0..3]   [ 4.. 7]=W1[0..3]  [ 8..11]=B1
-#    [12..15]=W2[0..3]  [16..19]=B2        [20..23]=H  [24..27]=Y
-#
-#  GPU IMEM (24 instrs) — one kernel:
-#    WMMA.LOAD.A R0=4(W1)  ; LOAD.B R0=0(X)   ; LOAD.C R0=8(B1)
-#    WMMA.MMA D=A·B+C → R12..R15
-#    MAX R12..R15 with 0  ; ReLU on H tile
-#    WMMA.STORE R0=20(H)
-#    WMMA.LOAD.A R0=12(W2) ; LOAD.B R0=20(H)  ; LOAD.C R0=16(B2)
-#    WMMA.MMA D=A·B+C → R12..R15
-#    WMMA.STORE R0=24(Y)
-#    RET
-#
-#  ARM program (79 DWs = 158 instrs):
-#    Phase 1: D_IMEM   (DMEM[0..23]→GPU IMEM, len=24)         12 DWs
-#    Phase 2: D_UNPACK (DMEM[24..79]→GPU DMEM, len=14, b_all) 29 DWs
-#    Phase 3: GPU launch (pc=0, mask=0xF)                     28 DWs
-#    Phase 4: D_PACK   (GPU DMEM[24..27]→DMEM[80..], len=2)   10 DWs
-#
-#  HW snoop captures TX[0..1] only (each bank's Y); both = 0x4180_4180_4180_4180.
-# ══════════════════════════════════════════════════════════════
-sub tann { banner("T_ANN: 2-layer WMMA inference (Y=16.0)"); ic(); my @c; my $b;
-
-  # ── ARM IMEM: 79 DW pairs = 158 instrs ───────────────────────
-  @c=cw(1,0,79,0); iw($c[0],$c[1],0x20);
-
-  # Phase 1: D_IMEM — DMEM[0..23] → GPU IMEM (CR0=src=0, CR1=dst=0, CR2=len=24, CR3=op=5)
-  iw(0xEE000A10,0xE3A00000,0); # MCR CR0,R0  ; MOV R0,#0
-  iw(0xE3A01018,0xEE010A10,0); # MOV R1,#24  ; MCR CR1,R0
-  iw(0xE3A02005,0xEE021A10,0); # MOV R2,#5   ; MCR CR2,R1
-  iw($NOP,      0xEE032A10,0); # NOP         ; MCR CR3,R2 → kick D_IMEM
-  for(1..8){np()}              # wait D_IMEM (24w × 2cyc = 48cyc)
-
-  # Phase 2: D_UNPACK — DMEM[24..] → GPU DMEM (CR0=24, CR1=0, CR2=14, CR3=65 burst_all)
-  iw(0xEE000A10,0xE3A00018,0); # MCR CR0,R0  ; MOV R0,#24
-  iw(0xEE011A10,0xE3A01000,0); # MCR CR1,R1  ; MOV R1,#0
-  iw(0xEE022A10,0xE3A0200E,0); # MCR CR2,R2  ; MOV R2,#14
-  iw(0xEE033A10,0xE3A03041,0); # MCR CR3,R3  ; MOV R3,#0x41 → kick D_UNPACK
-  for(1..25){np()}             # wait D_UNPACK (14 × 4banks × 3cyc ≈ 168cyc)
-
-  # Phase 3: GPU launch (CR4=pc=0, CR7=mask=0xF, CR5=launch)
-  iw(0xEE040A10,0xE3A00000,0); # MCR CR4,R0  ; MOV R0,#0
-  iw(0xEE071A10,0xE3A0100F,0); # MCR CR7,R1  ; MOV R1,#15
-  iw(0xEE052A10,0xE3A02001,0); # MCR CR5,R2  ; MOV R2,#1 → launch
-  for(1..25){np()}             # wait 2×WMMA + ReLU (~130cyc)
-
-  # Phase 4: D_PACK — GPU DMEM[24..27] → CPU DMEM[80..] (CR0=24, CR1=80, CR2=2, CR3=67)
-  iw(0xEE000A10,0xE3A00018,0); # MCR CR0,R0  ; MOV R0,#24
-  iw(0xEE011A10,0xE3A01050,0); # MCR CR1,R1  ; MOV R1,#80
-  iw(0xEE022A10,0xE3A02002,0); # MCR CR2,R2  ; MOV R2,#2
-  iw(0xEE033A10,0xE3A03043,0); # MCR CR3,R3  ; MOV R3,#0x43 → kick D_PACK
-  for(1..5){np()}              # wait D_PACK
-  iw($NOP,$HALT,0);            # NOP ; B .
-
-  # ── GPU IMEM (12 DW pairs = 24 instrs) at CPU DMEM[0..23] ────
-  @c=cw(2,0,12,0); iw($c[0],$c[1],0);
-  iw(0xF4400000,0x20000004,0); # WMMA.LOAD.A R0=4 (W1) ; MOVI R0,4
-  iw(0xF5800000,0x20000000,0); # WMMA.LOAD.B R0=0 (X)  ; MOVI R0,0
-  iw(0xF6C00000,0x20000008,0); # WMMA.LOAD.C R0=8 (B1) ; MOVI R0,8
-  iw(0x24000000,0xECC48C00,0); # MOVI.bf16 R0,0        ; WMMA.MMA D=A·B+C
-  iw(0x54DD0000,0x54CC0000,0); # MAX R13 (ReLU)        ; MAX R12 (ReLU)
-  iw(0x54FF0000,0x54EE0000,0); # MAX R15 (ReLU)        ; MAX R14 (ReLU)
-  iw(0xFCC00000,0x20000014,0); # WMMA.STORE R0=20 (H)  ; MOVI R0,20
-  iw(0xF4400000,0x2000000C,0); # WMMA.LOAD.A R0=12(W2) ; MOVI R0,12
-  iw(0xF5800000,0x20000014,0); # WMMA.LOAD.B R0=20 (H) ; MOVI R0,20
-  iw(0xF6C00000,0x20000010,0); # WMMA.LOAD.C R0=16(B2) ; MOVI R0,16
-  iw(0x20000018,0xECC48C00,0); # MOVI R0,24            ; WMMA.MMA D=A·B+C
-  iw(0xC8000000,0xFCC00000,0); # RET                   ; WMMA.STORE R0=24 (Y)
-
-  # ── GPU DMEM stage (28 DW pairs at CPU DMEM[24]) ─────────────
-  # 7 DW per bank × 4 banks. Per bank: X(2DW)|W1(2DW)|B1(1DW)|W2(2DW)|B2(1DW)|H(1DW)|Y(1DW) = 10 DW? — no, sized as below
-  # Layout per bank (each DW = 2 bf16 words): X[0..3]=2DW, W1[0..3]=2DW, B1[0..3]=1DW(zero placeholder), W2[0..3]=2DW, B2/H/Y zero placeholders 3DW
-  # DMA D_UNPACK stride=14 words/bank → 7 DWs/bank (matches model_tb)
-  @c=cw(2,0x018,28,0); iw($c[0],$c[1],0);
-  for($b=0; $b<4; $b++){
-    iw(0x3F803F80,0x3F803F80,0); # X[0..3]  = 1.0
-    iw(0x3F803F80,0x3F803F80,0); # W1[0..3] = 1.0
-    iw(0,0,0);                    # B1 = 0
-    iw(0x3F803F80,0x3F803F80,0); # W2[0..3] = 1.0
-    iw(0,0,0);                    # B2 = 0
-    iw(0,0,0);                    # H  = 0 (filled by GPU)
-    iw(0,0,0);                    # Y  = 0 (filled by GPU)
-  }
-
-  # ── Readback zeros at DMEM[80] + commands ───────────────────
-  @c=cw(2,0x050,4,0); iw($c[0],$c[1],0);
-  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
-  @c=cw(3,0x000,0,0); iw($c[0],$c[1],0);    # CPU_START (entry_pc=0)
-  @c=cw(4,0x050,4,0); iw($c[0],$c[1],0);    # READBACK from DMEM[80], 4 DWs (one/bank)
-  @c=cw(5,0x000,0,0); iw($c[0],$c[1],0);    # SEND_PKT
-
-  id();
-  # All 4 banks → Y = 16.0 (bf16 0x4180); HW snoop captures TX[0..1].
-  # TX[0]=bank0={0x41804180, 0x41804180}, TX[1]=bank1=same.
-  c4("T_ANN", pt(400), cr(), 0x41804180, 0x41804180, 0x41804180, 0x41804180);
+# Input pattern (host-generated, matches model_tb ann_input_pattern_bf16).
+# Returns BF16 u16.
+sub input_bf16 { my ($feat,$pkt) = @_;
+    my $pat = ($feat + $pkt) % 5;
+    return 0xBF80 if $pat == 0;   # -1.0
+    return 0xBF00 if $pat == 1;   # -0.5
+    return 0x0000 if $pat == 2;
+    return 0x3F00 if $pat == 3;   #  0.5
+    return 0x3F80;                #  1.0
+}
+# ann_hw_input_cpu_word: packs two BF16 into a 32b CPU word.
+sub input_cpu_word { my ($flat_idx) = @_;
+    my $bank  = int($flat_idx / 20);
+    my $wsel  = $flat_idx % 20;
+    my $alo = $wsel*2;
+    my $ahi = $wsel*2 + 1;
+    my $flo = int($alo/4)*4 + $bank;
+    my $fhi = int($ahi/4)*4 + $bank;
+    my $vlo = input_bf16($flo, $alo % 4);
+    my $vhi = input_bf16($fhi, $ahi % 4);
+    pack2_u16($vlo, $vhi)
 }
 
 # ══════════════════════════════════════════════════════════════
-#  Summary + Dispatch
+#  ARM copy program (16-17 instrs, port of ann_hw_build_copy_prog)
+# ══════════════════════════════════════════════════════════════
+sub build_copy_prog {
+    # v2.0: first instruction reads the per-thread CPU ID from CR10 into R11,
+    # so the subsequent CMP/BNE gate runs thread 0 alone (HW has no backdoor).
+    @copy_prog = ();
+    push @copy_prog, arm_mrc(11, 10);        # 0  — R11 = CR10 = this thread's TID
+    push @copy_prog, arm_cmp_imm(11, 0);     # 1  — CMP R11, #0
+    push @copy_prog, 0;                       # 2  — patched to B.NE end (threads 1..3 halt)
+    push @copy_prog, arm_mov_imm(1, 16);     # 3  — R1 = 16
+    push @copy_prog, arm_mcr(1, 0);           # 4  — CR0 = 16 (src)
+    push @copy_prog, arm_mov_imm(0, 0);      # 5  — R0 = 0
+    push @copy_prog, arm_ldr_imm(2, 0, 0);   # 6  — R2 = mem[0] (dst)
+    push @copy_prog, arm_ldr_imm(3, 0, 4);   # 7  — R3 = mem[1] (len)
+    push @copy_prog, arm_mcr(2, 1);           # 8  — CR1 = dst
+    push @copy_prog, arm_mcr(3, 2);           # 9  — CR2 = len
+    push @copy_prog, arm_mov_imm(4, 65);     # 10 — R4 = 0x41 (D_UNPACK burst_all)
+    push @copy_prog, arm_mcr(4, 3);           # 11 — CR3 = op → kick DMA
+    push @copy_prog, arm_mov_shift(6, 3, $SHIFT_LSL, 2); # 12 — R6 = R3<<2
+    push @copy_prog, arm_add_imm(6, 6, 16);  # 13 — R6 += 16 (wait target)
+    push @copy_prog, arm_mrc(5, 9);           # 14 — R5 = CR9 (dma_cur_addr)
+    push @copy_prog, arm_cmp_reg(5, 6);       # 15
+    push @copy_prog, arm_b_idx(0x1, 16, 14); # 16 — B.NE back to MRC
+    push @copy_prog, $HALT;                   # 17
+    push @copy_prog, $HALT;                   # 18
+    $copy_prog_len = scalar @copy_prog;
+    $copy_prog[2] = arm_b_idx(0x1, 2, $copy_prog_len - 2);  # gate-by-thread (shifted)
+    push @copy_prog, $NOP if $copy_prog_len % 2;   # pad to even
+    $copy_prog_len = scalar @copy_prog;
+}
+
+# ══════════════════════════════════════════════════════════════
+#  GPU program (60 instrs, port of ann_hw_build_gpu_prog)
+# ══════════════════════════════════════════════════════════════
+sub build_gpu_prog {
+    @gpu_prog = ();
+    # Linear kernel @ 0
+    push @gpu_prog, enc_movi_dt(0, 0, $ANN_HW_GPU_PARAM_BASE);    # 0
+    push @gpu_prog, enc_i($OP_LD, 0, 1, 0, 0);                     # 1
+    push @gpu_prog, enc_i($OP_LD, 0, 2, 0, 1);                     # 2
+    push @gpu_prog, enc_i($OP_LD, 0, 3, 0, 2);                     # 3
+    push @gpu_prog, enc_i($OP_LD, 0, 0, 0, 3);                     # 4
+    push @gpu_prog, 0;                                              # 5
+    push @gpu_prog, 0;                                              # 6
+    push @gpu_prog, enc_wmma_load(0, 4,  1, 0);                    # 7
+    push @gpu_prog, enc_wmma_load(1, 8,  2, 0);                    # 8
+    push @gpu_prog, enc_wmma_load(2, 12, 3, 0);                    # 9
+    push @gpu_prog, enc_movi_dt(0, 3, 0);                           # 10
+    push @gpu_prog, enc_wmma_mma(12, 4, 8, 12);                    # 11
+    push @gpu_prog, enc_i($OP_ADDI, 0, 0, 0, 0xFFFF);              # 12
+    push @gpu_prog, enc_setp(0, $COMP_NE, 0, 0, 3);                # 13
+    push @gpu_prog, 0;                                              # 14
+    push @gpu_prog, enc_pbra(0, 17, 16);                           # 15
+    push @gpu_prog, enc_bra(23);                                   # 16
+    push @gpu_prog, enc_i($OP_ADDI, 0, 1, 1, 4);                  # 17
+    push @gpu_prog, enc_i($OP_ADDI, 0, 2, 2, 4);                  # 18
+    push @gpu_prog, enc_wmma_load(0, 4, 1, 0);                    # 19
+    push @gpu_prog, enc_wmma_load(1, 8, 2, 0);                    # 20
+    push @gpu_prog, enc_wmma_mma(12, 4, 8, 12);                  # 21
+    push @gpu_prog, enc_bra(12);                                   # 22
+    push @gpu_prog, enc_movi_dt(0, 0, $ANN_HW_GPU_PARAM_BASE);   # 23
+    push @gpu_prog, enc_i($OP_LD, 0, 1, 0, 4);                    # 24
+    push @gpu_prog, 0;                                              # 25
+    push @gpu_prog, enc_wmma_store(12, 1, 0);                     # 26
+    push @gpu_prog, (($OP_RET & 0x1F) << 27);                     # 27
+    # ReLU kernel @ 28
+    push @gpu_prog, enc_movi_dt(0, 0, $ANN_HW_GPU_PARAM_BASE);   # 28
+    push @gpu_prog, enc_i($OP_LD, 0, 1, 0, 0);                    # 29
+    push @gpu_prog, enc_i($OP_LD, 0, 2, 0, 1);                    # 30
+    push @gpu_prog, enc_i($OP_LD, 0, 3, 0, 2);                    # 31
+    push @gpu_prog, enc_i($OP_LD, 0, 0, 0, 3);                    # 32
+    push @gpu_prog, 0;                                              # 33
+    push @gpu_prog, 0;                                              # 34
+    push @gpu_prog, enc_wmma_load(0, 4, 1, 0);                    # 35
+    push @gpu_prog, enc_wmma_load(1, 8, 2, 0);                    # 36
+    push @gpu_prog, enc_wmma_load(2, 12, 3, 0);                   # 37
+    push @gpu_prog, enc_movi_dt(0, 3, 0);                           # 38
+    push @gpu_prog, enc_wmma_mma(12, 4, 8, 12);                  # 39
+    push @gpu_prog, enc_i($OP_ADDI, 0, 0, 0, 0xFFFF);             # 40
+    push @gpu_prog, enc_setp(0, $COMP_NE, 0, 0, 3);               # 41
+    push @gpu_prog, 0;                                              # 42
+    push @gpu_prog, enc_pbra(0, 45, 44);                          # 43
+    push @gpu_prog, enc_bra(51);                                   # 44
+    push @gpu_prog, enc_i($OP_ADDI, 0, 1, 1, 4);                  # 45
+    push @gpu_prog, enc_i($OP_ADDI, 0, 2, 2, 4);                  # 46
+    push @gpu_prog, enc_wmma_load(0, 4, 1, 0);                    # 47
+    push @gpu_prog, enc_wmma_load(1, 8, 2, 0);                    # 48
+    push @gpu_prog, enc_wmma_mma(12, 4, 8, 12);                  # 49
+    push @gpu_prog, enc_bra(40);                                   # 50
+    push @gpu_prog, enc_r($OP_MAX, 1, 12, 12, 3);                 # 51
+    push @gpu_prog, enc_r($OP_MAX, 1, 13, 13, 3);                 # 52
+    push @gpu_prog, enc_r($OP_MAX, 1, 14, 14, 3);                 # 53
+    push @gpu_prog, enc_r($OP_MAX, 1, 15, 15, 3);                 # 54
+    push @gpu_prog, enc_movi_dt(0, 0, $ANN_HW_GPU_PARAM_BASE);   # 55
+    push @gpu_prog, enc_i($OP_LD, 0, 1, 0, 4);                    # 56
+    push @gpu_prog, 0;                                              # 57
+    push @gpu_prog, enc_wmma_store(12, 1, 0);                     # 58
+    push @gpu_prog, (($OP_RET & 0x1F) << 27);                     # 59
+    $gpu_prog_len = scalar @gpu_prog;
+}
+
+# ══════════════════════════════════════════════════════════════
+#  Scheduler records builder (writes into @final_dmem)
+# ══════════════════════════════════════════════════════════════
+sub write_sched_record {
+    my ($rec_idx, $entry_pc, $a_base, $b_base, $c_base, $k_count, $out_base) = @_;
+    my $base = $ANN_HW_SCHED_CPU_BASE + $rec_idx * $ANN_HW_SCHED_RECORD_WORDS;
+    my $word0 = pack2_u16($a_base, $b_base);
+    my $word1 = pack2_u16($c_base, $k_count);
+    my $word2 = pack2_u16($out_base, 0);
+    $final_dmem[$base + 0] = $entry_pc;
+    for my $bank (0..3) {
+        $final_dmem[$base + 1 + $bank*3 + 0] = $word0;
+        $final_dmem[$base + 1 + $bank*3 + 1] = $word1;
+        $final_dmem[$base + 1 + $bank*3 + 2] = $word2;
+    }
+}
+
+sub build_sched_and_final_dmem {
+    @sched_prog = ();
+    @final_dmem = (0) x 1024;
+    $final_dmem[0]  = $ANN_HW_DMA_WAIT_PARAM;
+    $final_dmem[1]  = $ANN_HW_DMA_WAIT_INPUT;
+    $final_dmem[2]  = $ANN_HW_DMA_WAIT_GPU;
+    $final_dmem[3]  = $ANN_HW_GPUK_CPU_BASE;
+    $final_dmem[4]  = $ANN_HW_INPUT_CPU_BASE;
+    $final_dmem[5]  = $ANN_HW_SCHED_CPU_BASE * 4;
+    $final_dmem[6]  = $ANN_HW_READBACK_CPU_BASE;
+    $final_dmem[7]  = $ANN_HW_GPU_PARAM_BASE;
+    $final_dmem[8]  = $ANN_HW_GPU_X0_BASE;
+    $final_dmem[9]  = $ANN_HW_GPU_X3_BASE;
+    $final_dmem[10] = $gpu_prog_len;
+    $final_dmem[11] = 20;
+    $final_dmem[12] = 3;
+    $final_dmem[13] = 2;
+    $final_dmem[14] = $ANN_HW_SCHED_RECORD_WORDS;
+    $final_dmem[15] = $ANN_HW_TILE_COUNT;
+    for my $i (0 .. $gpu_prog_len - 1) {
+        $final_dmem[$ANN_HW_GPUK_CPU_BASE + $i] = $gpu_prog[$i];
+    }
+    for my $i (0..79) {
+        $final_dmem[$ANN_HW_INPUT_CPU_BASE + $i] = input_cpu_word($i);
+    }
+
+    my $rec = 0;
+    for my $ot (0..23) {
+        write_sched_record($rec++, $ANN_HW_GPU_RELU_PC,
+            $ANN_HW_GPU_W1_BASE + $ot*40,
+            $ANN_HW_GPU_X0_BASE,
+            $ANN_HW_GPU_B1_BASE + $ot*4,
+            10,
+            $ANN_HW_GPU_X1_BASE + $ot*4);
+    }
+    for my $ot (0..10) {
+        write_sched_record($rec++, $ANN_HW_GPU_RELU_PC,
+            $ANN_HW_GPU_W2_BASE + $ot*96,
+            $ANN_HW_GPU_X1_BASE,
+            $ANN_HW_GPU_B2_BASE + $ot*4,
+            24,
+            $ANN_HW_GPU_X2_BASE + $ot*4);
+    }
+    write_sched_record($rec++, $ANN_HW_GPU_LINEAR_PC,
+        $ANN_HW_GPU_W3_BASE,
+        $ANN_HW_GPU_X2_BASE,
+        $ANN_HW_GPU_B3_BASE,
+        11,
+        $ANN_HW_GPU_X3_BASE);
+
+    $final_dmem_words = $ANN_HW_READBACK_CPU_BASE + 8;
+
+    # Sched program (port of ann_hw_build_sched_prog, v2.0 — CR10 TID gate)
+    push @sched_prog, arm_mrc(11, 10);                    # 0 — R11 = per-thread TID
+    push @sched_prog, arm_cmp_imm(11, 0);                 # 1
+    push @sched_prog, 0;                                    # 2 patched — B.NE halt
+    push @sched_prog, arm_mov_imm(0, 0);                   # 2
+    push @sched_prog, arm_ldr_imm(1, 0, 12);               # 3
+    push @sched_prog, arm_mcr(1, 0);                        # 4
+    push @sched_prog, arm_mov_imm(2, 0);                   # 5
+    push @sched_prog, arm_mcr(2, 1);                        # 6
+    push @sched_prog, arm_ldr_imm(2, 0, 40);               # 7
+    push @sched_prog, arm_mcr(2, 2);                        # 8
+    push @sched_prog, arm_mov_imm(3, 5);                   # 9
+    push @sched_prog, arm_mcr(3, 3);                        # 10
+    push @sched_prog, arm_ldr_imm(6, 0, 12);               # 11
+    push @sched_prog, arm_add_reg(6, 6, 2);                # 12
+    push @sched_prog, arm_mrc(5, 9);                        # 13
+    push @sched_prog, arm_cmp_reg(5, 6);                    # 14
+    push @sched_prog, arm_b_idx(0x1, 16, 14);               # 16
+    push @sched_prog, arm_ldr_imm(1, 0, 16);               # 16
+    push @sched_prog, arm_mcr(1, 0);                        # 17
+    push @sched_prog, arm_ldr_imm(2, 0, 32);               # 18
+    push @sched_prog, arm_mcr(2, 1);                        # 19
+    push @sched_prog, arm_ldr_imm(2, 0, 44);               # 20
+    push @sched_prog, arm_mcr(2, 2);                        # 21
+    push @sched_prog, arm_mov_imm(3, 65);                  # 22
+    push @sched_prog, arm_mcr(3, 3);                        # 23
+    push @sched_prog, arm_mov_shift(6, 2, $SHIFT_LSL, 2); # 24
+    push @sched_prog, arm_add_reg(6, 6, 1);                # 25
+    push @sched_prog, arm_mrc(5, 9);                        # 26
+    push @sched_prog, arm_cmp_reg(5, 6);                    # 27
+    push @sched_prog, arm_b_idx(0x1, 29, 27);               # 29
+    push @sched_prog, arm_mov_imm(1, 15);                  # 29
+    push @sched_prog, arm_mcr(1, 7);                        # 30
+    push @sched_prog, arm_ldr_imm(5, 0, 20);               # 31
+    push @sched_prog, arm_ldr_imm(6, 0, 60);               # 32
+    push @sched_prog, arm_ldr_imm(1, 5, 0);                # 33
+    push @sched_prog, arm_mcr(1, 4);                        # 34
+    push @sched_prog, arm_mov_shift(4, 5, $SHIFT_LSR, 2); # 35
+    push @sched_prog, arm_add_imm(1, 4, 1);                # 36
+    push @sched_prog, arm_mcr(1, 0);                        # 37
+    push @sched_prog, arm_ldr_imm(2, 0, 28);               # 38
+    push @sched_prog, arm_mcr(2, 1);                        # 39
+    push @sched_prog, arm_ldr_imm(2, 0, 48);               # 40
+    push @sched_prog, arm_mcr(2, 2);                        # 41
+    push @sched_prog, arm_mov_imm(3, 65);                  # 42
+    push @sched_prog, arm_mcr(3, 3);                        # 43
+    push @sched_prog, arm_mov_shift(7, 2, $SHIFT_LSL, 2); # 44
+    push @sched_prog, arm_add_reg(7, 7, 1);                # 45
+    push @sched_prog, arm_mrc(12, 9);                       # 46
+    push @sched_prog, arm_cmp_reg(12, 7);                   # 47
+    push @sched_prog, arm_b_idx(0x1, 49, 47);               # 49
+    push @sched_prog, arm_mov_imm(2, 1);                   # 49
+    push @sched_prog, arm_mcr(2, 5);                        # 50
+    push @sched_prog, arm_mrc(12, 6);                       # 51
+    push @sched_prog, arm_cmp_imm(12, 5);                   # 52
+    push @sched_prog, arm_b_idx(0x1, 54, 52);               # 54
+    push @sched_prog, arm_add_imm(5, 5, 52);               # 54
+    push @sched_prog, arm_sub_imm(6, 6, 1);                # 55
+    push @sched_prog, arm_cmp_imm(6, 0);                    # 56
+    push @sched_prog, arm_b_idx(0x1, 58, 34);               # 58
+    push @sched_prog, arm_ldr_imm(1, 0, 36);               # 58
+    push @sched_prog, arm_mcr(1, 0);                        # 59
+    push @sched_prog, arm_ldr_imm(2, 0, 24);               # 60
+    push @sched_prog, arm_mcr(2, 1);                        # 61
+    push @sched_prog, arm_ldr_imm(2, 0, 52);               # 62
+    push @sched_prog, arm_mcr(2, 2);                        # 63
+    push @sched_prog, arm_mov_imm(3, 67);                  # 64
+    push @sched_prog, arm_mcr(3, 3);                        # 65
+    push @sched_prog, arm_mov_shift(7, 2, $SHIFT_LSL, 2); # 66
+    push @sched_prog, arm_ldr_imm(1, 0, 24);               # 67
+    push @sched_prog, arm_add_reg(7, 7, 1);                # 68
+    push @sched_prog, arm_mrc(12, 9);                       # 69
+    push @sched_prog, arm_cmp_reg(12, 7);                   # 70
+    push @sched_prog, arm_b_idx(0x1, 72, 70);               # 72
+    # Post-process logits (72..112)
+    push @sched_prog, arm_mov_shift(0, 1, $SHIFT_LSL, 2); # 72
+    for my $k (0..7) {
+        push @sched_prog, arm_ldr_imm(4+$k, 0, $k*4);      # 73..80
+    }
+    push @sched_prog, arm_mov_shift(12, 4,  $SHIFT_LSL, 16); # 81
+    push @sched_prog, arm_mov_shift(12, 12, $SHIFT_LSR, 16); # 82
+    push @sched_prog, arm_orr_shift(12, 12, 6, $SHIFT_LSL, 16); # 83
+    push @sched_prog, arm_str_imm(12, 0, 0);                  # 84
+    push @sched_prog, arm_mov_shift(12, 8,  $SHIFT_LSL, 16); # 85
+    push @sched_prog, arm_mov_shift(12, 12, $SHIFT_LSR, 16); # 86
+    push @sched_prog, arm_orr_shift(12, 12, 10, $SHIFT_LSL, 16); # 87
+    push @sched_prog, arm_str_imm(12, 0, 4);                  # 88
+    push @sched_prog, arm_mov_shift(12, 4,  $SHIFT_LSR, 16); # 89
+    push @sched_prog, arm_mov_shift(14, 6,  $SHIFT_LSR, 16); # 90
+    push @sched_prog, arm_orr_shift(12, 12, 14, $SHIFT_LSL, 16); # 91
+    push @sched_prog, arm_str_imm(12, 0, 8);                  # 92
+    push @sched_prog, arm_mov_shift(12, 8,  $SHIFT_LSR, 16); # 93
+    push @sched_prog, arm_mov_shift(14, 10, $SHIFT_LSR, 16); # 94
+    push @sched_prog, arm_orr_shift(12, 12, 14, $SHIFT_LSL, 16); # 95
+    push @sched_prog, arm_str_imm(12, 0, 12);                 # 96
+    push @sched_prog, arm_mov_shift(12, 5,  $SHIFT_LSL, 16); # 97
+    push @sched_prog, arm_mov_shift(12, 12, $SHIFT_LSR, 16); # 98
+    push @sched_prog, arm_orr_shift(12, 12, 7, $SHIFT_LSL, 16); # 99
+    push @sched_prog, arm_str_imm(12, 0, 16);                 # 100
+    push @sched_prog, arm_mov_shift(12, 9,  $SHIFT_LSL, 16); # 101
+    push @sched_prog, arm_mov_shift(12, 12, $SHIFT_LSR, 16); # 102
+    push @sched_prog, arm_orr_shift(12, 12, 11, $SHIFT_LSL, 16); # 103
+    push @sched_prog, arm_str_imm(12, 0, 20);                 # 104
+    push @sched_prog, arm_mov_shift(12, 5,  $SHIFT_LSR, 16); # 105
+    push @sched_prog, arm_mov_shift(14, 7,  $SHIFT_LSR, 16); # 106
+    push @sched_prog, arm_orr_shift(12, 12, 14, $SHIFT_LSL, 16); # 107
+    push @sched_prog, arm_str_imm(12, 0, 24);                 # 108
+    push @sched_prog, arm_mov_shift(12, 9,  $SHIFT_LSR, 16); # 109
+    push @sched_prog, arm_mov_shift(14, 11, $SHIFT_LSR, 16); # 110
+    push @sched_prog, arm_orr_shift(12, 12, 14, $SHIFT_LSL, 16); # 111
+    push @sched_prog, arm_str_imm(12, 0, 28);                 # 112
+
+    push @sched_prog, $HALT;  # 113
+    push @sched_prog, $HALT;  # 114
+    $sched_prog_len = scalar @sched_prog;
+    $sched_prog[2] = arm_b_idx(0x1, 2, $sched_prog_len - 2);
+    push @sched_prog, $NOP if $sched_prog_len % 2;
+    $sched_prog_len = scalar @sched_prog;
+}
+
+# ══════════════════════════════════════════════════════════════
+#  Packet-level helpers (chunked, stay within MMIO scratch limit)
+# ══════════════════════════════════════════════════════════════
+
+# Send one LOAD_DMEM packet with `@data` 32b words starting at word `addr`.
+# Count in DWs = ceil(n/2). Pads with NOP if odd. Returns after drain.
+sub pkt_load_dmem {
+    my ($addr, $words_ref, $off, $n_words, $ctrl) = @_;
+    $ctrl = 0x20 unless defined $ctrl;
+    my $dw_count = int(($n_words + 1) / 2);
+    my @c = cw(2, $addr, $dw_count, 0);
+    iw($c[0], $c[1], $ctrl);
+    for (my $i = 0; $i < $n_words; $i += 2) {
+        my $lo = $words_ref->[$off + $i] & 0xFFFFFFFF;
+        my $hi = (($i + 1) < $n_words ? $words_ref->[$off + $i + 1] : 0) & 0xFFFFFFFF;
+        iw($hi, $lo, 0);
+    }
+    id();
+}
+
+sub pkt_load_imem {
+    my ($addr, $words_ref, $off, $n_words, $ctrl) = @_;
+    $ctrl = 0x20 unless defined $ctrl;
+    my $dw_count = int(($n_words + 1) / 2);
+    my @c = cw(1, $addr, $dw_count, 0);
+    iw($c[0], $c[1], $ctrl);
+    for (my $i = 0; $i < $n_words; $i += 2) {
+        my $lo = $words_ref->[$off + $i] & 0xFFFFFFFF;
+        my $hi = (($i + 1) < $n_words ? $words_ref->[$off + $i + 1] : 0) & 0xFFFFFFFF;
+        iw($hi, $lo, 0);
+    }
+    id();
+}
+
+# Split a large 32b-word array into multiple LOAD_DMEM packets.
+sub send_dmem_chunked {
+    my ($start_addr, $words_ref, $label) = @_;
+    my $n = scalar @$words_ref;
+    my $words_per_pkt = 2 * $CHUNK_DW;   # each DW = 2 words
+    my $off = 0; my $pkt = 0;
+    while ($off < $n) {
+        my $chunk = ($n - $off > $words_per_pkt) ? $words_per_pkt : ($n - $off);
+        ic();
+        pkt_load_dmem($start_addr + $off, $words_ref, $off, $chunk, 0x20);
+        $off += $chunk; $pkt++;
+    }
+    printf("  [CHUNKED] %s: %d words over %d packets\n", $label, $n, $pkt) if $V;
+}
+
+sub send_imem_chunked {
+    my ($start_addr, $words_ref, $label) = @_;
+    my $n = scalar @$words_ref;
+    my $words_per_pkt = 2 * $CHUNK_DW;
+    my $off = 0; my $pkt = 0;
+    while ($off < $n) {
+        my $chunk = ($n - $off > $words_per_pkt) ? $words_per_pkt : ($n - $off);
+        ic();
+        pkt_load_imem($start_addr + $off, $words_ref, $off, $chunk, 0x20);
+        $off += $chunk; $pkt++;
+    }
+    printf("  [CHUNKED] %s: %d instrs over %d packets\n", $label, $n, $pkt) if $V;
+}
+
+# Packet: send copy_consts (2 DWs) and one weight chunk's 32b words
+# all in one go (if small enough) or split.
+# Returns the CPU DMEM address immediately after the last written word.
+sub send_copy_consts_pkt {
+    my ($gpu_dst, $words_per_bank, $wait_count) = @_;
+    # CPU DMEM[0] = gpu_dst, [1] = words_per_bank, [2] = wait_count, [3] = 0.
+    # model_tb: rx({{16'h0, words_per_bank}, {16'h0, gpu_dst}}) → HI=wpb, LO=gpu_dst.
+    ic();
+    my @c = cw(2, 0, 2, 0); iw($c[0], $c[1], 0x20);
+    iw($words_per_bank & 0xFFFF, $gpu_dst & 0xFFFF, 0);     # word1 | word0
+    iw(0, $wait_count & 0xFFFFFFFF, 0);                      # word3 | word2
+    id();
+}
+
+# Send a weight chunk to CPU DMEM[16..16+2*wpb-1] (= 2*wpb 32b words).
+# bf16_base = starting BF16 index within each bank image.
+sub send_weight_chunk {
+    my ($bf16_base, $words_per_bank) = @_;
+    my $total_words = 4 * $words_per_bank;    # 4 banks × wpb 32b words (each covers 2 bf16)
+    my @words;
+    for (my $flat = 0; $flat < $total_words; $flat++) {
+        push @words, gpu_cpu_word($bf16_base, $words_per_bank, $flat);
+    }
+    send_dmem_chunked($ANN_HW_COPY_BUF_BASE, \@words,
+                      sprintf("weight_chunk bf16_base=%d wpb=%d", $bf16_base, $words_per_bank));
+}
+
+# Issue CPU_START (one small packet), wait for drd+txd.
+sub pkt_cpu_start {
+    ic();
+    my @c = cw(3, 0, 0, 0); iw($c[0], $c[1], 0x20);
+    # pkt_proc will wait for cpu_done before returning to IDLE.
+    # Use larger poll budget for long-running CPU programs.
+    id();
+    # No TX expected (no SEND_PKT). drd is enough.
+}
+
+# Final packet: CPU_START + READBACK + SEND_PKT (triggers inference + reads out Y)
+sub pkt_final_run {
+    ic();
+    my @c;
+    @c = cw(3, 0, 0, 0);                                                    iw($c[0], $c[1], 0x20);
+    @c = cw(4, $ANN_HW_READBACK_CPU_BASE, 4, 0);                            iw($c[0], $c[1], 0x00);
+    @c = cw(5, 0, 0, 0);                                                    iw($c[0], $c[1], 0x00);
+    id();
+    # Poll budget: 5 minutes. HW inference is ~80k cycles of real compute,
+    # but pkt_proc also has to clock through CPU halt detection + RB + SEND_PKT,
+    # and if the scheduler is stepping on itself (known 4-thread concern, see
+    # BLOCKER note below), it may still be alive and slowly making progress.
+    my $done = pt(3000, 100);
+    dump_st("post-poll");
+    return ($done, cr());
+}
+
+# ══════════════════════════════════════════════════════════════
+#  Main flow — split into LOAD (weights → GPU DMEM) and RUN (inference)
+#  GPU DMEM is BRAM and retains contents across ic()/hard_reset(),
+#  so `load` once and `run` as many times as you like.
+# ══════════════════════════════════════════════════════════════
+
+sub ann_build_host {
+    phase("Host-side asset build");
+    load_weights();
+    build_gpu_image();
+    build_copy_prog();
+    build_gpu_prog();
+    build_sched_and_final_dmem();
+    printf("  [BUILD] copy_prog=%d instrs  gpu_prog=%d instrs  sched_prog=%d instrs\n",
+        $copy_prog_len, $gpu_prog_len, $sched_prog_len);
+    printf("  [BUILD] final_dmem_words=%d  preload0=%d/bank  preload1=%d/bank\n",
+        $final_dmem_words, $ANN_HW_PRELOAD0_WPB, $ANN_HW_PRELOAD1_WPB);
+}
+
+# Stage 1: push all ANN weights into GPU DMEM via the on-SoC DMA copy path.
+# After this completes, GPU DMEM[0..2121] per bank holds the packed weight
+# image and survives until the bitfile is reloaded.
+sub ann_load_weights {
+    banner("T_ANN_LOAD: stream 4×2048 BF16 weights into GPU DMEM");
+    ann_build_host();
+    hard_reset();
+
+    phase("CPU IMEM ← copy program");
+    send_imem_chunked(0, \@copy_prog, "copy_prog");
+
+    phase("Weight chunk 0 (dst=0, wpb=$ANN_HW_PRELOAD0_WPB)");
+    send_copy_consts_pkt(0, $ANN_HW_PRELOAD0_WPB, $ANN_HW_DMA_WAIT_COPY_LONG);
+    send_weight_chunk(0, $ANN_HW_PRELOAD0_WPB);
+    phase("CPU_START 1 (copy → GPU DMEM[0..1019] per bank)");
+    pkt_cpu_start();
+
+    phase("Weight chunk 1 (dst=$ANN_HW_PRELOAD1_GPU_BASE, wpb=$ANN_HW_PRELOAD1_WPB)");
+    send_copy_consts_pkt($ANN_HW_PRELOAD1_GPU_BASE, $ANN_HW_PRELOAD1_WPB,
+                         $ANN_HW_DMA_WAIT_COPY_SHORT);
+    send_weight_chunk($ANN_HW_PRELOAD1_GPU_BASE, $ANN_HW_PRELOAD1_WPB);
+    phase("CPU_START 2 (copy → GPU DMEM[2040..2121] per bank)");
+    pkt_cpu_start();
+
+    dump_st("after-load");
+    print "  [OK] weights resident in GPU DMEM — run `model_test run` to infer\n\n";
+}
+
+# ══════════════════════════════════════════════════════════════
+#  Host-driven tiled run (36 consolidated tiles)
+#
+#  Replaces model_tb's CPU-side scheduler (which requires a sim-only
+#  per-thread regfile poke to gate 3 of the 4 threads). Here the Perl
+#  host drives the outer 36-tile loop and each per-tile ARM is a
+#  straight-line program (DMA → GPU launch → DMA → halt) — same
+#  structure as copy_prog, which we confirmed works safely when all
+#  4 threads race through it (redundant DMA/GPU kicks are no-ops
+#  while the engine is busy).
+#
+#  Layout (CPU DMEM, 32-bit words):
+#    [ 0.. 11] per-tile DMA params (3 words × 4 banks, D_UNPACK burst_all)
+#    [12]     GPU_PARAM_BASE = 2208 (constant for tile_arm LDR)
+#    [13]     entry_pc  (0 = LINEAR kernel, 28 = RELU kernel)
+#    [14]     DMA wait target for input copy = 12
+#    [15]     GPU done value = 5  (CR6: {idle, active, done} = 0b101)
+#    [16..23] readback scratch (D_PACK result during final packet)
+#
+#  tile_arm (stays resident in CPU IMEM after tile_setup):
+#    1. D_UNPACK CPU[0..11] → GPU[GPU_PARAM_BASE..] (3 words/bank × 4, burst)
+#    2. wait CR9 == 12
+#    3. launch GPU at entry_pc with mask=0xF
+#    4. wait CR6 == 5
+#    5. halt
+# ══════════════════════════════════════════════════════════════
+
+# Constants for tile scratch area
+my $TILE_CPU_PARAM_BASE = 0;       # word 0: DMA params start
+my $TILE_CPU_GPU_PBASE  = 12;      # word 12: GPU_PARAM_BASE constant
+my $TILE_CPU_ENTRY_PC   = 13;      # word 13: entry_pc
+my $TILE_CPU_WAIT_DMA   = 14;      # word 14: DMA wait target (12)
+my $TILE_CPU_WAIT_GPU   = 15;      # word 15: GPU done value (5)
+my $TILE_CPU_RB_BASE    = 16;      # word 16..23: readback scratch
+
+# Build the one-time GPU-program-loader ARM. It DMAs CPU DMEM[0..2*gpu_prog_len-1]
+# (where GPU prog instructions live as 32b words) into GPU IMEM via D_IMEM,
+# then halts.
+sub build_gpu_imem_loader {
+    my @p;
+    push @p, arm_mov_imm(0, 0);              # R0 = 0 (CPU DMEM base)
+    push @p, arm_mov_imm(1, 0);              # R1 = 0 (DMA src)
+    push @p, arm_mcr(1, 0);                   # CR0 = 0
+    push @p, arm_mov_imm(1, 0);              # R1 = 0 (DMA dst in GPU IMEM)
+    push @p, arm_mcr(1, 1);                   # CR1 = 0
+    push @p, arm_mov_imm(1, $gpu_prog_len);  # R1 = gpu_prog_len (60)
+    push @p, arm_mcr(1, 2);                   # CR2 = 60 (len)
+    push @p, arm_mov_imm(1, 5);              # R1 = 5 (D_IMEM opcode)
+    push @p, arm_mcr(1, 3);                   # CR3 = 5 → kick D_IMEM
+    # wait: CR9 == 0 + 60 = 60 (D_IMEM advances cpu_ptr by 1 per instr)
+    my $wait_loop = scalar @p;
+    push @p, arm_mrc(5, 9);                   # R5 = CR9
+    push @p, arm_mov_imm(6, $gpu_prog_len);  # R6 = 60
+    push @p, arm_cmp_reg(5, 6);
+    push @p, arm_b_idx(0x1, scalar(@p), $wait_loop);  # B.NE loop
+    push @p, $HALT;
+    push @p, $NOP while @p % 2;
+    return \@p;
+}
+
+# Build the tile ARM (re-used for all 36 tiles). Reads params pre-staged in
+# CPU DMEM by the host (see layout above). Straight-line single-pass program.
+sub build_tile_arm {
+    my @p;
+    # Phase 1: D_UNPACK CPU[0..11] → GPU_PARAM_BASE (3 words/bank × 4 banks, burst_all)
+    push @p, arm_mov_imm(0, 0);                               # R0 = 0
+    push @p, arm_mov_imm(1, 0);                               # R1 = 0 (DMA src)
+    push @p, arm_mcr(1, 0);                                    # CR0 = 0
+    push @p, arm_ldr_imm(1, 0, $TILE_CPU_GPU_PBASE * 4);     # R1 = mem[12] = GPU_PARAM_BASE
+    push @p, arm_mcr(1, 1);                                    # CR1 = GPU_PARAM_BASE
+    push @p, arm_mov_imm(1, 3);                               # R1 = 3 (len: 3 words/bank)
+    push @p, arm_mcr(1, 2);                                    # CR2 = 3
+    push @p, arm_mov_imm(1, 0x41);                            # R1 = 0x41 (D_UNPACK burst_all)
+    push @p, arm_mcr(1, 3);                                    # CR3 = 0x41 → kick
+    # Wait: CR9 == 12  (src=0, len=3, burst_all=4 banks → cpu_ptr ends at 12)
+    my $wait_dma = scalar @p;
+    push @p, arm_mrc(5, 9);                                    # R5 = CR9
+    push @p, arm_ldr_imm(6, 0, $TILE_CPU_WAIT_DMA * 4);       # R6 = mem[14] = 12
+    push @p, arm_cmp_reg(5, 6);
+    push @p, arm_b_idx(0x1, scalar(@p), $wait_dma);
+
+    # Phase 2: Launch GPU at entry_pc with mask=0xF
+    push @p, arm_ldr_imm(1, 0, $TILE_CPU_ENTRY_PC * 4);       # R1 = entry_pc
+    push @p, arm_mcr(1, 4);                                    # CR4 = entry_pc
+    push @p, arm_mov_imm(1, 15);                              # R1 = 15 (mask)
+    push @p, arm_mcr(1, 7);                                    # CR7 = 15
+    push @p, arm_mov_imm(1, 1);                               # R1 = 1 (start)
+    push @p, arm_mcr(1, 5);                                    # CR5 = 1 → kick GPU
+    # Wait: CR6 == 5  (idle | done, active=0)
+    my $wait_gpu = scalar @p;
+    push @p, arm_mrc(5, 6);                                    # R5 = CR6
+    push @p, arm_ldr_imm(6, 0, $TILE_CPU_WAIT_GPU * 4);       # R6 = mem[15] = 5
+    push @p, arm_cmp_reg(5, 6);
+    push @p, arm_b_idx(0x1, scalar(@p), $wait_gpu);
+
+    push @p, $HALT;
+    push @p, $NOP while @p % 2;
+    return \@p;
+}
+
+# Build the final D_PACK ARM. DMAs GPU[X3_BASE..X3_BASE+1 per bank, burst_all]
+# → CPU DMEM[TILE_CPU_RB_BASE..]. 2 words/bank × 4 banks = 8 CPU words = 4 DWs.
+sub build_dpack_arm {
+    my @p;
+    push @p, arm_mov_imm(0, 0);                               # R0 = 0
+    push @p, arm_ldr_imm(1, 0, ($TILE_CPU_PARAM_BASE + 0) * 4); # R1 = mem[0] = X3_BASE GPU addr
+    push @p, arm_mcr(1, 0);                                    # CR0 = X3_BASE (GPU src)
+    push @p, arm_ldr_imm(1, 0, ($TILE_CPU_PARAM_BASE + 1) * 4); # R1 = mem[1] = CPU RB dst
+    push @p, arm_mcr(1, 1);                                    # CR1 = CPU RB addr
+    push @p, arm_mov_imm(1, 2);                               # R1 = 2 (len: 2 32b words/bank)
+    push @p, arm_mcr(1, 2);                                    # CR2 = 2
+    push @p, arm_mov_imm(1, 0x43);                            # R1 = 0x43 (D_PACK burst_all)
+    push @p, arm_mcr(1, 3);                                    # CR3 → kick D_PACK
+    # Wait: CR9 == RB + 2*4 = RB + 8  (D_PACK advances cpu_ptr by 1 per 32b word written)
+    my $wait_dma = scalar @p;
+    push @p, arm_mrc(5, 9);
+    push @p, arm_ldr_imm(6, 0, ($TILE_CPU_PARAM_BASE + 2) * 4); # R6 = mem[2] = wait target
+    push @p, arm_cmp_reg(5, 6);
+    push @p, arm_b_idx(0x1, scalar(@p), $wait_dma);
+    push @p, $HALT;
+    push @p, $NOP while @p % 2;
+    return \@p;
+}
+
+# Load GPU program into GPU IMEM via a one-time CPU-side DMA.
+sub gpu_prog_load {
+    # Step 1: stage GPU prog in CPU DMEM[0..gpu_prog_len-1]
+    ic();
+    my $dw = int(($gpu_prog_len + 1) / 2);
+    my @c = cw(2, 0, $dw, 0); iw($c[0], $c[1], 0x20);
+    for (my $i = 0; $i < $gpu_prog_len; $i += 2) {
+        my $lo = $gpu_prog[$i] & 0xFFFFFFFF;
+        my $hi = (($i+1) < $gpu_prog_len ? $gpu_prog[$i+1] : 0) & 0xFFFFFFFF;
+        iw($hi, $lo, 0);
+    }
+    id();
+
+    # Step 2: push the GPU-IMEM-loader ARM into CPU IMEM
+    my $loader = build_gpu_imem_loader();
+    ic();
+    pkt_load_imem(0, $loader, 0, scalar(@$loader), 0x20);
+
+    # Step 3: CPU_START. pkt_proc enters P_CPU_RUN, CPU DMAs GPU prog
+    # into GPU IMEM via D_IMEM, halts. drd fires when pkt_proc returns to IDLE.
+    ic();
+    @c = cw(3, 0, 0, 0); iw($c[0], $c[1], 0x20);
+    id();
+    printf("  [GPU_PROG] loaded %d instructions into GPU IMEM\n", $gpu_prog_len) if $V;
+}
+
+# Install the per-tile ARM into CPU IMEM once; reused across all 36 tiles.
+sub tile_arm_install {
+    my $arm = build_tile_arm();
+    ic();
+    pkt_load_imem(0, $arm, 0, scalar(@$arm), 0x20);
+    id();
+    printf("  [TILE_ARM] installed (%d instructions)\n", scalar(@$arm)) if $V;
+}
+
+# Run one tile. Params are read from @final_dmem (built by
+# build_sched_and_final_dmem in ann_build_host).
+sub run_one_tile {
+    my ($tile_idx) = @_;
+    my $rec = $ANN_HW_SCHED_CPU_BASE + $tile_idx * $ANN_HW_SCHED_RECORD_WORDS;
+    my $entry_pc = $final_dmem[$rec + 0];
+    # Per-bank 3-word records sit at $rec+1 .. $rec+12 (same for all 4 banks).
+
+    # Stage tile params in CPU DMEM[0..15]:
+    #   [0..11] = 4 × (3 per-bank words) for D_UNPACK burst_all
+    #   [12]    = GPU_PARAM_BASE
+    #   [13]    = entry_pc
+    #   [14]    = DMA wait target (12)
+    #   [15]    = GPU done value (5)
+    my @words;
+    for my $bank (0..3) {
+        for my $i (0..2) {
+            push @words, $final_dmem[$rec + 1 + $bank*3 + $i];
+        }
+    }
+    push @words, $ANN_HW_GPU_PARAM_BASE;   # [12]
+    push @words, $entry_pc;                  # [13]
+    push @words, 12;                         # [14]
+    push @words, 5;                          # [15]
+
+    ic();
+    # Same packet:
+    #   LOAD_DMEM addr=0 count=8 (16 words = 8 DWs)
+    #   CPU_START  +  READBACK (dummy 4 DWs from RB area) + SEND_PKT
+    my @c;
+    @c = cw(2, 0, 8, 0); iw($c[0], $c[1], 0x20);
+    for (my $i = 0; $i < 16; $i += 2) {
+        iw($words[$i+1] & 0xFFFFFFFF, $words[$i] & 0xFFFFFFFF, 0);
+    }
+    @c = cw(3, 0, 0, 0); iw($c[0], $c[1], 0);
+    @c = cw(4, $TILE_CPU_RB_BASE, 4, 0); iw($c[0], $c[1], 0);
+    @c = cw(5, 0, 0, 0); iw($c[0], $c[1], 0);
+    id();
+    my $done = pt(100, 50);   # up to 5s per tile (compute is ~1ms)
+    if (!$done) {
+        printf("  [TILE %2d] TIMEOUT (entry_pc=%d)\n", $tile_idx, $entry_pc);
+        return 0;
+    }
+    return 1;
+}
+
+# Final D_PACK: drain Y from GPU DMEM[X3_BASE..] to CPU DMEM, then READBACK + SEND.
+sub final_readback {
+    # D_PACK ARM into CPU IMEM (overwrites tile ARM)
+    my $arm = build_dpack_arm();
+    ic();
+    pkt_load_imem(0, $arm, 0, scalar(@$arm), 0x20);
+    id();
+
+    my $rb_base     = $TILE_CPU_RB_BASE;       # 16
+    my $wait_target = $rb_base + 8;             # 24 (2 words/bank × 4 banks)
+
+    # Stage D_PACK params at CPU DMEM[0..3]:
+    #   word 0 = GPU X3_BASE (src)
+    #   word 1 = rb_base     (dst)
+    #   word 2 = wait_target
+    #   word 3 = 0
+    # iw(hi, lo) packs { HI:word[i+1], LO:word[i] } per DW, so
+    # first DW:  HI=rb_base,    LO=X3_BASE
+    # second DW: HI=0,          LO=wait_target
+    ic();
+    my @c;
+    @c = cw(2, 0, 2, 0); iw($c[0], $c[1], 0x20);
+    iw($rb_base,     $ANN_HW_GPU_X3_BASE, 0);
+    iw(0,            $wait_target,         0);
+
+    @c = cw(3, 0,         0, 0); iw($c[0], $c[1], 0);   # CPU_START
+    @c = cw(4, $rb_base,  4, 0); iw($c[0], $c[1], 0);   # READBACK 4 DWs from RB area
+    @c = cw(5, 0,         0, 0); iw($c[0], $c[1], 0);   # SEND_PKT
+    id();
+    my $done = pt(300, 100);
+    my @tx = cr();
+    return ($done, @tx);
+}
+
+# ══════════════════════════════════════════════════════════════
+#  Diagnostic subcommands — bisect where the tile loop wedges
+# ══════════════════════════════════════════════════════════════
+
+# Build ARM programs of increasing ambition.
+# Each returns a ref to a 32b word array.
+sub build_halt_only_arm {
+    my @p;
+    push @p, $HALT;                          # 0: HALT
+    push @p, $HALT;                          # 1: HALT (2-sighting stability filter)
+    return \@p;
+}
+
+sub build_dma_only_arm {
+    # Same D_UNPACK + wait as the real tile_arm, but NO GPU kick.
+    my @p;
+    push @p, arm_mov_imm(0, 0);
+    push @p, arm_mov_imm(1, 0);
+    push @p, arm_mcr(1, 0);                   # CR0 = 0 (src)
+    push @p, arm_ldr_imm(1, 0, $TILE_CPU_GPU_PBASE * 4);  # R1 = mem[12]
+    push @p, arm_mcr(1, 1);                   # CR1 = GPU_PARAM_BASE (dst)
+    push @p, arm_mov_imm(1, 3);
+    push @p, arm_mcr(1, 2);                   # CR2 = 3 (len)
+    push @p, arm_mov_imm(1, 0x41);
+    push @p, arm_mcr(1, 3);                   # CR3 = 0x41 kick D_UNPACK
+    my $wait = scalar @p;
+    push @p, arm_mrc(5, 9);
+    push @p, arm_ldr_imm(6, 0, $TILE_CPU_WAIT_DMA * 4);
+    push @p, arm_cmp_reg(5, 6);
+    push @p, arm_b_idx(0x1, scalar(@p), $wait);
+    push @p, $HALT;
+    push @p, $HALT;
+    return \@p;
+}
+
+# Run one packet with a given ARM installed + one tile param block staged.
+sub diag_pkt {
+    my ($label, $arm_ref, $entry_pc_stub) = @_;
+
+    ic();
+    pkt_load_imem(0, $arm_ref, 0, scalar(@$arm_ref), 0x20);
+    id();
+
+    # Stage the same param block tile 0 would see (L1 ReLU tile), so
+    # if the diagnostic ARM does use them, values are sensible.
+    my $rec = $ANN_HW_SCHED_CPU_BASE;   # tile 0 sched record start
+    my @words;
+    for my $bank (0..3) {
+        for my $i (0..2) {
+            push @words, $final_dmem[$rec + 1 + $bank*3 + $i];
+        }
+    }
+    push @words, $ANN_HW_GPU_PARAM_BASE;
+    push @words, defined($entry_pc_stub) ? $entry_pc_stub : $final_dmem[$rec + 0];
+    push @words, 12;
+    push @words, 5;
+
+    ic();
+    my @c;
+    @c = cw(2, 0, 8, 0); iw($c[0], $c[1], 0x20);
+    for (my $i = 0; $i < 16; $i += 2) {
+        iw($words[$i+1] & 0xFFFFFFFF, $words[$i] & 0xFFFFFFFF, 0);
+    }
+    @c = cw(3, 0, 0, 0); iw($c[0], $c[1], 0);
+    @c = cw(4, $TILE_CPU_RB_BASE, 4, 0); iw($c[0], $c[1], 0);
+    @c = cw(5, 0, 0, 0); iw($c[0], $c[1], 0);
+    id();
+    my $done = pt(60, 50);     # 3 s timeout
+    dump_st("diag-post");
+    if ($done) {
+        my @tx = cr();
+        printf("  [%s] PASS — txd fired, TX[0]={%08X,%08X}\n",
+            $label, $tx[0], $tx[1]);
+        $pass++;
+    } else {
+        printf("  [%s] TIMEOUT — pkt_proc wedged (likely P_CPU_RUN, cpu_done never asserted)\n",
+            $label);
+        $fail++;
+    }
+}
+
+sub ann_diag {
+    banner("T_ANN_DIAG: bisect CPU/DMA/GPU host-driven tile path");
+    ann_build_host();
+    hard_reset();
+
+    phase("(1/3) HALT-only ARM — checks CPU reset/start/halt round-trip");
+    diag_pkt("DIAG-HALT", build_halt_only_arm(), 0);
+
+    phase("(2/3) DMA-only ARM — adds D_UNPACK+wait (no GPU kick)");
+    diag_pkt("DIAG-DMA", build_dma_only_arm(), 0);
+
+    phase("(3/3) Full tile ARM — adds GPU launch+wait (what `run` uses)");
+    diag_pkt("DIAG-FULL", build_tile_arm(), $ANN_HW_GPU_RELU_PC);
+}
+
+# Stage 2: on-SoC scheduler flow — mirrors model_tb T5 ("HW scheduler").
+# Assumes GPU DMEM already holds weights (from a prior `load` run).
+# The scheduler program itself runs the 36-tile outer loop; the host just
+# pushes the scheduler program + final_dmem image, kicks CPU_START, and
+# reads back the four logit packets.  Thread 0 is gated-in via CR10 MRC.
+sub ann_run_inference {
+    banner("T_ANN_RUN: on-SoC scheduler (36-tile, CR10 TID gate)");
+    ann_build_host();
+    hard_reset();
+
+    phase("CPU IMEM ← scheduler program");
+    send_imem_chunked(0, \@sched_prog, "sched_prog");
+
+    phase("CPU DMEM ← final image (params + GPU prog + input + sched records)");
+    send_dmem_chunked(0, [ @final_dmem[0 .. $final_dmem_words - 1] ], "final_dmem");
+
+    phase("CPU_START + READBACK + SEND_PKT");
+    ic();
+    my @c;
+    @c = cw(3, 0, 0, 0);                                    iw($c[0], $c[1], 0x2B);
+    @c = cw(4, $ANN_HW_READBACK_CPU_BASE, 4, 0);            iw($c[0], $c[1], 0x00);
+    @c = cw(5, 0, 0, 0);                                    iw($c[0], $c[1], 0x00);
+    id();
+    my $done = pt(1200, 100);    # ~120s budget (sim runs in ~77k cycles)
+    dump_st("post-poll");
+    my @tx = cr();
+    verify_tx($done, @tx);
+}
+
+sub verify_tx {
+    my ($done, @tx) = @_;
+    my @exp = (
+        0xC1E4C1F0, 0x4184C0D5,    # pkt 0
+        0xC0864012, 0xC225417C,    # pkt 1
+        0xC337C363, 0xC29C43B1,    # pkt 2
+        0xC32BC340, 0x3F164392,    # pkt 3
+    );
+    printf("  Expected: pkt0={%08X,%08X} pkt1={%08X,%08X}\n",
+        $exp[0], $exp[1], $exp[2], $exp[3]);
+    if (!$done) { print "  [FAIL] no TX (timeout)\n"; $fail++; return }
+    for (my $i = 0; $i < 2; $i++) {     # HW snoop only captures TX[0..1]
+        my $gh = $tx[$i*2]; my $gl = $tx[$i*2 + 1];
+        my $eh = $exp[$i*2]; my $el = $exp[$i*2 + 1];
+        if ($gh == $eh && $gl == $el) {
+            printf("  [PASS] pkt%d = {%08X,%08X}\n", $i, $gh, $gl); $pass++;
+        } else {
+            printf("  [FAIL] pkt%d = {%08X,%08X}  exp {%08X,%08X}\n",
+                $i, $gh, $gl, $eh, $el); $fail++;
+        }
+    }
+}
+
+# Convenience: full end-to-end (load then run).
+sub tann_full { ann_load_weights(); ann_run_inference(); }
+
+# ══════════════════════════════════════════════════════════════
+#  Summary
 # ══════════════════════════════════════════════════════════════
 sub summary {
-  print "\n" . "=" x 50 . "\n";
-  printf("  PASSED: %d  FAILED: %d  TOTAL: %d\n",$pass,$fail,$pass+$fail);
-  printf("  MMIO: %d txns, %d errors\n",$txn,$err);
-  print "=" x 50 . "\n";
-  print($fail==0&&$pass>0 ? ">>> ALL TESTS PASSED <<<\n" : ">>> SOME TESTS FAILED <<<\n") if $pass+$fail>0;
-  print "\n";
+    print "\n" . "=" x 50 . "\n";
+    printf("  PASSED: %d  FAILED: %d  TOTAL: %d\n", $pass, $fail, $pass+$fail);
+    printf("  MMIO: %d txns, %d errors\n", $txn, $err);
+    print "=" x 50 . "\n";
+    print($fail == 0 && $pass > 0 ? ">>> ANN FULL MODEL PASSED <<<\n"
+                                   : ">>> ANN FULL MODEL FAILED <<<\n") if $pass+$fail > 0;
+    print "\n";
 }
 
-$V=1;
-if(grep{$_ eq '-q'}@ARGV){$V=0;@ARGV=grep{$_ ne '-q'}@ARGV}
-my $c=$ARGV[0]||"help";
+# ── Dispatch ──────────────────────────────────────────────────
+$V = 1;
+if (grep { $_ eq '-q' } @ARGV) { $V = 0; @ARGV = grep { $_ ne '-q' } @ARGV }
+my $c = $ARGV[0] || "model";
 
-my %tests = (
-  test1=>[\&t1], test3=>[\&t3], test4=>[\&t4], test5=>[\&t5],
-  test6a=>[\&t6a], test6b=>[\&t6a,\&t6b],
-  test8=>[\&t8], test9=>[\&t9], test10=>[\&t10], test11=>[\&t11], test12=>[\&t12],
-  test13=>[\&t13], test14=>[\&t14], test15=>[\&t15],
-  test16=>[\&t16], test17=>[\&t17], test18=>[\&t18], test19=>[\&t19],
-  test20=>[\&t20], test21=>[\&t21],
-  test22=>[\&t22], test23=>[\&t23], test24=>[\&t24], test25=>[\&t25],
-  test26=>[\&t26], test27=>[\&t27],
-  test28=>[\&t28], test29=>[\&t29], test30=>[\&t30], test31=>[\&t31],
-  test32=>[\&t32], test33=>[\&t33], test34=>[\&t34],
-  test35=>[\&t35], test36=>[\&t36], test37=>[\&t37], test38=>[\&t38],
-  test39=>[\&t39], test40=>[\&t40], test41=>[\&t41], test42=>[\&t42],
-  tann=>[\&tann], model=>[\&tann], testann=>[\&tann],
-);
-
-if(exists $tests{$c}){ for(@{$tests{$c}}){$_->()} summary(); }
-elsif($c eq "cpu"){ t1();t3();t4();t5();t6a();t6b();t8();t9();t10();t11();t12(); summary(); }
-elsif($c eq "gpu"){ t13();t14();t15();t16();t17();t18();t19();t20();t21(); summary(); }
-elsif($c eq "isa"){ t28();t29();t30();t31();t32();t33();t34(); summary(); }
-elsif($c eq "gpuisa"){ t35();t36();t37();t38();t39();t40();t41();t42(); summary(); }
-elsif($c eq "net"){ t26();t27(); summary(); }
-elsif($c eq "hetero"){ t22();t23();t24();t25(); summary(); }
-elsif($c eq "ann"){ tann(); summary(); }
-elsif($c eq "all"){ t1();t3();t4();t5();t6a();t6b();t8();t9();t10();t11();t12();
-  t13();t14();t15();t16();t17();t18();t19();t20();t21();
-  t22();t23();t24();t25();t26();t27();
-  t28();t29();t30();t31();t32();t33();t34();
-  t35();t36();t37();t38();t39();t40();t41();t42();
-  tann(); summary(); }
-elsif($c eq "status"){ my$s=rr($HW_ST); ds($s,"status"); }
-elsif($c eq "result"){ cr(); }
-elsif($c eq "clear"){ rw($SW_CMD,0x04);usleep(10000);rw($SW_CMD,0);print"Cleared\n"; }
+if    ($c eq "model" || $c eq "tann" || $c eq "ann")   { tann_full();         summary(); }
+elsif ($c eq "load"  || $c eq "preload")                 { ann_load_weights(); summary(); }
+elsif ($c eq "run"   || $c eq "infer")                   { ann_run_inference(); summary(); }
+elsif ($c eq "diag")                                      { ann_diag();          summary(); }
+elsif ($c eq "status") { dump_st("status"); }
+elsif ($c eq "result") { cr(); }
+elsif ($c eq "reset")  { hard_reset(); }
+elsif ($c eq "clear")  { rw($SW_CMD, $CMD_CLEAR); usleep(10000); rw($SW_CMD, 0); print "Cleared\n"; }
 else {
-  print "\nUsage: perl model_test <command> [-q]\n\n";
-  print "Individual: test1 test3..test42 (skip t2/t7 MUL)\n";
-  print "ANN model:  tann | model | testann   (2-layer WMMA inference, Y=16.0)\n";
-  print "Groups:     cpu gpu isa gpuisa net hetero ann\n";
-  print "Full:       all (40 base tests + ANN)\n";
-  print "Utils:      status result clear\n\n";
+    print "\nUsage: sw/model_test <command> [-q]\n\n";
+    print "ANN stages:\n";
+    print "  load | preload     stream weights → GPU DMEM (slow, ~60 packets)\n";
+    print "  run  | infer       run inference + readback (assumes `load` already ran)\n";
+    print "  model | tann | ann full pipeline (= load + run)   [default]\n\n";
+    print "Utils: status | result | reset | clear\n\n";
+    print "Typical iteration loop:\n";
+    print "  sw/model_test load       # once per FPGA programming\n";
+    print "  sw/model_test run        # as many times as you want\n\n";
+    print "Environment:\n";
+    print "  MODEL_DIR    dir with ann_weights_dmem_t[0-3].hex (default: sw/model)\n\n";
 }

@@ -42,7 +42,12 @@ module cp10_regfile (
     output wire [3:0] gpu_thread_mask,
     output wire [31:0] gpu_scratch,
     input wire gpu_kernel_done, // 1-cycle pulse from sm_core
-    input wire gpu_active // high while kernel running (from sm_top)
+    input wire gpu_active, // high while kernel running (from sm_top)
+
+    // CPU thread ID at the EX2 stage of the issuing MRC (readable via CR10).
+    // Lets multi-thread ARM code identify itself to gate single-thread regions
+    // without a sim-only regfile poke.  v1.1 addition.
+    input wire [1:0] cpu_tid
 );
 
     // ================================================================
@@ -187,6 +192,7 @@ module cp10_regfile (
             4'd7:  cp_rdata = {28'd0, cr7_thread_mask};
             4'd8:  cp_rdata = cr8_gpu_scratch;
             4'd9:  cp_rdata = dma_cur_addr;
+            4'd10: cp_rdata = {30'd0, cpu_tid};  // v1.1: per-thread ID
             default: cp_rdata = 32'd0;
         endcase
     end
