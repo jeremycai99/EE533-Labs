@@ -59,8 +59,12 @@ dkms.conf
 # Python cache
 __pycache__/
 
-# Generated model artifacts
-Final/model/GPU_HW_RELU*/
+# Generated model artifacts — per-file patterns inside GPU_HW_RELU/ so the
+# 4 canonical weight hex files (needed by model_tb.v sim and sw/model_test
+# HW) can be committed while every other trained artifact stays ignored.
+Final/model/GPU_HW_RELU/*.npy
+Final/model/GPU_HW_RELU/*.txt
+Final/model/GPU_HW_RELU/ann_weights_raw_dmem_t*.hex
 Final/model/ann_weights_bf16.npy
 Final/model/feat_idx.npy
 Final/model/scaler_mean.npy
