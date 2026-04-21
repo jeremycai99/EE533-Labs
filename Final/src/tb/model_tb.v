@@ -204,81 +204,45 @@ initial begin : init_ann_full_assets
         ann_w_t3[ann_asset_i] = 16'd0;
     end
 
-    ann_asset_fd = $fopen("../../model/GPU_HW_RELU/ann_weights_dmem_t0.hex", "r");
+    // v2.0 layout: the 4 canonical BF16 weight hex files live directly under
+    // Final/model/.  The old GPU_HW_RELU/ subdirectory (and the even older
+    // ann_weights_dmem_t*.hex at model/ root) have been retired.
+    ann_asset_fd = $fopen("../../model/ann_weights_dmem_t0.hex", "r");
     if (ann_asset_fd != 0) begin
         $fclose(ann_asset_fd);
-        ann_hwrelu_found_cnt = ann_hwrelu_found_cnt + 1;
-    end
-
-    ann_asset_fd = $fopen("../../model/GPU_HW_RELU/ann_weights_dmem_t1.hex", "r");
-    if (ann_asset_fd != 0) begin
-        $fclose(ann_asset_fd);
-        ann_hwrelu_found_cnt = ann_hwrelu_found_cnt + 1;
-    end
-
-    ann_asset_fd = $fopen("../../model/GPU_HW_RELU/ann_weights_dmem_t2.hex", "r");
-    if (ann_asset_fd != 0) begin
-        $fclose(ann_asset_fd);
-        ann_hwrelu_found_cnt = ann_hwrelu_found_cnt + 1;
-    end
-
-    ann_asset_fd = $fopen("../../model/GPU_HW_RELU/ann_weights_dmem_t3.hex", "r");
-    if (ann_asset_fd != 0) begin
-        $fclose(ann_asset_fd);
-        ann_hwrelu_found_cnt = ann_hwrelu_found_cnt + 1;
-    end
-
-    if (ann_hwrelu_found_cnt == 4) begin
-        $readmemh("../../model/GPU_HW_RELU/ann_weights_dmem_t0.hex", ann_w_t0);
-        $readmemh("../../model/GPU_HW_RELU/ann_weights_dmem_t1.hex", ann_w_t1);
-        $readmemh("../../model/GPU_HW_RELU/ann_weights_dmem_t2.hex", ann_w_t2);
-        $readmemh("../../model/GPU_HW_RELU/ann_weights_dmem_t3.hex", ann_w_t3);
+        $readmemh("../../model/ann_weights_dmem_t0.hex", ann_w_t0);
         ann_w_t0_present = 1'b1;
-        ann_w_t1_present = 1'b1;
-        ann_w_t2_present = 1'b1;
-        ann_w_t3_present = 1'b1;
-        ann_model_use_hwrelu = 1'b1;
-        $display("[INFO] ANN full-model assets loaded from ../../model/GPU_HW_RELU/");
-    end else begin
-        if ((ann_hwrelu_found_cnt != 0) && (ann_hwrelu_found_cnt != 4))
-            $display("[INFO] ANN HW-ReLU asset set incomplete (%0d/4 files); falling back to ../../model/ann_weights_dmem_t[0-3].hex",
-                     ann_hwrelu_found_cnt);
-
-        ann_asset_fd = $fopen("../../model/ann_weights_dmem_t0.hex", "r");
-        if (ann_asset_fd != 0) begin
-            $fclose(ann_asset_fd);
-            $readmemh("../../model/ann_weights_dmem_t0.hex", ann_w_t0);
-            ann_w_t0_present = 1'b1;
-        end
-
-        ann_asset_fd = $fopen("../../model/ann_weights_dmem_t1.hex", "r");
-        if (ann_asset_fd != 0) begin
-            $fclose(ann_asset_fd);
-            $readmemh("../../model/ann_weights_dmem_t1.hex", ann_w_t1);
-            ann_w_t1_present = 1'b1;
-        end
-
-        ann_asset_fd = $fopen("../../model/ann_weights_dmem_t2.hex", "r");
-        if (ann_asset_fd != 0) begin
-            $fclose(ann_asset_fd);
-            $readmemh("../../model/ann_weights_dmem_t2.hex", ann_w_t2);
-            ann_w_t2_present = 1'b1;
-        end
-
-        ann_asset_fd = $fopen("../../model/ann_weights_dmem_t3.hex", "r");
-        if (ann_asset_fd != 0) begin
-            $fclose(ann_asset_fd);
-            $readmemh("../../model/ann_weights_dmem_t3.hex", ann_w_t3);
-            ann_w_t3_present = 1'b1;
-        end
-
-        if (ann_w_t0_present && ann_w_t1_present && ann_w_t2_present && ann_w_t3_present)
-            $display("[INFO] ANN full-model assets loaded from ../../model/");
     end
 
-    if (!(ann_w_t0_present && ann_w_t1_present && ann_w_t2_present && ann_w_t3_present))
-        $display("[INFO] ANN full-model assets incomplete: t0=%0d t1=%0d t2=%0d t3=%0d (expected ../../model/GPU_HW_RELU/ann_weights_dmem_t[0-3].hex or ../../model/ann_weights_dmem_t[0-3].hex from Final/src/sim)",
+    ann_asset_fd = $fopen("../../model/ann_weights_dmem_t1.hex", "r");
+    if (ann_asset_fd != 0) begin
+        $fclose(ann_asset_fd);
+        $readmemh("../../model/ann_weights_dmem_t1.hex", ann_w_t1);
+        ann_w_t1_present = 1'b1;
+    end
+
+    ann_asset_fd = $fopen("../../model/ann_weights_dmem_t2.hex", "r");
+    if (ann_asset_fd != 0) begin
+        $fclose(ann_asset_fd);
+        $readmemh("../../model/ann_weights_dmem_t2.hex", ann_w_t2);
+        ann_w_t2_present = 1'b1;
+    end
+
+    ann_asset_fd = $fopen("../../model/ann_weights_dmem_t3.hex", "r");
+    if (ann_asset_fd != 0) begin
+        $fclose(ann_asset_fd);
+        $readmemh("../../model/ann_weights_dmem_t3.hex", ann_w_t3);
+        ann_w_t3_present = 1'b1;
+    end
+
+    if (ann_w_t0_present && ann_w_t1_present && ann_w_t2_present && ann_w_t3_present) begin
+        ann_model_use_hwrelu = 1'b1;
+        ann_hwrelu_found_cnt = 4;
+        $display("[INFO] ANN full-model assets loaded from ../../model/");
+    end else begin
+        $display("[INFO] ANN full-model assets incomplete: t0=%0d t1=%0d t2=%0d t3=%0d (expected ../../model/ann_weights_dmem_t[0-3].hex relative to Final/src/sim)",
                  ann_w_t0_present, ann_w_t1_present, ann_w_t2_present, ann_w_t3_present);
+    end
 
     ann_full_tail_nz = 0;
     for (ann_asset_i = ANN_WEIGHT_LINEAR_COUNT; ann_asset_i < (4 * ANN_MODEL_THREAD_DEPTH); ann_asset_i = ann_asset_i + 1)
@@ -2580,7 +2544,7 @@ initial begin
         cycle_cnt = 0;
 
         if (!ann_thread_present(2'd1)) begin
-            $display("    [SKIP] Missing ANN weight files (checked ../../model/GPU_HW_RELU/ and ../../model/)");
+            $display("    [SKIP] Missing ANN weight files (checked ../../model/)");
         end else begin
             send_ann_thread_slice_dmem(2'd1, ANN_STAGE_BASE_ADDR, 0, 8, 8'h24);
             rx(cmd(4'h4, ANN_STAGE_BASE_ADDR, 16'd2, 32'h0), 8'h00);
@@ -2613,7 +2577,7 @@ initial begin
 
         if (!(ann_thread_present(2'd0) && ann_thread_present(2'd1) &&
               ann_thread_present(2'd2) && ann_thread_present(2'd3))) begin
-            $display("    [SKIP] Missing ANN weight files (checked ../../model/GPU_HW_RELU/ and ../../model/)");
+            $display("    [SKIP] Missing ANN weight files (checked ../../model/)");
         end else begin
             send_gpu_arm(8'h26, 8'd4, 8'd0, 8'd2);
             send_gpu_imem({32'h00000000, 32'hC8000000},
@@ -2657,7 +2621,7 @@ initial begin
 
         if (!(ann_thread_present(2'd0) && ann_thread_present(2'd1) &&
               ann_thread_present(2'd2) && ann_thread_present(2'd3))) begin
-            $display("    [SKIP] Missing ANN weight files (checked ../../model/GPU_HW_RELU/ and ../../model/)");
+            $display("    [SKIP] Missing ANN weight files (checked ../../model/)");
         end else begin
             ann_compute_reference_model();
             ann_init_tiled_inputs();
@@ -2698,7 +2662,7 @@ initial begin
                 $display("    [INFO] ReLU tiles : %0d launches, %0d cycles total, avg %0d",
                          ann_tile_cycle_relu_cnt, ann_tile_cycle_relu_total,
                          ann_tile_cycle_relu_total / ann_tile_cycle_relu_cnt);
-            $display("    [INFO] Asset source = %0s", ann_model_use_hwrelu ? "GPU_HW_RELU" : "model root");
+            $display("    [INFO] Asset source = %0s", "model/ (flat v2.0)");
             $display("    [INFO] Expected logits rows:");
             for (ann_full_row = 0; ann_full_row < ANN_N_CLASS; ann_full_row = ann_full_row + 1)
                 $display("      exp row%0d: %04h %04h %04h %04h",
@@ -2743,7 +2707,7 @@ initial begin
 
         if (!(ann_thread_present(2'd0) && ann_thread_present(2'd1) &&
               ann_thread_present(2'd2) && ann_thread_present(2'd3))) begin
-            $display("    [SKIP] Missing ANN weight files (checked ../../model/GPU_HW_RELU/ and ../../model/)");
+            $display("    [SKIP] Missing ANN weight files (checked ../../model/)");
         end else begin
             // NOTE: the 116-instruction scheduler program is designed so that
             // all 4 CPU threads can co-execute it — DMA / GPU kicks are
