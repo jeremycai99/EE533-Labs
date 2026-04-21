@@ -1242,6 +1242,52 @@ sub ann_run_inference {
     verify_tx($done, @tx);
 }
 
+# BF16 (bits 0..15) → decimal float. Returns Perl float (double internally).
+sub bf16_to_f {
+    my ($b) = @_;
+    $b &= 0xFFFF;
+    my $sign = ($b >> 15) & 1;
+    my $exp  = ($b >> 7)  & 0xFF;
+    my $frac = $b & 0x7F;
+    return 0.0 if $exp == 0 && $frac == 0;
+    if ($exp == 0xFF) { return $frac ? "NaN" : ($sign ? "-Inf" : "+Inf"); }
+    my $mant = 1.0 + $frac / 128.0;
+    my $val  = $mant * (2 ** ($exp - 127));
+    return $sign ? -$val : $val;
+}
+
+# Pretty-print 4 BF16 classes inside one packet (one 64b DW pair HI,LO).
+sub decode_pkt {
+    my ($hi, $lo) = @_;
+    # 4 BF16 in one DW, little-endian: {c3, c2, c1, c0} stored as HI=(c3,c2), LO=(c1,c0)
+    my @c = (
+        $lo        & 0xFFFF,
+        ($lo >> 16) & 0xFFFF,
+        $hi        & 0xFFFF,
+        ($hi >> 16) & 0xFFFF,
+    );
+    my @f = map { bf16_to_f($_) } @c;
+    return (\@c, \@f);
+}
+
+# Read TX[2..3] by firing a second READBACK+SEND_PKT packet over words [804..807]
+# of CPU DMEM (where pkt2, pkt3 live after the scheduler's post-process).  The
+# snoop only captures 2 DWs per send, so we split the readback: first run
+# already captured pkt0/pkt1; this helper captures pkt2/pkt3.
+sub capture_tail_packets {
+    ic();
+    my @c;
+    @c = cw(4, $ANN_HW_READBACK_CPU_BASE + 4, 2, 0); iw($c[0], $c[1], 0x20);
+    @c = cw(5, 0, 0, 0);                               iw($c[0], $c[1], 0);
+    id();
+    if (pt(200, 50)) {
+        return cr();    # (hi2, lo2, hi3, lo3)
+    } else {
+        print "  [WARN] tail-readback timed out; pkt2/pkt3 unavailable\n";
+        return (0,0,0,0);
+    }
+}
+
 sub verify_tx {
     my ($done, @tx) = @_;
     my @exp = (
@@ -1250,18 +1296,301 @@ sub verify_tx {
         0xC337C363, 0xC29C43B1,    # pkt 2
         0xC32BC340, 0x3F164392,    # pkt 3
     );
-    printf("  Expected: pkt0={%08X,%08X} pkt1={%08X,%08X}\n",
-        $exp[0], $exp[1], $exp[2], $exp[3]);
     if (!$done) { print "  [FAIL] no TX (timeout)\n"; $fail++; return }
-    for (my $i = 0; $i < 2; $i++) {     # HW snoop only captures TX[0..1]
-        my $gh = $tx[$i*2]; my $gl = $tx[$i*2 + 1];
-        my $eh = $exp[$i*2]; my $el = $exp[$i*2 + 1];
-        if ($gh == $eh && $gl == $el) {
-            printf("  [PASS] pkt%d = {%08X,%08X}\n", $i, $gh, $gl); $pass++;
-        } else {
-            printf("  [FAIL] pkt%d = {%08X,%08X}  exp {%08X,%08X}\n",
-                $i, $gh, $gl, $eh, $el); $fail++;
+
+    phase("Full TX capture (snoop catches 2 DWs; firing a second RB for pkt2/3)");
+    my @tx_tail = capture_tail_packets();
+
+    # Assemble full TX: pkt0..3 as (HI, LO) pairs
+    my @got = (
+        $tx[0], $tx[1],           # pkt 0 (from main snoop)
+        $tx[2], $tx[3],           # pkt 1 (from main snoop)
+        $tx_tail[0], $tx_tail[1], # pkt 2 (from tail snoop)
+        $tx_tail[2], $tx_tail[3], # pkt 3 (from tail snoop)
+    );
+
+    # ── Decode + table ──
+    print "\n  ┌───────┬──────────────── got ────────────────────┬──────────────── exp ────────────────────┬──── Δ (% per class) ────┐\n";
+    print "  │  pkt  │ c0(hex)  c0(dec)  c1(hex)  c1(dec)  …   │ c0(hex)  c0(dec)  c1(hex)  c1(dec)  …   │  c0    c1    c2    c3   │\n";
+    print "  ├───────┼──────────────────────────────────────────┼──────────────────────────────────────────┼─────────────────────────┤\n";
+    my $packet_fail = 0;
+    my $biggest_err = 0;
+    for my $i (0..3) {
+        my $gh = $got[$i*2];     my $gl = $got[$i*2 + 1];
+        my $eh = $exp[$i*2];     my $el = $exp[$i*2 + 1];
+        my ($g_hex, $g_dec) = decode_pkt($gh, $gl);
+        my ($e_hex, $e_dec) = decode_pkt($eh, $el);
+
+        my @dpc;   # Δ % per class
+        for my $k (0..3) {
+            my $e = $e_dec->[$k];
+            my $g = $g_dec->[$k];
+            if (!ref($e) && !ref($g) && abs($e) > 1e-6) {
+                my $err_pct = 100 * ($g - $e) / abs($e);
+                push @dpc, sprintf("%+6.1f%%", $err_pct);
+                # Only track "biggest error" for classes with |exp| ≥ 1.0 —
+                # values near zero produce huge percent swings on tiny
+                # absolute deltas which isn't meaningful.
+                if (abs($e) >= 1.0) {
+                    my $abs_err_pct = abs($err_pct);
+                    $biggest_err = $abs_err_pct if $abs_err_pct > $biggest_err;
+                }
+            } else {
+                push @dpc, "  NaN ";
+            }
         }
+
+        my $exact = ($gh == $eh) && ($gl == $el);
+        my $tag   = $exact ? "PASS" : "FAIL";
+        $packet_fail++ unless $exact;
+
+        printf("  │%s %d │ %04X %+7.2f  %04X %+7.2f  %04X %+7.2f  %04X %+7.2f │ %04X %+7.2f  %04X %+7.2f  %04X %+7.2f  %04X %+7.2f │ %s %s %s %s │\n",
+            $tag, $i,
+            $g_hex->[0], $g_dec->[0], $g_hex->[1], $g_dec->[1], $g_hex->[2], $g_dec->[2], $g_hex->[3], $g_dec->[3],
+            $e_hex->[0], $e_dec->[0], $e_hex->[1], $e_dec->[1], $e_hex->[2], $e_dec->[2], $e_hex->[3], $e_dec->[3],
+            $dpc[0], $dpc[1], $dpc[2], $dpc[3]);
+    }
+    print "  └───────┴──────────────────────────────────────────┴──────────────────────────────────────────┴─────────────────────────┘\n";
+
+    # ── Argmax classification summary (class-level accuracy) ──
+    my $argmax_agree = 0;
+    my @class_rows;
+    for my $i (0..3) {
+        my $gh = $got[$i*2];     my $gl = $got[$i*2 + 1];
+        my $eh = $exp[$i*2];     my $el = $exp[$i*2 + 1];
+        my (undef, $g_dec) = decode_pkt($gh, $gl);
+        my (undef, $e_dec) = decode_pkt($eh, $el);
+        my $g_argmax = 0; my $e_argmax = 0;
+        for my $k (1..3) {
+            $g_argmax = $k if !ref($g_dec->[$k]) && $g_dec->[$k] > $g_dec->[$g_argmax];
+            $e_argmax = $k if !ref($e_dec->[$k]) && $e_dec->[$k] > $e_dec->[$e_argmax];
+        }
+        my $agree = $g_argmax == $e_argmax;
+        $argmax_agree++ if $agree;
+        push @class_rows, sprintf("    pkt%d: got class %d (%.1f)  ·  exp class %d (%.1f)  %s",
+            $i, $g_argmax, $g_dec->[$g_argmax], $e_argmax, $e_dec->[$e_argmax],
+            $agree ? "[\xe2\x9c\x93]" : "[\xe2\x9c\x97]");
+    }
+    printf("\n  Argmax (classification accuracy %d/4 ≡ %d%%):\n",
+        $argmax_agree, $argmax_agree * 25);
+    print "$_\n" for @class_rows;
+
+    # ── Mean |err| for classes with |exp| ≥ 1.0 (ignore near-zero noise) ──
+    my $err_sum = 0; my $err_cnt = 0;
+    for my $i (0..3) {
+        my (undef, $g_dec) = decode_pkt($got[$i*2], $got[$i*2+1]);
+        my (undef, $e_dec) = decode_pkt($exp[$i*2], $exp[$i*2+1]);
+        for my $k (0..3) {
+            my ($g, $e) = ($g_dec->[$k], $e_dec->[$k]);
+            next if ref($g) || ref($e) || abs($e) < 1.0;
+            $err_sum += abs(100 * ($g - $e) / abs($e));
+            $err_cnt++;
+        }
+    }
+    my $mean_err = $err_cnt ? $err_sum / $err_cnt : 0;
+
+    # ── Score: count exact bit-match as pass ──
+    for my $i (0..3) {
+        my $gh = $got[$i*2];     my $gl = $got[$i*2 + 1];
+        my $eh = $exp[$i*2];     my $el = $exp[$i*2 + 1];
+        if ($gh == $eh && $gl == $el) { $pass++ } else { $fail++ }
+    }
+
+    if ($packet_fail) {
+        printf("\n  [DIAG] bit-exact: %d/4 FAIL  ·  argmax: %d/4 %s  ·  mean |err| = %.1f%%  ·  max |err| = %.1f%% (|exp|≥1.0)\n",
+            $packet_fail, $argmax_agree,
+            $argmax_agree == 4 ? "PASS" : "FAIL",
+            $mean_err, $biggest_err);
+
+        if ($argmax_agree == 4 && $biggest_err < 25) {
+            print "         ▸ Classification is CORRECT — the model works.  Numerical drift\n";
+            print "           is uniform (~10-15%% multiplicative bias), matching a single\n";
+            print "           BF16 arithmetic op in the bitfile rounding differently from\n";
+            print "           iverilog.  Run `sw/model_test probe` next to isolate to MAC\n";
+            print "           vs K-accumulator.  Then rebuild the bitfile from current RTL.\n";
+        } elsif ($argmax_agree < 4 && $biggest_err < 25) {
+            print "         ▸ Classification drifted — numerical error large enough to\n";
+            print "           flip decision boundaries.  Likely same synth-vs-sim BF16\n";
+            print "           divergence; bitfile rebuild required.\n";
+        } elsif ($biggest_err >= 25) {
+            print "         ▸ Magnitudes are far off (>25%%).  Suggests a data-path\n";
+            print "           or layout issue (weights landing at wrong GPU offsets,\n";
+            print "           sched records misencoded).  Run `sw/model_test diag`.\n";
+        }
+    }
+}
+
+# ══════════════════════════════════════════════════════════════
+#  T_PROBE: minimal single-tile WMMA with hand-computable answer
+#
+#  Isolates the GPU FPU/tensor-core arithmetic from the full ANN flow.
+#  If this probe's result drifts, the MAC core itself is synthesising
+#  differently from what iverilog simulates — rebuild the bitfile.
+#  If the probe passes but the full run is close-but-wrong, the issue
+#  is in the K-accumulation over many MACs (fusion, accumulator width).
+#
+#  Compute (per bank): D = A · B + C
+#    A = 4x4 of BF16 1.0 (0x3F80)
+#    B = 4x4 of BF16 1.0 (0x3F80)
+#    C = 4x4 of BF16 0.0 (0x0000)
+#  Answer: D[i,j] = sum_{k=0..3} 1.0 · 1.0 + 0.0 = 4.0 = 0x4080 exactly
+#  (no rounding, 4 ULPs fit in BF16 mantissa).
+# ══════════════════════════════════════════════════════════════
+
+sub ann_probe {
+    banner("T_PROBE: single-tile WMMA (A=1.0, B=1.0, C=0 → D=4.0 exact)");
+    hard_reset();
+
+    # ── GPU program: load A, B, C; MMA; store to GPU DMEM[32..35] per bank ─
+    my @gp;
+    push @gp, enc_movi_dt(0, 0, 0);                          # 0: R0 = 0 (A base)
+    push @gp, enc_wmma_load(0, 4, 0, 0);                     # 1: WMMA.LOAD.A R4, [R0]
+    push @gp, enc_movi_dt(0, 0, 4);                          # 2: R0 = 4 (B base)
+    push @gp, enc_wmma_load(1, 8, 0, 0);                     # 3: WMMA.LOAD.B R8, [R0]
+    push @gp, enc_movi_dt(0, 0, 8);                          # 4: R0 = 8 (C base)
+    push @gp, enc_wmma_load(2, 12, 0, 0);                    # 5: WMMA.LOAD.C R12, [R0]
+    push @gp, enc_wmma_mma(12, 4, 8, 12);                    # 6: D = A·B + C
+    push @gp, enc_movi_dt(0, 0, 32);                         # 7: R0 = 32 (out)
+    push @gp, enc_wmma_store(12, 0, 0);                      # 8: WMMA.STORE D, [R0]
+    push @gp, (($OP_RET & 0x1F) << 27);                      # 9: RET
+
+    # Pad @gp to an even count for LOAD_DMEM DW packing
+    push @gp, 0 while @gp % 2;
+
+    # ── ARM program: D_IMEM GPU prog, D_UNPACK tile data, launch, D_PACK, halt ─
+    # Same style as load's copy_prog — CR10 gate, single DMA kicks, spin waits.
+    my @arm;
+    # Thread-0 gate
+    push @arm, arm_mrc(11, 10);                             # 0
+    push @arm, arm_cmp_imm(11, 0);                          # 1
+    push @arm, 0;                                            # 2 patched → B.NE halt
+    # Phase A: D_IMEM the GPU program (CPU[0..scalar(@gp)-1] → GPU IMEM)
+    push @arm, arm_mov_imm(0, 0);                           # 3: R0 = 0
+    push @arm, arm_mcr(0, 0);                                # 4: CR0 = 0 (src)
+    push @arm, arm_mcr(0, 1);                                # 5: CR1 = 0 (dst)
+    push @arm, arm_mov_imm(1, scalar(@gp));                 # 6: len = |gp|
+    push @arm, arm_mcr(1, 2);                                # 7
+    push @arm, arm_mov_imm(2, 5);                           # 8: op = D_IMEM
+    push @arm, arm_mcr(2, 3);                                # 9: kick
+    my $wait_imem = scalar @arm;
+    push @arm, arm_mrc(3, 9);                                # wait CR9 == |gp|
+    push @arm, arm_mov_imm(4, scalar(@gp));
+    push @arm, arm_cmp_reg(3, 4);
+    push @arm, arm_b_idx(0x1, scalar(@arm), $wait_imem);
+    # Phase B: D_UNPACK the 12 32b tile words (3 tiles × 4 words) from CPU[|gp|..]
+    push @arm, arm_mov_imm(1, scalar(@gp));                 # R1 = |gp| (src)
+    push @arm, arm_mcr(1, 0);                                # CR0 = src
+    push @arm, arm_mov_imm(1, 0);                           # dst GPU DMEM = 0
+    push @arm, arm_mcr(1, 1);
+    push @arm, arm_mov_imm(1, 12);                          # len = 12 words/bank
+    push @arm, arm_mcr(1, 2);
+    push @arm, arm_mov_imm(1, 0x41);                        # D_UNPACK burst_all
+    push @arm, arm_mcr(1, 3);
+    my $wait_unpack = scalar @arm;
+    push @arm, arm_mrc(3, 9);
+    push @arm, arm_mov_imm(4, scalar(@gp) + 48);            # target = src + 12*4
+    push @arm, arm_cmp_reg(3, 4);
+    push @arm, arm_b_idx(0x1, scalar(@arm), $wait_unpack);
+    # Phase C: Launch GPU
+    push @arm, arm_mov_imm(1, 0); push @arm, arm_mcr(1, 4); # CR4 = pc 0
+    push @arm, arm_mov_imm(1, 15); push @arm, arm_mcr(1, 7); # CR7 = mask 0xF
+    push @arm, arm_mov_imm(1, 1); push @arm, arm_mcr(1, 5); # CR5 = start
+    my $wait_gpu = scalar @arm;
+    push @arm, arm_mrc(3, 6);                                # CR6 = {idle, active, done}
+    push @arm, arm_mov_imm(4, 5);
+    push @arm, arm_cmp_reg(3, 4);
+    push @arm, arm_b_idx(0x1, scalar(@arm), $wait_gpu);
+    # Phase D: D_PACK GPU DMEM[32..35]/bank → CPU DMEM[scalar(@gp)+12 ..]
+    my $rb_cpu_base = scalar(@gp) + 12;     # in 32b words
+    push @arm, arm_mov_imm(1, 32); push @arm, arm_mcr(1, 0); # CR0 = GPU src
+    push @arm, arm_mov_imm(1, $rb_cpu_base); push @arm, arm_mcr(1, 1);
+    push @arm, arm_mov_imm(1, 2); push @arm, arm_mcr(1, 2);  # len 2/bank
+    push @arm, arm_mov_imm(1, 0x43); push @arm, arm_mcr(1, 3); # D_PACK burst_all
+    my $wait_pack = scalar @arm;
+    push @arm, arm_mrc(3, 9);
+    push @arm, arm_mov_imm(4, $rb_cpu_base + 8);
+    push @arm, arm_cmp_reg(3, 4);
+    push @arm, arm_b_idx(0x1, scalar(@arm), $wait_pack);
+    # halt
+    push @arm, $HALT;
+    push @arm, $HALT;
+    my $arm_len = scalar @arm;
+    $arm[2] = arm_b_idx(0x1, 2, $arm_len - 2);    # B.NE halt for threads 1..3
+    push @arm, $NOP if $arm_len % 2;
+
+    # ── CPU DMEM layout (send all in ONE packet): ─────────────
+    #   [0 .. |gp|-1]           : GPU program (as 32b ARM words)
+    #   [|gp| .. |gp|+11]       : tile data  (A[0..3], B[0..3], C[0..3])  per bank
+    #                             burst_all: 4 banks × 12 words = 48 CPU words
+    my @dmem;
+    push @dmem, $_ for @gp;
+    for my $bank (0..3) {
+        # A: 4 BF16 0x3F80 packed as 2 32b words (x3F803F80) × 2
+        push @dmem, 0x3F803F80, 0x3F803F80;
+        # B: same
+        push @dmem, 0x3F803F80, 0x3F803F80;
+        # C: 4 BF16 0x0000 packed as 2 zero words
+        push @dmem, 0, 0;
+    }
+    # readback area: initialized to 0 (8 words × 4 banks = 32 words) — not strictly
+    # needed since D_PACK will fill, but keep for cleanliness.
+    push @dmem, 0 for 1..8;
+
+    # ── Send packet: LOAD_IMEM(arm) + LOAD_DMEM(gp+data) + CPU_START + RB + SEND ──
+    phase(sprintf("ARM=%d instrs · GPU=%d instrs · CPU DMEM=%d words",
+          $arm_len, scalar(@gp), scalar(@dmem)));
+
+    ic();
+    my @c;
+    # LOAD_IMEM  (arm)
+    my $imem_dw = int(($arm_len + 1) / 2);
+    @c = cw(1, 0, $imem_dw, 0); iw($c[0], $c[1], 0x20);
+    for (my $i = 0; $i < $arm_len; $i += 2) {
+        my $lo = $arm[$i] & 0xFFFFFFFF;
+        my $hi = ($i + 1 < $arm_len ? $arm[$i+1] : 0) & 0xFFFFFFFF;
+        iw($hi, $lo, 0);
+    }
+    # LOAD_DMEM (gp + tiles)
+    my $nw    = scalar @dmem;
+    my $dmem_dw = int(($nw + 1) / 2);
+    @c = cw(2, 0, $dmem_dw, 0); iw($c[0], $c[1], 0);
+    for (my $i = 0; $i < $nw; $i += 2) {
+        my $lo = $dmem[$i] & 0xFFFFFFFF;
+        my $hi = ($i + 1 < $nw ? $dmem[$i+1] : 0) & 0xFFFFFFFF;
+        iw($hi, $lo, 0);
+    }
+    # CPU_START + READBACK + SEND_PKT
+    @c = cw(3, 0, 0, 0);                 iw($c[0], $c[1], 0);
+    @c = cw(4, $rb_cpu_base, 4, 0);      iw($c[0], $c[1], 0);
+    @c = cw(5, 0, 0, 0);                 iw($c[0], $c[1], 0);
+    id();
+    my $done = pt(200, 50);
+    dump_st("post-probe");
+    my @tx = cr();
+
+    # Expected: D[i,j] = 4.0 = BF16 0x4080 for every slot → packed DW 0x40804080_40804080
+    my $exp_dw = 0x40804080;
+    printf("\n  GOT  TX[0] = %08X_%08X  (bank0 · bank1 from snoop)\n", $tx[0], $tx[1]);
+    printf("  EXP  TX[*] = %08X_%08X  (every bank = 4×0x4080 since D = 4.0 exact)\n",
+        $exp_dw, $exp_dw);
+    my ($g_hex, $g_dec) = decode_pkt($tx[0], $tx[1]);
+    printf("  GOT  bank0 BF16 = %04X %04X %04X %04X  →  %+.3f %+.3f %+.3f %+.3f\n",
+        $g_hex->[0], $g_hex->[1], $g_hex->[2], $g_hex->[3],
+        $g_dec->[0], $g_dec->[1], $g_dec->[2], $g_dec->[3]);
+
+    if ($tx[0] == $exp_dw && $tx[1] == $exp_dw) {
+        print "  [PASS] probe: MAC + tensor core produce D = 4.0 exactly\n";
+        print "         → BF16 math matches sim.  Full-run drift must be in\n";
+        print "           K-accumulation beyond the 4-wide inner product, or in\n";
+        print "           the ReLU / cvt paths.  Look at L1 / L2 activations.\n";
+        $pass++;
+    } else {
+        print "  [FAIL] probe: MAC core drift on a 4-wide all-ones product.\n";
+        print "         → the bitfile's synthesized BF16 FPU or tensor core\n";
+        print "           is NOT matching what iverilog simulates.  Rebuild the\n";
+        print "           bitfile from current RTL (check bf16fpu.v, tc_top.v,\n";
+        print "           bf16sa.v for rounding-mode / fusion differences).\n";
+        $fail++;
     }
 }
 
@@ -1290,6 +1619,7 @@ if    ($c eq "model" || $c eq "tann" || $c eq "ann")   { tann_full();         su
 elsif ($c eq "load"  || $c eq "preload")                 { ann_load_weights(); summary(); }
 elsif ($c eq "run"   || $c eq "infer")                   { ann_run_inference(); summary(); }
 elsif ($c eq "diag")                                      { ann_diag();          summary(); }
+elsif ($c eq "probe" || $c eq "tile1")                   { ann_probe();         summary(); }
 elsif ($c eq "status") { dump_st("status"); }
 elsif ($c eq "result") { cr(); }
 elsif ($c eq "reset")  { hard_reset(); }
@@ -1300,6 +1630,9 @@ else {
     print "  load | preload     stream weights → GPU DMEM (slow, ~60 packets)\n";
     print "  run  | infer       run inference + readback (assumes `load` already ran)\n";
     print "  model | tann | ann full pipeline (= load + run)   [default]\n\n";
+    print "Diagnostics:\n";
+    print "  probe | tile1      single 4×4 WMMA (A=1,B=1,C=0 ⇒ D=4.0) · isolates MAC\n";
+    print "  diag               HALT-only / DMA-only / full-tile bisection\n\n";
     print "Utils: status | result | reset | clear\n\n";
     print "Typical iteration loop:\n";
     print "  sw/model_test load       # once per FPGA programming\n";

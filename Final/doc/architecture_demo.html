@@ -569,33 +569,33 @@ const SCENARIOS = {
         tokens:[{wire:"w_pkt_arm",progress:.6}],
         state:{pkt:[["state","P_CPU_RUN"],["cmd","CPU_START"],["owns_port_b","0"]],arm:[["cpu_rst_n","1 ↑"],["cpu_start","1 ↑"],["entry_pc","0x00000000"],["thread_mask","1111"]]},
         log:"pkt_proc: de-asserts owns_port_b, drives cpu_rst_n=1 & cpu_start pulse · entry_pc=0x0" },
-      { t:6,  cycle:140,  label:"CPU preprocesses input", short:"CPU pre", active:["arm","cpudmem"], wires:["w_cpudmem_arm"],
-        state:{arm:[["threads","4 (T0..T3)"],["op","MUL · MLA"],["stage","EX2"]],cpudmem:[["base","0x100"],["count","40"],["port","A (CPU)"]]},
-        log:"Arm: per-thread MUL/MLA scales 40 features by scaler_std → writes GPU program + weights to CPU DMEM" },
-      { t:7,  cycle:220,  label:"Transfer program to GPU (D_IMEM)", short:"D_IMEM", active:["arm","cp10","dma","cpudmem","gpuimem"], wires:["w_cp10_arm","w_cp10_dma","w_dma_cpudmem","w_dma_gpuimem"],
+      { t:6,  cycle:140,  label:"CPU preprocesses input", short:"CPU pre", active:["arm","cpuimem","cpudmem"], wires:["w_cpuimem_arm","w_cpudmem_arm"],
+        state:{arm:[["threads","4 (T0..T3)"],["op","MRC CR10 TID · gate T0"],["stage","IF→EX2"]],cpuimem:[["port","A (CPU)"],["rd","PC=0x000..0x02F"]],cpudmem:[["base","0x100"],["count","40"],["port","A (CPU)"]]},
+        log:"ARM IF fetching from CPU IMEM each cycle · thread 0 passes R11==0 gate · reads scheduler params from CPU DMEM" },
+      { t:7,  cycle:220,  label:"Transfer program to GPU (D_IMEM)", short:"D_IMEM", active:["arm","cpuimem","cp10","dma","cpudmem","gpuimem"], wires:["w_cpuimem_arm","w_cp10_arm","w_cp10_dma","w_dma_cpudmem","w_dma_gpuimem"],
         tokens:[{wire:"w_dma_cpudmem",progress:.4},{wire:"w_dma_gpuimem",progress:.6}],
-        state:{arm:[["instr","MCR p10,0,R4,CR0..CR3"]],cp10:[["CR0","0x00000040 src"],["CR2","0x0040 len"],["CR3","D_IMEM start"]],dma:[["mode","D_IMEM"],["state","S_IMEM_RD→WR"]],cpudmem:[["port","B (DMA)"],["rd","0x040..0x07F"]],gpuimem:[["we","1"],["addr","0x00..0x3F"]]},
-        log:"DMA D_IMEM: CPU DMEM → GPU IMEM · 64 GPU instrs · 1:1 32→32" },
-      { t:8,  cycle:300,  label:"Stream data to GPU (D_UNPACK)", short:"D_UNPACK", active:["arm","cp10","dma","cpudmem","gpudmem"], wires:["w_cp10_dma","w_dma_cpudmem","w_dma_gpudmem"],
+        state:{arm:[["instr","MCR p10,0,R4,CR0..CR3"]],cpuimem:[["port","A (CPU)"],["rd","sched MCR sequence"]],cp10:[["CR0","0x00000040 src"],["CR2","0x0040 len"],["CR3","D_IMEM start"]],dma:[["mode","D_IMEM"],["state","S_IMEM_RD→WR"]],cpudmem:[["port","B (DMA)"],["rd","0x040..0x07F"]],gpuimem:[["we","1"],["addr","0x00..0x3F"]]},
+        log:"ARM executes MCR stream from CPU IMEM → CP10 latches DMA ctrl → DMA D_IMEM copies CPU DMEM → GPU IMEM (32→32 1:1)" },
+      { t:8,  cycle:300,  label:"Stream data to GPU (D_UNPACK)", short:"D_UNPACK", active:["arm","cpuimem","cp10","dma","cpudmem","gpudmem"], wires:["w_cpuimem_arm","w_cp10_arm","w_cp10_dma","w_dma_cpudmem","w_dma_gpudmem"],
         tokens:[{wire:"w_dma_cpudmem",progress:.4},{wire:"w_dma_gpudmem",progress:.6}],
-        state:{cp10:[["CR3","D_UNPACK start"]],dma:[["mode","D_UNPACK"],["state","S_UNPACK_WR_HI"],["burst_all","1"],["bank","b00→b11"]],cpudmem:[["port","B (DMA)"],["rd","0x100..0x1FF"]],gpudmem:[["we","1111"],["t0..t3","0x000→"]]},
-        log:"DMA D_UNPACK: 32b CPU words → 2×16b GPU words · 4-bank burst across T0..T3" },
-      { t:9,  cycle:460,  label:"Launch GPU kernel", short:"GPU launch", active:["cp10","gpu","gpuimem"], wires:["w_cp10_gpu","w_gpuimem_gpu"],
-        state:{cp10:[["CR4","0x00000000 pc"],["CR5","0b001 start"],["CR7","1111 mask"]],gpu:[["kernel_start","1 ↑"],["active_mask","1111"]]},
-        log:"CP10 → sm_core: kernel_start pulse · entry_pc=0x00 · 4 SIMT lanes released" },
-      { t:10, cycle:480,  label:"GPU runs L1 → L2 → L3 (36 tiles)", short:"GPU L1→L2→L3", active:["gpu","gpudmem","gpuimem"], wires:["w_gpudmem_gpu","w_gpuimem_gpu"],
-        state:{gpu:[["entry_pc","0x00 (LINEAR) · 0x1C (RELU)"],["opcode","WMMA.MMA + PBRA K-loop + MAX (ReLU)"],["tc_state","ACC"],["lane_mask","1111"]],gpudmem:[["read","W1 40×96 · W2 96×42 · W3 42×4 per bank"]]},
-        log:"Scheduler drives 36 consolidated tiles: L1 24 × ReLU (40→96, K=10) · L2 11 × ReLU (96→42, K=24) · L3 1 × linear (42→4, K=11) · each tile ~1.6k–3.7k cyc incl. K-loop + store" },
-      { t:11, cycle:77100, label:"GPU signals done", short:"GPU done", active:["gpu","cp10"], wires:["w_cp10_gpu"],
-        state:{gpu:[["kernel_done","1 ↑"]],cp10:[["CR6","0x00000005 idle|done"]]},
-        log:"sm_core: all 4 threads RET on final tile · cr6_done latched · 36 tiles × K-accum (L1:24 ReLU + L2:11 ReLU + L3:1 linear) · ~76,620 GPU cyc total" },
-      { t:12, cycle:77250, label:"Read results back (D_PACK)", short:"D_PACK", active:["arm","cp10","dma","gpudmem","cpudmem"], wires:["w_cp10_arm","w_cp10_dma","w_dma_gpudmem","w_dma_cpudmem"],
+        state:{arm:[["instr","MCR CR3=0x41 burst_all"]],cpuimem:[["port","A (CPU)"],["rd","sched MCR stream"]],cp10:[["CR3","D_UNPACK start"]],dma:[["mode","D_UNPACK"],["state","S_UNPACK_WR_HI"],["burst_all","1"],["bank","b00→b11"]],cpudmem:[["port","B (DMA)"],["rd","0x100..0x1FF"]],gpudmem:[["we","1111"],["t0..t3","0x000→"]]},
+        log:"ARM kicks DMA via MCR; DMA D_UNPACK: 32b CPU words → 2×16b GPU words · 4-bank burst across T0..T3" },
+      { t:9,  cycle:460,  label:"Launch GPU kernel", short:"GPU launch", active:["arm","cpuimem","cp10","gpu","gpuimem"], wires:["w_cpuimem_arm","w_cp10_arm","w_cp10_gpu","w_gpuimem_gpu"],
+        state:{arm:[["instr","MCR CR4/CR7/CR5"]],cpuimem:[["port","A (CPU)"],["rd","launch sequence"]],cp10:[["CR4","0x00000000 pc"],["CR5","0b001 start"],["CR7","1111 mask"]],gpu:[["kernel_start","1 ↑"],["active_mask","1111"]]},
+        log:"ARM MCR CR4=pc · CR7=mask · CR5[0]=start → CP10 pulses kernel_start to sm_core · 4 SIMT lanes released" },
+      { t:10, cycle:480,  label:"GPU runs L1 → L2 → L3 (36 tiles)", short:"GPU L1→L2→L3", active:["gpu","gpudmem","gpuimem","arm","cpuimem","cp10"], wires:["w_gpudmem_gpu","w_gpuimem_gpu","w_cpuimem_arm","w_cp10_arm"],
+        state:{gpu:[["entry_pc","0x00 (LINEAR) · 0x1C (RELU)"],["opcode","WMMA.MMA + PBRA K-loop + MAX (ReLU)"],["tc_state","ACC"],["lane_mask","1111"]],gpudmem:[["read","W1 40×96 · W2 96×42 · W3 42×4 per bank"]],arm:[["op","MRC CR6 busy-wait"],["role","scheduler polling"]],cpuimem:[["port","A (CPU)"],["rd","wait-loop MRC/CMP/B.NE"]]},
+        log:"GPU is the primary actor — 36 consolidated tiles (L1 24 ReLU · L2 11 ReLU · L3 1 linear) · ~1.6k–3.7k cyc each. ARM thread 0 spins in a 3-instr MRC/CMP/B.NE loop on CR6 (not NOPs — dynamic wait handles the variable per-tile latency); threads 1..3 are halted via the CR10 TID gate." },
+      { t:11, cycle:77100, label:"GPU signals done", short:"GPU done", active:["gpu","cp10","arm","cpuimem"], wires:["w_cp10_gpu","w_cp10_arm","w_cpuimem_arm"],
+        state:{gpu:[["kernel_done","1 ↑"]],cp10:[["CR6","0x00000005 idle|done"]],arm:[["MRC","CR6 → 5 · exits wait"]],cpuimem:[["port","A (CPU)"],["rd","post-wait fall-through"]]},
+        log:"sm_core asserts kernel_done on final tile · CP10 latches CR6=5 · ARM's next MRC sees idle|done and falls through the B.NE · 36 tiles × K-accum done in ~76,620 GPU cyc" },
+      { t:12, cycle:77250, label:"Read results back (D_PACK)", short:"D_PACK", active:["arm","cpuimem","cp10","dma","gpudmem","cpudmem"], wires:["w_cpuimem_arm","w_cp10_arm","w_cp10_dma","w_dma_gpudmem","w_dma_cpudmem"],
         tokens:[{wire:"w_dma_gpudmem",progress:.4,rev:true},{wire:"w_dma_cpudmem",progress:.6,rev:true}],
-        state:{arm:[["MRC","CR6 poll → done"]],cp10:[["CR3","D_PACK start"]],dma:[["mode","D_PACK"],["state","S_PACK_WR"]],gpudmem:[["rd","0x978..0x97B (X3_BASE)"]],cpudmem:[["port","B (DMA)"],["stage","0x320 (READBACK)"],["got","4×64b logits"]]},
-        log:"DMA D_PACK: GPU X3_BASE → CPU DMEM[800] · 4 banks × 2 32b = 4 DWs" },
-      { t:13, cycle:77450, label:"CPU post-process (transpose/pack)", short:"CPU post", active:["arm","cpudmem"], wires:["w_cpudmem_arm"],
-        state:{arm:[["op","class-major → packet-major transpose"],["result","4 packed BF16 DWs"]],cpudmem:[["port","A (CPU)"],["rw","0x320..0x327"]]},
-        log:"Scheduler post-process block: {class,pkt} BF16 → packet-major packed words in-place" },
+        state:{arm:[["MRC/MCR","CR6 poll → CR0/CR1/CR2/CR3 D_PACK"]],cpuimem:[["port","A (CPU)"],["rd","D_PACK MCR stream"]],cp10:[["CR3","D_PACK start"]],dma:[["mode","D_PACK"],["state","S_PACK_WR"]],gpudmem:[["rd","0x978..0x97B (X3_BASE)"]],cpudmem:[["port","B (DMA)"],["stage","0x320 (READBACK)"],["got","4×64b logits"]]},
+        log:"ARM executes D_PACK MCR burst from CPU IMEM · DMA D_PACK: GPU X3_BASE → CPU DMEM[800] · 4 banks × 2 32b = 4 DWs" },
+      { t:13, cycle:77450, label:"CPU post-process (transpose/pack)", short:"CPU post", active:["arm","cpuimem","cpudmem"], wires:["w_cpuimem_arm","w_cpudmem_arm"],
+        state:{arm:[["op","class-major → packet-major transpose"],["result","4 packed BF16 DWs"]],cpuimem:[["port","A (CPU)"],["rd","post-process block 0x120..0x1C8"]],cpudmem:[["port","A (CPU)"],["rw","0x320..0x327"]]},
+        log:"ARM fetching post-process instructions from CPU IMEM (LDR/MOV-shift/ORR-shift/STR) · transposes {class,pkt} BF16 → packet-major packed words in-place in CPU DMEM" },
       { t:14, cycle:77632, label:"Send reply packet (SEND_PKT)", short:"SEND_PKT", active:["pkt","cpudmem","fifo","tx"], wires:["w_pkt_cpudmem","w_pkt_fifo","w_fifo_tx"],
         tokens:[{wire:"w_fifo_tx",progress:.7}],
         state:{pkt:[["state","P_SEND_DONE"],["cmd","SEND_PKT"],["tx_start","1 ↑"]],cpudmem:[["port","B (pkt_proc)"],["rd","0x180"]],fifo:[["mode","TX_DRAIN"]]},
@@ -708,7 +708,15 @@ function Diagram({ selected, activeBlocks, activeWires, tokens, onSelect, showWi
     });
   }, []);
 
-  const tcActive = (activeBlocks?.includes("gpu") && /WMMA|tensor|FC1/i.test(phaseLabel||""));
+  // Interior of the SM Core (SP lanes + tensor core) lights up whenever the
+  // GPU block is active AND the phase is actually *running* compute — not
+  // merely being launched or winding down.  Accepts legacy labels (WMMA,
+  // tensor, FC1/FC2/FC3) as well as the current L1/L2/L3 ANN naming and
+  // any "GPU runs …"/"GPU … tiles" phrasing from the scheduler flow.
+  const tcActive = (
+    activeBlocks?.includes("gpu") &&
+    /\bruns?\b|WMMA|tensor|FC\d|L[1-3]|tile|scheduler/i.test(phaseLabel||"")
+  );
   const gpu = LAYOUT.gpu;
 
   return (
@@ -1312,13 +1320,16 @@ function App(){
 
   useEffect(() => {
     const el = document.getElementById("foot");
+    const fmt = n => (n ?? 0).toLocaleString("en-US");
     const lastCyc = scenario.phases[scenario.phases.length - 1]?.cycle ?? 0;
+    const curCyc  = phase?.cycle ?? 0;
     const latency = `~${(lastCyc * 8 / 1000).toFixed(1)}`;
+    const progressPct = lastCyc ? ((curCyc / lastCyc) * 100).toFixed(1) : "0.0";
     const cards = [
-      { k:"CYCLE",   v: phase?.cycle ?? 0,            d: `≈ ${((phase?.cycle ?? 0)*8/1000).toFixed(2)} µs @ 125 MHz` },
-      { k:"PHASE",   v: `${phaseIdx+1}/${total}`,     d: phase?.label || "" },
-      { k:"LATENCY", v: latency, u:"µs",              d: "end-to-end · HW scheduler 77,632 cyc · 36 tiles (L1 24 + L2 11 + L3 1)" },
-      { k:"RATE",    v: "8", u:"Gbps",                d: "NetFPGA · 64b @ 125 MHz · ~1,590 inf/s" }
+      { k:"CYCLE",   v: fmt(curCyc),                     d: `${progressPct}% of ${fmt(lastCyc)} @ 125 MHz · ${(curCyc*8/1000).toFixed(2)} µs elapsed` },
+      { k:"PHASE",   v: `${phaseIdx+1}/${total}`,        d: phase?.label || "" },
+      { k:"LATENCY", v: latency, u:"µs",                 d: `end-to-end · HW scheduler ${fmt(lastCyc)} cyc · 36 tiles (L1 24 + L2 11 + L3 1)` },
+      { k:"RATE",    v: "8", u:"Gbps",                   d: "NetFPGA · 64b @ 125 MHz · ~1,590 inf/s" }
     ];
     el.innerHTML = cards.map(c => `
       <div class="card">
