@@ -88,6 +88,7 @@ wire [`DATA_WIDTH-1:0] cpu_dmem_wdata;
 wire cpu_dmem_wen;
 wire [1:0] cpu_dmem_size;
 wire cpu_done_w;
+wire [1:0] cp_tid;
 
 // ================================================================
 //   INTERNAL WIRES — CPU <-> CP10
@@ -286,7 +287,6 @@ cpu_mt u_cpu_mt (
     .cp_tid_o(cp_tid),
     .cpu_done(cpu_done_w)
 );
-wire [1:0] cp_tid;
 
 // ================================================================
 //   CP10 — Compute Coprocessor Register File

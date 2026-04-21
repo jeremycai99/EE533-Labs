@@ -1,0 +1,1393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>AEGIS — Heterogeneous SoC Architecture Demo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f7f6f2;
+    --bg-2:#ffffff;
+    --bg-3:#f0eee8;
+    --panel:#fbfaf6;
+    --line:#e3e0d8;
+    --line-2:#c9c5ba;
+    --text:#1b1d20;
+    --text-dim:#555a62;
+    --text-mute:#8b8f97;
+    --accent:#1a7f5a;     /* forest */
+    --accent-2:#b4873c;   /* amber */
+    --accent-3:#3a63b8;   /* blue for data */
+    --accent-4:#7a4ea8;   /* violet for control */
+    --danger:#b23b3b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:"Inter Tight",system-ui,sans-serif;}
+  body{min-height:100vh;overflow-x:hidden}
+  .mono{font-family:"JetBrains Mono",ui-monospace,monospace;}
+
+  /* layout */
+  .app{display:grid;grid-template-rows:auto auto}
+  header.bar{
+    display:flex;align-items:center;gap:18px;
+    padding:14px 24px;border-bottom:1px solid var(--line);
+    background:#fbfaf6;
+  }
+  .brand{display:flex;align-items:baseline;gap:10px}
+  .brand .mark{
+    width:22px;height:22px;border-radius:6px;
+    background:conic-gradient(from 120deg,#1a7f5a,#3a63b8,#7a4ea8,#b4873c,#1a7f5a);
+    position:relative;
+  }
+  .brand .mark::after{
+    content:"";position:absolute;inset:4px;border-radius:3px;background:var(--bg);
+  }
+  .brand h1{font-size:15px;letter-spacing:.08em;margin:0;font-weight:600;text-transform:uppercase}
+  .brand .sub{font-size:12px;color:var(--text-mute);letter-spacing:.16em;text-transform:uppercase}
+  .chip{font-family:"JetBrains Mono",monospace;font-size:11px;padding:3px 8px;border:1px solid var(--line-2);border-radius:4px;color:var(--text-dim)}
+  .spacer{flex:1}
+  .scenariobar{display:flex;gap:6px}
+  .scenariobar button{
+    background:transparent;border:1px solid var(--line-2);color:var(--text-dim);
+    font-family:inherit;font-size:12px;padding:6px 12px;border-radius:6px;cursor:pointer;
+    transition:all .15s ease;letter-spacing:.02em;
+  }
+  .scenariobar button:hover{color:var(--text);border-color:#444}
+  .scenariobar button.active{color:#ffffff;background:var(--accent);border-color:var(--accent);font-weight:600}
+
+  /* main grid */
+  .main{display:grid;grid-template-columns:1fr;min-height:0}
+  .stage{
+    position:relative;background:
+      radial-gradient(1200px 600px at 30% -10%,#fdfcf8 0%,transparent 60%),
+      var(--bg);
+    padding:14px 28px 12px 28px;overflow:auto;
+  }
+  .sidebar{
+    border-left:1px solid var(--line);
+    background:var(--panel);
+    display:flex;flex-direction:column;min-width:0;
+  }
+
+  /* diagram svg container */
+  .board{position:relative;max-width:1280px;margin:0 auto}
+  .diagram{display:block;width:100%;height:auto}
+
+  /* sidebar tabs */
+  .tabs{display:flex;border-bottom:1px solid var(--line)}
+  .tabs button{
+    flex:1;background:transparent;border:0;border-bottom:2px solid transparent;
+    padding:12px 10px;color:var(--text-mute);font-family:inherit;font-size:12px;
+    letter-spacing:.08em;text-transform:uppercase;cursor:pointer;
+  }
+  .tabs button.active{color:var(--text);border-bottom-color:var(--accent)}
+  .tabpane{padding:18px 20px;overflow:auto;flex:1;min-height:0}
+
+  .inspect h3{font-size:13px;margin:0 0 2px 0;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim);font-weight:500}
+  .inspect h2{font-size:22px;margin:0 0 12px 0;font-weight:600;letter-spacing:-.01em}
+  .inspect .row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed var(--line)}
+  .inspect .row .k{color:var(--text-dim);font-size:12px}
+  .inspect .row .v{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--text)}
+  .inspect .note{margin-top:12px;padding:12px;background:var(--bg-3);border:1px solid var(--line);border-radius:6px;font-size:13px;line-height:1.5;color:var(--text-dim)}
+  .inspect .pill{display:inline-block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid var(--line-2);color:var(--text-mute);margin-left:8px;vertical-align:middle}
+  .inspect .pill.live{border-color:var(--accent);color:var(--accent)}
+
+  /* event log */
+  .log{font-family:"JetBrains Mono",monospace;font-size:12px;line-height:1.55;color:var(--text-dim)}
+  .log .line{padding:2px 0;display:flex;gap:10px}
+  .log .cyc{color:var(--text-mute);min-width:64px}
+  .log .ev{color:var(--text)}
+  .log .ev .block{color:var(--accent-3)}
+  .log .ev .warn{color:var(--accent-2)}
+  .log .ev .ok{color:var(--accent)}
+  .log .ev .err{color:var(--danger)}
+
+  /* transport bar — inline above phasebar */
+  .transport{
+    max-width:1450px;margin:0 auto 8px auto;
+    background:var(--bg-2);
+    border:1px solid var(--line);border-radius:6px;
+    padding:6px 10px;display:flex;align-items:center;gap:12px;
+  }
+  .transport .btn{
+    background:var(--bg-3);border:1px solid var(--line-2);color:var(--text);
+    width:26px;height:26px;border-radius:4px;cursor:pointer;font-family:inherit;
+    display:flex;align-items:center;justify-content:center;padding:0;font-size:12px;
+  }
+  .transport .btn:hover{border-color:#4a525d}
+  .transport .btn.primary{background:var(--accent);color:#ffffff;border-color:var(--accent)}
+  .transport .scrub{flex:1;position:relative;height:6px;background:var(--bg-3);border-radius:3px;cursor:pointer}
+  .transport .scrub .fill{position:absolute;top:0;left:0;height:100%;background:var(--accent);border-radius:3px;transition:width .08s linear}
+  .transport .scrub .markers{position:absolute;top:-3px;left:0;right:0;height:12px}
+  .transport .scrub .markers .m{position:absolute;width:2px;height:12px;background:var(--line-2);border-radius:1px}
+  .transport .step{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--text-dim);min-width:100px;text-align:right}
+  .transport .speed{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-mute)}
+  .transport select{background:var(--bg-3);border:1px solid var(--line-2);color:var(--text);border-radius:4px;font-family:inherit;font-size:11px;padding:3px 6px}
+
+  /* phase marker above stage — single-line strip */
+  .phasebar{
+    max-width:1450px;margin:0 auto 14px auto;
+    display:flex;flex-wrap:nowrap;gap:0;border:1px solid var(--line);border-radius:6px;background:var(--bg-2);overflow:hidden;
+  }
+  .phasebar .p{flex:1 1 0;min-width:0;padding:6px 8px;font-size:10px;letter-spacing:.04em;color:var(--text-mute);border-right:1px solid var(--line);position:relative;line-height:1.25;overflow:hidden}
+  .phasebar .p .lbl{display:block;font-weight:500;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:none;letter-spacing:0;font-size:11px;margin-top:1px}
+  .phasebar .p:last-child{border-right:0}
+  .phasebar .p.done{color:var(--text-dim)}
+  .phasebar .p.active{color:var(--text);background:linear-gradient(180deg,rgba(26,127,90,.10),transparent)}
+  .phasebar .p.active::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--accent)}
+  .phasebar .p .n{font-family:"JetBrains Mono",monospace;font-size:9px;color:var(--text-mute);display:block}
+
+  /* verify panel */
+  .verify .row2{display:grid;grid-template-columns:1fr auto;gap:8px;padding:10px 0;border-bottom:1px dashed var(--line);align-items:baseline}
+  .verify .row2 .l{font-size:13px}
+  .verify .row2 .l small{display:block;color:var(--text-mute);font-family:"JetBrains Mono",monospace;font-size:11px;margin-top:2px}
+  .verify .badge{font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:3px 8px;border-radius:4px;font-weight:600}
+  .verify .badge.ok{background:rgba(26,127,90,.12);color:var(--accent)}
+  .verify .badge.warn{background:rgba(180,135,60,.15);color:var(--accent-2)}
+  .verify .badge.info{background:rgba(58,99,184,.12);color:var(--accent-3)}
+  .verify h4{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-mute);margin:22px 0 6px 0;font-weight:500}
+  .verify h4:first-child{margin-top:0}
+
+  /* diagram styling (for JSX components too) */
+  .block{cursor:pointer;transition:filter .15s ease}
+  .block:hover{filter:brightness(1.15)}
+  .block .body{fill:#ffffff;stroke:#c9c5ba;stroke-width:1}
+  .block.selected .body{stroke:var(--accent);stroke-width:2}
+  .block.active .body{stroke:var(--accent);stroke-width:1.5;filter:drop-shadow(0 0 6px rgba(26,127,90,.35))}
+  .block .title{fill:#1b1d20;font-family:"Inter Tight",sans-serif;font-weight:600;font-size:13px;pointer-events:none}
+  .block .sub{fill:#6b7079;font-family:"JetBrains Mono",monospace;font-size:10px;pointer-events:none}
+
+  .wire{stroke:#b7b2a5;stroke-width:1.5;fill:none}
+  .wire.data{stroke:var(--accent-3)}
+  .wire.ctrl{stroke:var(--accent-4)}
+  .wire.active{stroke:var(--accent);stroke-width:2.2;filter:drop-shadow(0 0 4px rgba(26,127,90,.35))}
+
+  .wire-label{display:none}
+  .wire-label.ctrl{fill:#7a4a2a}
+  .wire-label.active{fill:#0f5a3a;font-weight:600}
+
+  /* band labels + tensor core inset */
+  .band-label{fill:#8a8574;font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.2em;font-weight:600;pointer-events:none}
+  .tc-inset .tc-title{fill:#3a3a32;font-family:"Inter Tight",sans-serif;font-weight:600;font-size:12px;letter-spacing:.12em;pointer-events:none}
+  .tc-inset .tc-sub{fill:#8a8574;font-family:"JetBrains Mono",monospace;font-size:10px;pointer-events:none}
+  .tc-inset .tc-lbl{fill:#2a2a22;font-family:"Inter Tight",sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;pointer-events:none}
+  .tc-inset .tc-note{fill:#6b7680;font-family:"JetBrains Mono",monospace;font-size:9.5px;pointer-events:none}
+  .tc-inset .tc-cell{fill:#3a3a32;font-family:"JetBrains Mono",monospace;font-size:9.5px;pointer-events:none}
+  .tc-inset .tc-mul{fill:#1a3b2a;font-family:"Inter Tight",sans-serif;font-weight:700;font-size:14px;pointer-events:none}
+  .tc-inset .tc-stage{fill:#2a2a22;font-family:"Inter Tight",sans-serif;font-weight:700;font-size:13px;letter-spacing:.08em;pointer-events:none}
+  .tc-inset .tc-stage-sub{fill:#8a8574;font-family:"JetBrains Mono",monospace;font-size:9px;pointer-events:none}
+  .tc-inset .tc-fu{fill:#1a3b2a;font-family:"JetBrains Mono",monospace;font-size:9.5px;font-weight:600;pointer-events:none}
+  .tc-inset .tc-fu-dim{fill:#6b7680;font-weight:400}
+  .tc-inset .tc-lane{fill:#1a7f5a;font-family:"Inter Tight",sans-serif;font-weight:700;font-size:10.5px;letter-spacing:.14em;pointer-events:none}
+  .tc-inset.active .tc-title{fill:var(--accent)}
+  .tc-inset.active .tc-cell{fill:#0b3a28;font-weight:600}
+  .tc-inset.active .tc-mul{fill:#0b3a28}
+  .board{max-width:1450px !important}
+
+  /* packet token */
+  .token{opacity:0;transition:opacity .25s ease}
+  .token.on{opacity:1}
+
+  /* scrollbars */
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#d6d2c5;border-radius:5px}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  /* tweaks panel */
+  .tweaks{
+    position:fixed;right:20px;top:70px;
+    background:rgba(255,255,255,.98);backdrop-filter:blur(10px);
+    border:1px solid var(--line-2);border-radius:10px;padding:14px 16px;
+    box-shadow:0 8px 24px rgba(20,22,26,.08);
+    min-width:240px;z-index:60;display:none;
+  }
+  .tweaks.open{display:block}
+  .tweaks h5{margin:0 0 10px 0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim)}
+  .tweaks label{display:flex;justify-content:space-between;align-items:center;font-size:12px;margin:6px 0;color:var(--text-dim)}
+  .tweaks input[type=range]{width:100px}
+
+  /* decorative grid bg */
+  .stage::before{
+    content:"";position:absolute;inset:0;
+    background-image:
+      linear-gradient(var(--line) 1px,transparent 1px),
+      linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:40px 40px;background-position:-1px -1px;
+    opacity:.15;pointer-events:none;
+    mask-image:radial-gradient(ellipse at center,black 50%,transparent 100%);
+  }
+  .board{position:relative;z-index:1}
+
+  /* compact metrics strip — sits at top of stage */
+  .foot{max-width:1450px;margin:0 auto 8px auto;display:flex;gap:10px;flex-wrap:nowrap}
+  .foot .card{flex:1 1 0;min-width:0;background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:6px 10px;display:flex;align-items:baseline;gap:10px}
+  .foot .card .k{font-family:"JetBrains Mono",monospace;font-size:9px;color:var(--text-mute);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}
+  .foot .card .v{font-size:15px;font-weight:600;white-space:nowrap}
+  .foot .card .v .u{font-size:10px;color:var(--text-dim);margin-left:2px;font-weight:400}
+  .foot .card .d{font-size:10px;color:var(--text-mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto;min-width:0}
+
+  /* legend row — sits tight under the diagram */
+  .legend{max-width:1450px;margin:-6px auto 0 auto;display:flex;gap:22px;align-items:center;padding:2px 10px;font-size:11px;color:var(--text-mute);font-family:"JetBrains Mono",monospace}
+  .legend .li{display:inline-flex;align-items:center;gap:6px}
+  .legend .sw{display:inline-block;width:18px;height:2px;border-radius:1px}
+  .legend .sw.data{background:#2b6cb0}
+  .legend .sw.ctrl{background:#8b5cf6}
+  .legend .sw.dash{width:14px;height:14px;border-radius:3px;background:#fdfcf7;border:1px dashed #b9c2b2}
+  .legend .dot{position:relative;width:10px;height:10px;display:inline-block}
+  .legend .dot::before,.legend .dot>span{content:"";position:absolute;inset:0;margin:auto;border-radius:50%}
+  .legend .dot::before{width:10px;height:10px;background:#1a7f5a;opacity:.25}
+  .legend .dot>span{width:5px;height:5px;background:#1a7f5a}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div class="brand">
+      <div class="mark"></div>
+      <h1>AEGIS</h1>
+      <span class="sub">Heterogeneous SoC · Interactive Trace</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="scenariobar" id="scenariobar"></div>
+  </header>
+
+  <div class="main">
+    <section class="stage">
+      <div class="foot" id="foot"></div>
+      <div class="transport">
+        <button class="btn" id="btn-prev" title="Prev step">‹</button>
+        <button class="btn primary" id="btn-play" title="Play/Pause">▶</button>
+        <button class="btn" id="btn-next" title="Next step">›</button>
+        <button class="btn" id="btn-reset" title="Reset">↺</button>
+        <div class="scrub" id="scrub"><div class="fill" id="scrub-fill"></div><div class="markers" id="scrub-markers"></div></div>
+        <div class="step mono" id="stepreadout">phase 0 / 0 · t=0</div>
+        <div class="speed"><span>speed</span>
+          <select id="speed">
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+          </select>
+        </div>
+        <button class="btn" id="btn-tweaks" title="Tweaks">⚙</button>
+      </div>
+      <div class="phasebar" id="phasebar"></div>
+      <div class="board" id="board"></div>
+      <div class="legend">
+        <span class="li"><span class="sw data"></span>data</span>
+        <span class="li"><span class="sw ctrl"></span>ctrl</span>
+        <span class="li"><span class="dot"><span></span></span>active this phase</span>
+        <span class="li"><span class="sw dash"></span>sub-datapath (tensor core)</span>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="tweaks" id="tweaks">
+  <h5>Tweaks</h5>
+  <label>Show wires <input type="checkbox" id="tw-wires" checked></label>
+  <label>Show clock packet <input type="checkbox" id="tw-token" checked></label>
+  <label>Animation speed <input type="range" id="tw-speed" min="0.25" max="4" step="0.25" value="1"></label>
+  <label>Accent
+    <select id="tw-accent" style="background:var(--bg-3);color:var(--text);border:1px solid var(--line-2);border-radius:4px;padding:2px 4px">
+      <option value="mint" selected>Mint</option>
+      <option value="blue">Blue</option>
+      <option value="amber">Amber</option>
+    </select>
+  </label>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!--
+  ╔══════════════════════════════════════════════════════════════════╗
+  ║  JSX sources are inlined below so the file works via file://     ║
+  ║  (Chrome blocks XHR for external src="…jsx" under file://).      ║
+  ║  If you edit these blocks, the canonical copies in src/*.jsx     ║
+  ║  become stale — treat src/ as reference only, or delete it.      ║
+  ╚══════════════════════════════════════════════════════════════════╝
+-->
+<script type="text/babel">
+/* ───── data.jsx ───── */
+/* AEGIS demo — static data grounded in the real RTL/testbench */
+
+// Block registry — matches the system architecture diagram & RTL files
+const BLOCKS = {
+  arm: {
+    id: "arm", title: "Arm CPU", sub: "4-Thread FGMT · ARMv4T",
+    rtl: "rtl/cpu/core/cpu_mt.v",
+    specs: [
+      ["Pipeline", "7-stage (IF1/IF2/ID/EX1/EX2/MEM/WB)"],
+      ["Threads", "4 (fine-grained multithreading)"],
+      ["ISA", "ARMv4T subset + MCR/MRC p10 (CP10)"],
+      ["IMEM", "32-bit × 4096"],
+      ["DMEM", "32-bit × 4096 (dual-port)"],
+      ["Regfile", "BRAM 4R1W, 64×32 ({tid,reg})"],
+      ["MAC unit", "32×32→64 (MUL / MLA / MLAL)"],
+      ["Halt detect", "B . (0xEAFFFFFE) sticky / thread"]
+    ],
+    note: "Per-thread ARM cores on one pipeline. Each thread owns 16 GPRs; the regfile is a shared BRAM indexed by {tid,reg}. Writes from MLAL (two dest regs) are serialized over 2 cycles via dual_wr_stall."
+  },
+  pkt: {
+    id: "pkt", title: "Packet Processor", sub: "Sole FIFO master",
+    rtl: "rtl/network/pkt_proc.v",
+    specs: [
+      ["Role", "Decode cmd+data · init CPU IMEM/DMEM · repack"],
+      ["Opcodes", "LOAD_IMEM / LOAD_DMEM / CPU_START / READBACK / SEND_PKT"],
+      ["FSM states", "23 (IDLE → FETCH → DECODE → …)"],
+      ["Word format", "{cmd[3:0], addr[11:0], count[15:0], param[31:0]}"],
+      ["Auto-detect", "v2.1 — distinguishes cmd stream from network pkt"],
+      ["Ethertype", "0x88B5 (custom SoC framing)"],
+      ["→ ARM ctrl", "cpu_rst_n · cpu_start · entry_pc (pulses release)"],
+      ["← ARM ctrl", "cpu_done (per-thread halt OR)"]
+    ],
+    note: "The only bus master allowed to touch the Conv-FIFO (Port B / SRAM mode) and CPU IMEM/DMEM (Port B). Decodes command words, unpacks 64-bit → 2×32-bit into CPU IMEM/DMEM, asserts cpu_rst_n + cpu_start with entry_pc to release the ARM cores, then packs CPU results back out on READBACK/SEND_PKT."
+  },
+  fifo: {
+    id: "fifo", title: "Conv. FIFO", sub: "64-bit · 4096 depth",
+    rtl: "rtl/network/conv_fifo.v",
+    specs: [
+      ["Width", "64-bit data + 8-bit ctrl"],
+      ["Depth", "4096 entries"],
+      ["Modes", "RX_FIFO / SRAM / TX_DRAIN (2-bit)"],
+      ["Port A", "NetFPGA RX ingress · TX_DRAIN egress"],
+      ["Port B", "pkt_proc (SRAM-mode R/W + ptr wr)"],
+      ["Nearly-full", "threshold = 4"],
+      ["Pointers", "head / tail / pkt_end (12-bit)"]
+    ],
+    note: "3-mode convertible FIFO. RX_FIFO accumulates inbound NetFPGA words on Port A; SRAM exposes the buffer as dual-port RAM for pkt_proc on Port B; TX_DRAIN streams packed replies back out of Port A (tx_start from pkt_proc kicks drain)."
+  },
+  cpudmem: {
+    id: "cpudmem", title: "CPU DMEM", sub: "32-bit · 4096 · dual-port",
+    rtl: "rtl/cpu/testmem/test_d_mem.v",
+    specs: [
+      ["Width × Depth", "32 × 4096"],
+      ["Port A", "CPU LD/ST (byte-addr → word-addr)"],
+      ["Port B", "pkt_proc ⇄ DMA (word-addr, muxed)"],
+      ["Arbitration", "owns_port_b selects master"],
+      ["ANN stage base", "0x180"],
+      ["Weight span", "8182 linear BF16 words (fc1+fc2+fc3)"]
+    ],
+    note: "True-dual-port SRAM. CPU uses Port A; Port B is statically muxed between pkt_proc (during LOAD_DMEM / READBACK) and the DMA Engine (during D_UNPACK / D_PACK) via pp_owns_port_b."
+  },
+  cpuimem: {
+    id: "cpuimem", title: "CPU IMEM", sub: "32-bit · 4096 · dual-port",
+    rtl: "rtl/cpu/testmem/test_i_mem.v",
+    specs: [
+      ["Width × Depth", "32 × 4096"],
+      ["Port A", "CPU fetch (IF1, read-only)"],
+      ["Port B", "pkt_proc LOAD_IMEM (write-only)"],
+      ["Halt encoding", "0xEAFFFFFE (B .)"]
+    ],
+    note: "Loaded at boot / per-packet by pkt_proc via LOAD_IMEM. One 64-bit FIFO word unpacks into two consecutive 32-bit ARM instructions. CPU never writes IMEM."
+  },
+  cp10: {
+    id: "cp10", title: "CP10 Regfile", sub: "CR0–CR9 · DMA + GPU bridge",
+    rtl: "rtl/cp/cp10_regfile.v",
+    specs: [
+      ["CR0 / CR1", "DMA src / dst addr"],
+      ["CR2", "DMA xfer length (16-bit)"],
+      ["CR3", "{burst_all, auto_inc, bank[1:0], tgt, dir, start}"],
+      ["CR4", "GPU entry PC"],
+      ["CR5", "{auto_dma, gpu_reset_n, kernel_start}"],
+      ["CR6", "GPU_STATUS (RO, sticky kernel_done)"],
+      ["CR7", "GPU active thread mask [3:0]"],
+      ["CR8", "GPU scratch"],
+      ["CR9", "DMA_CUR_ADDR (RO)"]
+    ],
+    note: "Coprocessor 10 — the control bridge between the ARM CPU and the two accelerators. Writes come in via MCR (CPU → CP10) and reads via MRC; on the output side it drives the DMA command bundle and the GPU kernel-launch bundle, and latches back their status flags."
+  },
+  dma: {
+    id: "dma", title: "DMA Engine", sub: "IMEM · UNPACK · PACK",
+    rtl: "rtl/cp/dma_engine.v",
+    specs: [
+      ["D_IMEM", "CPU DMEM → GPU IMEM  (32 → 32, 1:1)"],
+      ["D_UNPACK", "CPU DMEM → GPU DMEM  (32 → 2×16, 4-bank)"],
+      ["D_PACK", "GPU DMEM → CPU DMEM  (2×16 → 32)"],
+      ["Burst-all", "cpu_ptr advances across all 4 banks"],
+      ["FSM", "12 states (IDLE, IMEM_RD/WR, UNPACK_*, PACK_*)"],
+      ["Status → CP10", "dma_busy · dma_error · dma_cur_addr"]
+    ],
+    note: "Kicked by CP10 CR3[0] (dma_start pulse). Three modes move data between the 32-bit CPU DMEM world and the 4× 16-bit banked GPU DMEM, swizzling word halves across banks. Shares CPU-DMEM Port B with pkt_proc (arbitrated by pp_owns_port_b)."
+  },
+  gpuimem: {
+    id: "gpuimem", title: "GPU IMEM", sub: "32-bit · 256",
+    rtl: "rtl/gpu/testmem/test_gpu_imem.v",
+    specs: [
+      ["Width × Depth", "32 × 256"],
+      ["Loaded via", "DMA D_IMEM (from CPU DMEM)"],
+      ["Opcodes", "32 (ST/LD/MOV/FMA/WMMA.MMA…)"]
+    ],
+    note: "Single instruction memory shared by all 4 GPU threads (SIMT)."
+  },
+  gpudmem: {
+    id: "gpudmem", title: "GPU DMEM", sub: "4×1024 · 16-bit",
+    rtl: "rtl/gpu/testmem/test_gpu_dmem.v",
+    specs: [
+      ["Banks", "4 (one per SIMT lane)"],
+      ["Width × Depth", "16 × 1024 per bank"],
+      ["Data types", "INT16 and BF16 (bf16comp engine)"]
+    ],
+    note: "Per-thread private memory. A BF16 word and an INT16 word share the same slot width; cvt instructions round-trip between them."
+  },
+  gpu: {
+    id: "gpu", title: "GPU SM Core", sub: "Quad-thread SIMT · 4×4 Tensor Core",
+    rtl: "rtl/gpu/core/sm_core.v",
+    specs: [
+      ["Lanes", "4 SP cores + 1 tensor core"],
+      ["Tensor Core", "4×4 WMMA.MMA (BF16 multiply, FP32 accum)"],
+      ["SIMT stack", "PBRA + reconvergence redirect"],
+      ["Regfile", "GPR 4R1W, pred regfile"],
+      ["Fetch", "1 IMEM read / cycle, PC widht 32"],
+      ["Kernel done", "pulses sticky in CP10 CR6"]
+    ],
+    note: "PTX-compatible quad-thread SM. BF16 FPU for classic math; dedicated 4×4 tensor core for WMMA matmul used by the ANN Q·K / FC layers."
+  },
+  rx: { id:"rx", title:"Network RX", sub:"NetFPGA · 1 GbE ingress", rtl:"(netfpga)",
+        specs:[["Bus","64-bit data + 8-bit ctrl"],["Handshake","in_wr / in_rdy"],["Into","conv_fifo Port A (RX_FIFO mode)"]],
+        note:"Ethernet frames arrive from the NetFPGA-1G MAC. The SoC top-level exposes in_data/in_ctrl/in_wr with an in_rdy backpressure handshake straight into the Conv FIFO." },
+  tx: { id:"tx", title:"Network TX", sub:"NetFPGA · 1 GbE egress", rtl:"(netfpga)",
+        specs:[["Bus","64-bit data + 8-bit ctrl"],["Handshake","out_wr / out_rdy"],["From","conv_fifo Port A (TX_DRAIN)"]],
+        note:"Processed frames / alerts egress via the NetFPGA-1G MAC. The Conv FIFO streams packed replies out using out_data/out_ctrl/out_wr under the TX consumer's out_rdy." }
+};
+
+/* Layout — 1480 × 600 SVG, 5 columns:
+     col 1: Arm CPU (full-height tall block)
+     col 2: packet path + CPU IMEM/DMEM + CP10 stack
+     col 3: NetFPGA jacks (top) + DMA Engine (mid)
+     col 4: GPU IMEM/DMEM
+     col 5: GPU SM core (tall, contains SP-LANE + Tensor-Core inset)
+   Vertical floor for all column stacks: y ≈ 460. */
+const LAYOUT = {
+  // col 1 — Arm CPU (tall): aligns top with pkt and bottom with cp10
+  arm:     { x:  30, y:  30, w: 150, h: 430, kind:"tall", lane:"cpu" },
+
+  // col 2 — packet path + CPU memories + CP10 (stacked, compact)
+  pkt:     { x: 200, y:  30, w: 210, h:  60, lane:"net" },
+  fifo:    { x: 200, y: 130, w: 210, h:  60, lane:"cpu" },
+  cpuimem: { x: 200, y: 205, w: 210, h:  55, lane:"cpu" },
+  cpudmem: { x: 200, y: 275, w: 210, h:  65, lane:"cpu" },
+  cp10:    { x: 200, y: 360, w: 210, h: 100, lane:"bridge" },
+
+  // col 3 top — NETFPGA jacks (east of pkt) — shifted right for wire routing room
+  rx:      { x: 490, y:  40, w: 120, h:  32, kind:"pill", lane:"net" },
+  tx:      { x: 490, y:  82, w: 120, h:  32, kind:"pill", lane:"net" },
+
+  // col 3 mid — DMA Engine (central hub, spans cpuimem→cp10 vertically)
+  dma:     { x: 490, y: 215, w: 120, h: 200, lane:"bridge" },
+
+  // col 4 — GPU-side memories (aligned with CPU memories)
+  gpuimem: { x: 680, y: 205, w: 150, h:  55, lane:"gpumem" },
+  gpudmem: { x: 680, y: 275, w: 150, h:  65, lane:"gpumem" },
+
+  // col 5 — GPU SM core (tall, holds SP-LANE + tensor-core inset)
+  gpu:     { x: 870, y:  30, w: 440, h: 480, kind:"tall", lane:"gpu" }
+};
+
+/* Tensor-core 4×4 WMMA.MMA sub-datapath (all ops BF16). */
+const TC = {
+  cellA:  26, cellM:  30, gutter: 22, addW:   40, addH:   30,
+  yGrid:  268, xA:     28
+};
+
+// Wires — source block anchor → destination block anchor.
+// Connectivity tracked directly against Final/src/rtl/soc/soc.v.
+const WIRES = [
+  // ── External NetFPGA ports talk to Conv FIFO (Port A = RX, TX stream) ──
+  { id:"w_rx_fifo", from:"rx",   fa:"w", to:"fifo", ta:"en", kind:"data", label:"in_data · in_ctrl · in_wr" },
+  { id:"w_fifo_tx", from:"fifo", fa:"e", to:"tx",   ta:"w",  kind:"data", label:"out_data · out_ctrl · out_wr" },
+
+  // ── pkt_proc is the sole FIFO master (Port B, SRAM mode) ──
+  { id:"w_pkt_fifo", from:"pkt", fa:"s", to:"fifo", ta:"n", kind:"data", bidir:true, label:"FIFO port B  ·  mode · head/tail · tx_start" },
+
+  // ── pkt_proc directly drives CPU IMEM / DMEM Port B (not via fifo bus) ──
+  { id:"w_pkt_cpuimem", from:"pkt", fa:"ee", to:"cpuimem", ta:"e",  via:440, kind:"data", label:"LOAD_IMEM  (port B · write-only)" },
+  { id:"w_pkt_cpudmem", from:"pkt", fa:"es", to:"cpudmem", ta:"ee", via:460, kind:"data", bidir:true, label:"LOAD_DMEM · READBACK  (port B)" },
+
+  // ── pkt_proc ⇄ ARM control (cpu_rst_n · cpu_start · entry_pc  ←→  cpu_done)
+  //     Label suppressed — gutter too narrow; signals documented in pkt block note. ──
+  { id:"w_pkt_arm", from:"pkt", fa:"w", to:"arm", ta:"en", via:190, kind:"ctrl", bidir:true },
+
+  // ── ARM ⇄ CPU memories (Port A) ──
+  { id:"w_cpuimem_arm", from:"cpuimem", fa:"w", to:"arm", ta:"e",  kind:"data", label:"IF1 fetch  (port A)" },
+  { id:"w_cpudmem_arm", from:"cpudmem", fa:"w", to:"arm", ta:"ee", kind:"data", bidir:true, label:"LD / ST  (port A)" },
+
+  // ── ARM ⇄ CP10 (MCR/MRC p10, 4-bit CRn, 32-bit data) ──
+  { id:"w_cp10_arm", from:"cp10", fa:"w", to:"arm", ta:"es", kind:"ctrl", bidir:true, label:"MCR · MRC  p10" },
+
+  // ── CP10 → DMA / GPU (control bundles + status return) ──
+  { id:"w_cp10_dma", from:"cp10", fa:"e",  to:"dma", ta:"ws", kind:"ctrl", bidir:true, label:"DMA ctrl (src/dst/len/tgt/dir/bank)  ·  busy/err" },
+  { id:"w_cp10_gpu", from:"cp10", fa:"es", to:"gpu", ta:"ws", kind:"ctrl", bidir:true, label:"kernel_start · entry_pc · mask  ·  kernel_done" },
+
+  // ── DMA ⇄ memories (all Port B) ──
+  { id:"w_dma_cpudmem", from:"dma", fa:"w",  to:"cpudmem", ta:"e",  kind:"data", bidir:true, label:"CPU DMEM  (port B, 32b)" },
+  { id:"w_dma_gpuimem", from:"dma", fa:"en", to:"gpuimem", ta:"w",  kind:"data",              label:"GPU IMEM  (port B, write-only)" },
+  { id:"w_dma_gpudmem", from:"dma", fa:"e",  to:"gpudmem", ta:"w",  kind:"data", bidir:true, label:"GPU DMEM  (port B, 4-bank muxed)" },
+
+  // ── sm_core ⇄ GPU memories (Port A) ──
+  { id:"w_gpudmem_gpu", from:"gpudmem", fa:"e", to:"gpu", ta:"w",  kind:"data", bidir:true, label:"GPU LD / ST  (port A, flat 4-bank)" },
+  { id:"w_gpuimem_gpu", from:"gpuimem", fa:"e", to:"gpu", ta:"wn", kind:"data",              label:"GPU IF  (port A)" }
+];
+
+// Real halted-thread logits pulled from ann_hw_compat_info.txt
+const ANN_LOGITS = [
+  ["row0 (T0)","3EB6 4102 4172 4098"],
+  ["row1 (T1)","3F8E 3F51 40CE 4054"],
+  ["row2 (T2)","3D28 412B 419F 40D8"],
+  ["row3 (T3)","0000 40D5 4176 4038"]
+];
+
+const SCENARIOS = {
+  hetero: {
+    id:"hetero",
+    title:"Full heterogeneous pipeline",
+    kind:"normal",
+    summary:"One end-to-end click-through: NetFPGA packet arrives → pkt_proc loads CPU firmware → Arm preprocess → CP10 programs DMA → GPU kernel runs on 4×4 tensor core → DMA pack back → CPU post → SEND_PKT to TX. Covers the full v8 FGMT SoC datapath.",
+    phases:[
+      { t:1,  cycle:0,    label:"Packet arrives", short:"RX arrives", active:["rx","fifo","pkt"], wires:["w_rx_fifo","w_pkt_fifo"],
+        tokens:[{wire:"w_rx_fifo",progress:1}],
+        state:{fifo:[["mode","RX_FIFO"],["in_wr","1"],["tail","0x004"]],pkt:[["state","P_RX_BUF"],["pkt_ready","1"]]},
+        log:"NetFPGA RX → Conv FIFO (Port A) · ethertype 0x88B5 · 16×64b words buffered; pkt_proc sees pkt_ready" },
+      { t:2,  cycle:8,    label:"Inspect header", short:"Hdr inspect", active:["pkt","fifo"], wires:["w_pkt_fifo"],
+        tokens:[{wire:"w_pkt_fifo",progress:.5}],
+        state:{pkt:[["state","P_HDR_RD"],["first_opcode","0x1 (LOAD_IMEM)"],["is_command","1"]],fifo:[["mode","SRAM"]]},
+        log:"pkt_proc v2.1: header opcode in [1..5] → command path" },
+      { t:3,  cycle:24,   label:"Load CPU program (LOAD_IMEM)", short:"LOAD_IMEM", active:["pkt","fifo","cpuimem"], wires:["w_pkt_cpuimem","w_pkt_fifo"],
+        tokens:[{wire:"w_pkt_cpuimem",progress:.7}],
+        state:{cpuimem:[["we","1"],["addr","0x3E"],["din_lo","E3A01000"],["din_hi","E3A02001"]],pkt:[["cmd","LOAD_IMEM"],["count","32"]],fifo:[["mode","SRAM"],["rd_ptr","0x020"]]},
+        log:"CPU IMEM[0x00..0x3F] ← 64 ARM instructions · halt terminator EAFFFFFE" },
+      { t:4,  cycle:80,   label:"Load CPU data (LOAD_DMEM)", short:"LOAD_DMEM", active:["pkt","fifo","cpudmem"], wires:["w_pkt_cpudmem","w_pkt_fifo"],
+        tokens:[{wire:"w_pkt_cpudmem",progress:.7}],
+        state:{cpudmem:[["we","1"],["addr","0x100"],["count","40 features"],["port","B (pkt_proc)"]],pkt:[["cmd","LOAD_DMEM"],["count","40"]],fifo:[["mode","SRAM"],["rd_ptr","0x040"]]},
+        log:"CPU DMEM[0x100..0x127] ← 40 input features · pkt_proc owns port B" },
+      { t:5,  cycle:120,  label:"Release CPU threads (CPU_START)", short:"CPU_START", active:["pkt","arm","cpuimem"], wires:["w_pkt_arm","w_cpuimem_arm"],
+        tokens:[{wire:"w_pkt_arm",progress:.6}],
+        state:{pkt:[["state","P_CPU_RUN"],["cmd","CPU_START"],["owns_port_b","0"]],arm:[["cpu_rst_n","1 ↑"],["cpu_start","1 ↑"],["entry_pc","0x00000000"],["thread_mask","1111"]]},
+        log:"pkt_proc: de-asserts owns_port_b, drives cpu_rst_n=1 & cpu_start pulse · entry_pc=0x0" },
+      { t:6,  cycle:140,  label:"CPU preprocesses input", short:"CPU pre", active:["arm","cpudmem"], wires:["w_cpudmem_arm"],
+        state:{arm:[["threads","4 (T0..T3)"],["op","MUL · MLA"],["stage","EX2"]],cpudmem:[["base","0x100"],["count","40"],["port","A (CPU)"]]},
+        log:"Arm: per-thread MUL/MLA scales 40 features by scaler_std → writes GPU program + weights to CPU DMEM" },
+      { t:7,  cycle:220,  label:"Transfer program to GPU (D_IMEM)", short:"D_IMEM", active:["arm","cp10","dma","cpudmem","gpuimem"], wires:["w_cp10_arm","w_cp10_dma","w_dma_cpudmem","w_dma_gpuimem"],
+        tokens:[{wire:"w_dma_cpudmem",progress:.4},{wire:"w_dma_gpuimem",progress:.6}],
+        state:{arm:[["instr","MCR p10,0,R4,CR0..CR3"]],cp10:[["CR0","0x00000040 src"],["CR2","0x0040 len"],["CR3","D_IMEM start"]],dma:[["mode","D_IMEM"],["state","S_IMEM_RD→WR"]],cpudmem:[["port","B (DMA)"],["rd","0x040..0x07F"]],gpuimem:[["we","1"],["addr","0x00..0x3F"]]},
+        log:"DMA D_IMEM: CPU DMEM → GPU IMEM · 64 GPU instrs · 1:1 32→32" },
+      { t:8,  cycle:300,  label:"Stream data to GPU (D_UNPACK)", short:"D_UNPACK", active:["arm","cp10","dma","cpudmem","gpudmem"], wires:["w_cp10_dma","w_dma_cpudmem","w_dma_gpudmem"],
+        tokens:[{wire:"w_dma_cpudmem",progress:.4},{wire:"w_dma_gpudmem",progress:.6}],
+        state:{cp10:[["CR3","D_UNPACK start"]],dma:[["mode","D_UNPACK"],["state","S_UNPACK_WR_HI"],["burst_all","1"],["bank","b00→b11"]],cpudmem:[["port","B (DMA)"],["rd","0x100..0x1FF"]],gpudmem:[["we","1111"],["t0..t3","0x000→"]]},
+        log:"DMA D_UNPACK: 32b CPU words → 2×16b GPU words · 4-bank burst across T0..T3" },
+      { t:9,  cycle:460,  label:"Launch GPU kernel", short:"GPU launch", active:["cp10","gpu","gpuimem"], wires:["w_cp10_gpu","w_gpuimem_gpu"],
+        state:{cp10:[["CR4","0x00000000 pc"],["CR5","0b001 start"],["CR7","1111 mask"]],gpu:[["kernel_start","1 ↑"],["active_mask","1111"]]},
+        log:"CP10 → sm_core: kernel_start pulse · entry_pc=0x00 · 4 SIMT lanes released" },
+      { t:10, cycle:480,  label:"GPU runs L1 → L2 → L3 (36 tiles)", short:"GPU L1→L2→L3", active:["gpu","gpudmem","gpuimem"], wires:["w_gpudmem_gpu","w_gpuimem_gpu"],
+        state:{gpu:[["entry_pc","0x00 (LINEAR) · 0x1C (RELU)"],["opcode","WMMA.MMA + PBRA K-loop + MAX (ReLU)"],["tc_state","ACC"],["lane_mask","1111"]],gpudmem:[["read","W1 40×96 · W2 96×42 · W3 42×4 per bank"]]},
+        log:"Scheduler drives 36 consolidated tiles: L1 24 × ReLU (40→96, K=10) · L2 11 × ReLU (96→42, K=24) · L3 1 × linear (42→4, K=11) · each tile ~1.6k–3.7k cyc incl. K-loop + store" },
+      { t:11, cycle:77100, label:"GPU signals done", short:"GPU done", active:["gpu","cp10"], wires:["w_cp10_gpu"],
+        state:{gpu:[["kernel_done","1 ↑"]],cp10:[["CR6","0x00000005 idle|done"]]},
+        log:"sm_core: all 4 threads RET on final tile · cr6_done latched · 36 tiles × K-accum (L1:24 ReLU + L2:11 ReLU + L3:1 linear) · ~76,620 GPU cyc total" },
+      { t:12, cycle:77250, label:"Read results back (D_PACK)", short:"D_PACK", active:["arm","cp10","dma","gpudmem","cpudmem"], wires:["w_cp10_arm","w_cp10_dma","w_dma_gpudmem","w_dma_cpudmem"],
+        tokens:[{wire:"w_dma_gpudmem",progress:.4,rev:true},{wire:"w_dma_cpudmem",progress:.6,rev:true}],
+        state:{arm:[["MRC","CR6 poll → done"]],cp10:[["CR3","D_PACK start"]],dma:[["mode","D_PACK"],["state","S_PACK_WR"]],gpudmem:[["rd","0x978..0x97B (X3_BASE)"]],cpudmem:[["port","B (DMA)"],["stage","0x320 (READBACK)"],["got","4×64b logits"]]},
+        log:"DMA D_PACK: GPU X3_BASE → CPU DMEM[800] · 4 banks × 2 32b = 4 DWs" },
+      { t:13, cycle:77450, label:"CPU post-process (transpose/pack)", short:"CPU post", active:["arm","cpudmem"], wires:["w_cpudmem_arm"],
+        state:{arm:[["op","class-major → packet-major transpose"],["result","4 packed BF16 DWs"]],cpudmem:[["port","A (CPU)"],["rw","0x320..0x327"]]},
+        log:"Scheduler post-process block: {class,pkt} BF16 → packet-major packed words in-place" },
+      { t:14, cycle:77632, label:"Send reply packet (SEND_PKT)", short:"SEND_PKT", active:["pkt","cpudmem","fifo","tx"], wires:["w_pkt_cpudmem","w_pkt_fifo","w_fifo_tx"],
+        tokens:[{wire:"w_fifo_tx",progress:.7}],
+        state:{pkt:[["state","P_SEND_DONE"],["cmd","SEND_PKT"],["tx_start","1 ↑"]],cpudmem:[["port","B (pkt_proc)"],["rd","0x180"]],fifo:[["mode","TX_DRAIN"]]},
+        log:"pkt_proc reads CPU DMEM → packs into FIFO → asserts tx_start; FIFO TX_DRAIN streams 4×64b reply over NetFPGA TX · logits 3EB6 4102 4172 4098 · 3F8E 3F51 40CE 4054 · …" }
+    ],
+    annOutput: ANN_LOGITS
+  }
+};
+
+// RTL verification findings — mapping diagram → code, with flags
+const VERIFY = {
+  summary: { modules: 23, testbenches: 9, blocks_mapped: 12, anomalies: 3, bugs_fixed: 4 },
+  mapping: [
+    { block:"Arm CPU", file:"rtl/cpu/core/cpu_mt.v", status:"ok", spec:"7-stage FGMT, 4 threads, ARMv4T", note:"Matches block-diagram label." },
+    { block:"Packet Processor", file:"rtl/network/pkt_proc.v", status:"ok", spec:"5 opcodes, 23 FSM states, auto-detect v2.1", note:"FIFO sole-master invariant enforced in RTL." },
+    { block:"Conv. FIFO", file:"rtl/network/conv_fifo.v", status:"ok", spec:"64b × 4096, 3 modes", note:"Matches." },
+    { block:"CPU DMEM", file:"rtl/cpu/testmem/test_d_mem.v", status:"ok", spec:"32b × 4096, dual-port", note:"Diagram says 4096 — confirmed." },
+    { block:"CPU IMEM", file:"rtl/cpu/testmem/test_i_mem.v", status:"warn", spec:"32b × 4096 (define.v); IMEM_ADDR_WIDTH=10→1024 in pkt_proc defaults", note:"Parameter default in pkt_proc header comment says 1024, but soc.v overrides with `IMEM_ADDR_WIDTH` from define.v (=12 → 4096). Consistent at elaboration; stale header comment only." },
+    { block:"CP10 Regfile", file:"rtl/cp/cp10_regfile.v", status:"ok", spec:"CR0–CR9, GPU+DMA bridge", note:"Register map matches Lab 9 / ISA doc." },
+    { block:"DMA Engine", file:"rtl/cp/dma_engine.v", status:"ok", spec:"3 modes, 12-state FSM", note:"v1.1 cosmetic fix: clears gpu_dmem_sel on D_IMEM entry." },
+    { block:"GPU IMEM", file:"rtl/gpu/testmem/test_gpu_imem.v", status:"ok", spec:"32b × 256", note:"Matches gpu_define.v." },
+    { block:"GPU DMEM", file:"rtl/gpu/testmem/test_gpu_dmem.v", status:"ok", spec:"16b × 1024 per bank, 4 banks", note:"Diagram labels '4-Banked (per Thread)' — matches." },
+    { block:"GPU SM Core", file:"rtl/gpu/core/sm_core.v", status:"ok", spec:"4×SP + tensor core, SIMT stack, PBRA pipe reg", note:"v1.7: convergence redirect wired between simt_stack and fetch_unit." },
+    { block:"Tensor Core", file:"rtl/gpu/core/tensor_core.v", status:"ok", spec:"4×4 WMMA.MMA BF16 mul → FP32 accum", note:"Matches `WMMA_MMA` opcode 5'b11101 in gpu_define.v." },
+    { block:"Network RX/TX", file:"(NetFPGA)", status:"info", spec:"64b @ 1 GbE", note:"External to repo; driven in soc_tb via RX/TX regs." }
+  ],
+  findings: [
+    { sev:"info", title:"pkt_proc IMEM_ADDR_WIDTH default is stale",
+      detail:"pkt_proc.v declares `parameter IMEM_ADDR_WIDTH = 10` — only used if the block is instantiated without override. soc.v always passes `IMEM_ADDR_WIDTH` from define.v (12), so hardware is correct. Recommend bumping the default to 12 to remove the foot-gun for future testbenches.",
+      file:"rtl/network/pkt_proc.v:39" },
+    { sev:"info", title:"CP0 reference in pkt_proc.v header",
+      detail:"Module header comment says “interfaces with the CP0 register file”. The SoC uses CP10 (cp10_regfile.v); cp0 does not exist. Code is correct — comment is out of date.",
+      file:"rtl/network/pkt_proc.v:2" },
+    { sev:"info", title:"CR6 sticky-done flag clear policy",
+      detail:"cp10_regfile.v clears gpu_done_flag only on a new CR5[0] write. If software polls CR6, then writes CR5 for a new kernel launch, the flag transitions within the same MCR cycle. Behavior matches the ISA doc (section “GPU status”) — logged here so testbench writers do not expect a separate clear register.",
+      file:"rtl/cp/cp10_regfile.v" },
+    { sev:"ok", title:"SoC integration test: 26 scenarios pass",
+      detail:"soc_tb.v enumerates tests 1–26 covering CPU datapath, CP10/DMA, GPU kernels K1–K6, WMMA tensor core, CVT round-trips, full heterogeneous, high-address DMA. Reference logits for the model TB (3EB6 4102 …) match ann_hw_compat_info.txt.",
+      file:"rtl/tb/soc_tb.v" },
+    { sev:"ok", title:"Design doc ↔ RTL: ISA v2.1 4R4W matches gpu_define.v",
+      detail:"All 32 GPU opcodes listed in gpu_define.v (NOP through WMMA_STORE) are present in isa_v2_1_wmma_4r4w.pdf with the same 5-bit encodings.",
+      file:"doc/isa_v2_1_wmma_4r4w.pdf" },
+    { sev:"warn", title:"ANN model — fc3 synthesis is a stub",
+      detail:"ann_hw_compat_info.txt notes: fc3 synthesized as deterministic group-average projection over 42 hidden units, and 10 entries of fc2.bias were zero-filled. OK for demonstrating the hardware path; production deployment needs a real trained fc3 head.",
+      file:"model/ann_hw_compat_info.txt" }
+  ]
+};
+
+window.AEGIS = { BLOCKS, LAYOUT, WIRES, TC, SCENARIOS, VERIFY };
+</script>
+
+<script type="text/babel">
+/* ───── diagram.jsx ───── */
+/* Diagram — the SVG architecture board with click-to-inspect + animated wires */
+const { useMemo } = React;
+
+// anchor positions inside a block rect (normalized to block w/h)
+function anchor(block, which){
+  const { x, y, w, h } = block;
+  const cx = x + w/2, cy = y + h/2;
+  switch(which){
+    case "n":  return { x: cx, y: y };
+    case "s":  return { x: cx, y: y + h };
+    case "e":  return { x: x + w, y: cy };
+    case "w":  return { x: x, y: cy };
+    case "nw": return { x: x + w*0.25, y: y };
+    case "ne": return { x: x + w*0.75, y: y };
+    case "sw": return { x: x + w*0.25, y: y + h };
+    case "se": return { x: x + w*0.75, y: y + h };
+    case "ee": return { x: x + w, y: y + h*0.75 };
+    case "en": return { x: x + w, y: y + h*0.25 };
+    case "ww": return { x: x, y: y + h*0.75 };
+    case "wn": return { x: x, y: y + h*0.25 };
+    case "ws": return { x: x, y: y + h*0.88 };
+    case "es": return { x: x + w, y: y + h*0.88 };
+    default:   return { x: cx, y: cy };
+  }
+}
+
+// build an orthogonal L/Z path from p1 to p2, with optional detour via a given X corridor
+function orthoPath(a, b, fa, ta, via){
+  const HORIZ = new Set(["e","w","ee","en","ww","wn","ws","es"]);
+  const fh = HORIZ.has(fa);
+  const th = HORIZ.has(ta);
+  if (via != null){
+    return `M${a.x},${a.y} H${via} V${b.y} H${b.x}`;
+  }
+  const midX = (a.x + b.x) / 2;
+  const midY = (a.y + b.y) / 2;
+  if (fh && th){
+    return `M${a.x},${a.y} H${midX} V${b.y} H${b.x}`;
+  } else if (!fh && !th){
+    return `M${a.x},${a.y} V${midY} H${b.x} V${b.y}`;
+  } else if (fh && !th){
+    return `M${a.x},${a.y} H${b.x} V${b.y}`;
+  } else {
+    return `M${a.x},${a.y} V${b.y} H${b.x}`;
+  }
+}
+
+function Diagram({ selected, activeBlocks, activeWires, tokens, onSelect, showWires, showToken, phaseLabel }){
+  const { BLOCKS, LAYOUT, WIRES, TC } = window.AEGIS;
+  const W = 1330, H = 515;
+
+  const wirePaths = useMemo(() => {
+    return WIRES.map(w => {
+      const a = anchor(LAYOUT[w.from], w.fa);
+      const b = anchor(LAYOUT[w.to], w.ta);
+      return { ...w, a, b, d: orthoPath(a,b,w.fa,w.ta,w.via) };
+    });
+  }, []);
+
+  const tcActive = (activeBlocks?.includes("gpu") && /WMMA|tensor|FC1/i.test(phaseLabel||""));
+  const gpu = LAYOUT.gpu;
+
+  return (
+    <svg className="diagram" viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#8b8f97"/>
+        </marker>
+        <marker id="arrow-start" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M10,0 L0,5 L10,10 z" fill="#8b8f97"/>
+        </marker>
+        <marker id="arrow-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#1a7f5a"/>
+        </marker>
+        <marker id="arrow-a-start" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M10,0 L0,5 L10,10 z" fill="#1a7f5a"/>
+        </marker>
+        <marker id="arrow-tc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#6b7680"/>
+        </marker>
+        <marker id="arrow-tc-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#1a7f5a"/>
+        </marker>
+      </defs>
+
+      <g className="bands">
+        <rect x="20" y="20" width="170" height="450" rx="6" fill="#eeece2" opacity=".55"/>
+        <text x="105" y="14" textAnchor="middle" className="band-label">CPU  CORE</text>
+
+        <rect x="190" y="20" width="230" height="450" rx="6" fill="#f1efe6" opacity=".45"/>
+        <text x="305" y="14" textAnchor="middle" className="band-label">CPU  DOMAIN</text>
+
+        <rect x="480" y="30" width="140" height="95" rx="6" fill="#f1efe6" opacity=".45"/>
+        <text x="550" y="24" textAnchor="middle" className="band-label">NETFPGA  1GbE</text>
+
+        <rect x="480" y="200" width="140" height="225" rx="6" fill="#eeece2" opacity=".55"/>
+        <text x="550" y="194" textAnchor="middle" className="band-label">DMA  BRIDGE</text>
+
+        <rect x="670" y="195" width="170" height="155" rx="6" fill="#eeece2" opacity=".55"/>
+        <text x="755" y="189" textAnchor="middle" className="band-label">GPU  MEMS</text>
+
+        <rect x="860" y="20" width="460" height="500" rx="6" fill="#ebeadf" opacity=".65"/>
+        <text x="1090" y="14" textAnchor="middle" className="band-label">GPU  SM  DOMAIN</text>
+      </g>
+
+      {showWires && wirePaths.map(w => {
+        const active = activeWires?.includes(w.id);
+        const endM = active ? "url(#arrow-a)" : "url(#arrow)";
+        const startM = w.bidir ? (active ? "url(#arrow-a-start)" : "url(#arrow-start)") : undefined;
+        return (
+          <path key={w.id}
+                className={`wire ${w.kind} ${active?"active":""}`}
+                d={w.d}
+                markerStart={startM}
+                markerEnd={endM} />
+        );
+      })}
+
+      {showWires && wirePaths.map(w => {
+        if (!w.label) return null;
+        const active = activeWires?.includes(w.id);
+        const { a, b } = w;
+        const HORIZ = new Set(["e","w","ee","en","ww","wn","ws","es"]);
+        const fh = HORIZ.has(w.fa);
+        const th = HORIZ.has(w.ta);
+        let lx, ly, anchor = "middle";
+        if (w.via != null){
+          // Label the long vertical segment in the via corridor.
+          lx = w.via + 4;
+          ly = (a.y + b.y)/2 - 6;
+          anchor = "start";
+        } else if (fh && th){
+          lx = (a.x + b.x)/2;
+          ly = Math.min(a.y, b.y) - 6;
+          if (Math.abs(a.y - b.y) > 4) ly = (a.y + b.y)/2 - 6;
+        } else if (!fh && !th){
+          lx = (a.x + b.x)/2 + 4;
+          ly = (a.y + b.y)/2 - 6;
+        } else if (fh && !th){
+          lx = (a.x + b.x)/2;
+          ly = a.y - 6;
+        } else {
+          lx = b.x;
+          ly = (a.y + b.y)/2 - 6;
+        }
+        return (
+          <text key={`lbl-${w.id}`} x={lx} y={ly} textAnchor={anchor}
+                className={`wire-label ${w.kind} ${active?"active":""}`}>
+            {w.label}
+          </text>
+        );
+      })}
+
+      {showToken && showWires && tokens?.map((tk,i) => {
+        const w = wirePaths.find(x => x.id === tk.wire);
+        if(!w) return null;
+        const { a, b } = w;
+        const p = Math.max(0, Math.min(1, tk.progress ?? .5));
+        const t = tk.rev ? 1-p : p;
+        const mx = (a.x+b.x)/2, my=(a.y+b.y)/2;
+        let x,y;
+        if (t < .5){
+          const tt = t/.5;
+          x = a.x + (mx - a.x)*tt;
+          y = a.y + (my - a.y)*tt;
+        } else {
+          const tt = (t-.5)/.5;
+          x = mx + (b.x - mx)*tt;
+          y = my + (b.y - my)*tt;
+        }
+        return (
+          <g key={i} className="token on">
+            <circle cx={x} cy={y} r="8" fill="#1a7f5a" opacity=".2"/>
+            <circle cx={x} cy={y} r="3.8" fill="#1a7f5a"/>
+          </g>
+        );
+      })}
+
+      {Object.entries(LAYOUT).map(([id, rect]) => {
+        const b = BLOCKS[id];
+        const sel = id === selected;
+        const act = activeBlocks?.includes(id);
+        const cls = `block ${sel?"selected":""} ${act?"active":""}`;
+        const isPill = rect.kind === "pill";
+        const isTall = rect.kind === "tall";
+        return (
+          <g key={id} className={cls} onClick={() => onSelect(id)}>
+            <rect className="body" x={rect.x} y={rect.y} width={rect.w} height={rect.h}
+                  rx={isPill?22:6} ry={isPill?22:6} />
+            {isTall ? (
+              <>
+                <text className="title" x={rect.x+rect.w/2} y={rect.y+34} textAnchor="middle">{b.title}</text>
+                {b.sub.split(" · ").map((s, i) => (
+                  <text key={i} className="sub" x={rect.x+rect.w/2} y={rect.y+60+i*16} textAnchor="middle">{s}</text>
+                ))}
+              </>
+            ) : isPill ? (
+              /* Pills are small (h≈32) — sub text would collide with the next block; show title only. */
+              <text className="title" x={rect.x+rect.w/2} y={rect.y+rect.h/2+4} textAnchor="middle">{b.title}</text>
+            ) : (
+              <>
+                <text className="title" x={rect.x+rect.w/2} y={rect.y+28} textAnchor="middle">{b.title}</text>
+                <text className="sub" x={rect.x+rect.w/2} y={rect.y+50} textAnchor="middle">{b.sub}</text>
+              </>
+            )}
+            {act && (
+              <circle cx={rect.x + rect.w - 12} cy={rect.y + 12} r="4" fill="#1a7f5a">
+                <animate attributeName="opacity" values="1;0.25;1" dur="1.2s" repeatCount="indefinite"/>
+              </circle>
+            )}
+          </g>
+        );
+      })}
+
+      {(() => {
+        const bandY = 52;
+        const bandH = 116;
+        const bandStroke = tcActive ? "#1a7f5a" : "#a9ada3";
+        const fuStroke   = tcActive ? "#1a7f5a" : "#8a8f7a";
+        const fuW = 118, fuH = 34, fuGap = 14, badgeW = 34, badgeGap = 14;
+        const laneInnerW = 2*fuW + fuGap + badgeGap + badgeW;
+        const laneW = laneInnerW + 24;
+        const laneX = (gpu.w - laneW) / 2;
+        const laneY = bandY + 50;
+        const laneH = fuH + 22;
+        const fuY = laneY + (laneH - fuH) / 2;
+        const fuAx = laneX + 12;
+        const fuBx = fuAx + fuW + fuGap;
+        const badgeX = fuBx + fuW + badgeGap;
+
+        const tcY = 184, tcH = 282;
+        const cellA  = 20, cellF  = 26;
+        const tileSide = 4*cellA;
+        const fmaSide  = 4*cellF;
+        const tileGap  = 24;
+        const centerX = gpu.w / 2;
+        const abPairW = 2*tileSide + tileGap;
+        const tileAbY = tcY + 48;
+        const tileAx  = centerX - abPairW/2;
+        const tileBx  = tileAx + tileSide + tileGap;
+        const fmaX = centerX - fmaSide/2;
+        const fmaY = tileAbY + tileSide + 8;
+        const tileCx = fmaX - tileSide - tileGap;
+        const tileCy = fmaY + (fmaSide - tileSide)/2;
+        const coutW = fmaSide, coutH = 30;
+        const coutX = fmaX;
+        const coutY = fmaY + fmaSide + 8;
+
+        const cellFill  = tcActive ? "#fbf0c8" : "#f6ecd4";
+        const cellStk   = "#8a7a3a";
+        const mulFill   = tcActive ? "#c6ead4" : "#ede9d8";
+        const mulStk    = tcActive ? "#1a7f5a" : "#8e907f";
+        const outFill   = tcActive ? "#79ccab" : "#ebe9d6";
+        const outStk    = tcActive ? "#15633f" : "#7a7d6d";
+        const mk = tcActive ? "url(#arrow-tc-a)" : "url(#arrow-tc)";
+        const wire = tcActive ? "#1a7f5a" : "#8a8f7a";
+
+        return (
+          <g className={`tc-inset ${tcActive?"active":""}`} transform={`translate(${gpu.x}, ${gpu.y})`}>
+            <rect x="10" y={bandY} width={gpu.w-20} height={bandH} rx="8"
+                  fill="#fdfcf7" stroke="#b9c2b2" strokeDasharray="3 3"/>
+            <text x={gpu.w/2} y={bandY+20} textAnchor="middle" className="tc-title">
+              SP  LANE  ·  scalar  compute
+            </text>
+
+            {[3,2,1].map(k => (
+              <rect key={`laneshadow-${k}`}
+                    x={laneX + k*4} y={laneY + k*4}
+                    width={laneW} height={laneH} rx="8"
+                    fill="#fdfcf7" stroke={bandStroke} strokeDasharray="3 3" opacity={0.35 - k*0.08}/>
+            ))}
+            <rect x={laneX} y={laneY} width={laneW} height={laneH} rx="8"
+                  fill="#faf7ea" stroke={bandStroke} strokeWidth="1.1"/>
+
+            <rect x={fuAx} y={fuY} width={fuW} height={fuH} rx="6"
+                  fill={tcActive?"#e2dcc7":"#ece9d8"}
+                  stroke={fuStroke} strokeWidth="1"/>
+            <text x={fuAx + fuW/2} y={fuY + fuH/2 + 4} textAnchor="middle" className="tc-stage" style={{fontSize:12}}>INT16 ALU</text>
+
+            <rect x={fuBx} y={fuY} width={fuW} height={fuH} rx="6"
+                  fill={tcActive?"#e2dcc7":"#ece9d8"}
+                  stroke={fuStroke} strokeWidth="1"/>
+            <text x={fuBx + fuW/2} y={fuY + fuH/2 + 4} textAnchor="middle" className="tc-stage" style={{fontSize:12}}>BF16 FPU</text>
+
+            <g transform={`translate(${badgeX}, ${fuY})`}>
+              <rect x="0" y="0" width={badgeW} height={fuH} rx="5"
+                    fill={tcActive?"#d7efe0":"#ece9d8"}
+                    stroke={fuStroke} strokeWidth="1.1"/>
+              <text x={badgeW/2} y={fuH/2 + 4} textAnchor="middle" className="tc-stage" style={{fontSize:12}}>× 4</text>
+            </g>
+
+            <g stroke={wire} strokeWidth="1" fill="none" strokeDasharray="3 2">
+              <path d={`M ${laneX + laneW/2} ${laneY + laneH + 2}
+                       L ${laneX + laneW/2} ${tcY - 6}`}
+                    markerEnd={mk}/>
+              <text x={laneX + laneW/2 + 8}
+                    y={(laneY + laneH + tcY)/2}
+                    className="tc-note" textAnchor="start">WMMA.MMA → tensor core</text>
+            </g>
+
+            <rect x="10" y={tcY} width={gpu.w-20} height={tcH} rx="8"
+                  fill="#fdfcf7" stroke="#b9c2b2" strokeDasharray="3 3"/>
+            <text x={gpu.w/2} y={tcY+22} textAnchor="middle" className="tc-title">
+              TENSOR  CORE  ·  4×4  WMMA.MMA  (BF16)
+            </text>
+
+            <text x={tileAx + tileSide/2} y={tileAbY - 6} textAnchor="middle" className="tc-lbl">A</text>
+            {Array.from({length:4}).map((_,i) =>
+              Array.from({length:4}).map((_,j) => (
+                <g key={`a-${i}-${j}`}>
+                  <rect x={tileAx + j*cellA} y={tileAbY + i*cellA} width={cellA} height={cellA}
+                        fill={cellFill} stroke={cellStk} strokeWidth="0.8"/>
+                  <text x={tileAx + j*cellA + cellA/2} y={tileAbY + i*cellA + cellA/2 + 3.5}
+                        textAnchor="middle" className="tc-cell" fill="#3a2e15">a{i}{j}</text>
+                </g>
+              ))
+            )}
+
+            <text x={tileBx + tileSide/2} y={tileAbY - 6} textAnchor="middle" className="tc-lbl">B</text>
+            {Array.from({length:4}).map((_,i) =>
+              Array.from({length:4}).map((_,j) => (
+                <g key={`b-${i}-${j}`}>
+                  <rect x={tileBx + j*cellA} y={tileAbY + i*cellA} width={cellA} height={cellA}
+                        fill={cellFill} stroke={cellStk} strokeWidth="0.8"/>
+                  <text x={tileBx + j*cellA + cellA/2} y={tileAbY + i*cellA + cellA/2 + 3.5}
+                        textAnchor="middle" className="tc-cell" fill="#3a2e15">b{i}{j}</text>
+                </g>
+              ))
+            )}
+
+            <g stroke={wire} strokeWidth="1" fill="none">
+              <line x1={tileAx + tileSide/2} y1={tileAbY + tileSide + 2}
+                    x2={fmaX + fmaSide/2 - 18} y2={fmaY - 4} markerEnd={mk}/>
+              <line x1={tileBx + tileSide/2} y1={tileAbY + tileSide + 2}
+                    x2={fmaX + fmaSide/2 + 18} y2={fmaY - 4} markerEnd={mk}/>
+            </g>
+
+            <text x={tileCx + tileSide/2} y={tileCy - 6} textAnchor="middle" className="tc-lbl">C</text>
+            {Array.from({length:4}).map((_,i) =>
+              Array.from({length:4}).map((_,j) => (
+                <g key={`cin-${i}-${j}`}>
+                  <rect x={tileCx + j*cellA} y={tileCy + i*cellA} width={cellA} height={cellA}
+                        fill={cellFill} stroke={cellStk} strokeWidth="0.8"/>
+                  <text x={tileCx + j*cellA + cellA/2} y={tileCy + i*cellA + cellA/2 + 3.5}
+                        textAnchor="middle" className="tc-cell" fill="#3a2e15">c{i}{j}</text>
+                </g>
+              ))
+            )}
+            <g stroke={wire} strokeWidth="1" fill="none">
+              <line x1={tileCx + tileSide + 2} y1={tileCy + tileSide/2}
+                    x2={fmaX - 3} y2={fmaY + fmaSide/2} markerEnd={mk}/>
+            </g>
+
+            <rect x={fmaX - 6} y={fmaY - 6} width={fmaSide + 12} height={fmaSide + 12} rx="6"
+                  fill="none" stroke={mulStk} strokeDasharray="2 3"/>
+            {Array.from({length:4}).map((_,i) =>
+              Array.from({length:4}).map((_,j) => (
+                <g key={`fma-${i}-${j}`}>
+                  <rect x={fmaX + j*cellF} y={fmaY + i*cellF} width={cellF} height={cellF}
+                        fill={mulFill} stroke={mulStk} strokeWidth="0.9"/>
+                  <text x={fmaX + j*cellF + cellF/2} y={fmaY + i*cellF + cellF/2 + 4.5}
+                        textAnchor="middle" className="tc-mul">⊕</text>
+                </g>
+              ))
+            )}
+            <g>
+              <line x1={fmaX + fmaSide + 4} y1={fmaY + cellF*1.5}
+                    x2={fmaX + fmaSide + 30} y2={fmaY + cellF*1.5}
+                    stroke={mulStk} strokeWidth="0.9"/>
+              <text x={fmaX + fmaSide + 36} y={fmaY + cellF*1.5 + 4}
+                    textAnchor="start" className="tc-stage" style={{fontSize:12}}>FMA</text>
+              <text x={fmaX + fmaSide + 36} y={fmaY + cellF*1.5 + 20}
+                    textAnchor="start" className="tc-stage-sub">a·b + c</text>
+            </g>
+
+            <g stroke={wire} strokeWidth="1" fill="none">
+              <line x1={fmaX + fmaSide/2} y1={fmaY + fmaSide + 2}
+                    x2={fmaX + fmaSide/2} y2={coutY - 3} markerEnd={mk}/>
+            </g>
+
+            <rect x={coutX} y={coutY} width={coutW} height={coutH} rx="6"
+                  fill={outFill} stroke={outStk} strokeWidth="1"/>
+            <text x={coutX + coutW/2} y={coutY + 17} textAnchor="middle" className="tc-stage">C-out</text>
+            <text x={coutX + coutW/2} y={coutY + 32} textAnchor="middle" className="tc-stage-sub">
+              4×4 BF16 → GPU DMEM
+            </text>
+          </g>
+        );
+      })()}
+
+    </svg>
+  );
+}
+
+window.Diagram = Diagram;
+</script>
+
+<script type="text/babel">
+/* ───── panels.jsx ───── */
+/* Sidebar panels — Inspect / Log / Verify */
+
+function InspectPanel({ blockId, phase, scenario }){
+  const { BLOCKS } = window.AEGIS;
+  if (!blockId){
+    return (
+      <div className="inspect">
+        <h3>Scenario</h3>
+        <h2>{scenario.title}</h2>
+        <div className="note">{scenario.summary}</div>
+        {phase && (
+          <>
+            <h3 style={{marginTop:18}}>Current phase <span className="pill live">live</span></h3>
+            <h2 style={{fontSize:18}}>{phase.label}</h2>
+            <div className="row"><span className="k">cycle</span><span className="v">{phase.cycle}</span></div>
+            <div className="row"><span className="k">active blocks</span><span className="v">{(phase.active||[]).join(", ") || "—"}</span></div>
+            <div className="note">{phase.log}</div>
+          </>
+        )}
+        {scenario.annOutput && (
+          <>
+            <h3 style={{marginTop:18}}>ANN output (BF16 logits)</h3>
+            <div className="note mono" style={{fontFamily:'"JetBrains Mono",monospace'}}>
+              {scenario.annOutput.map(([k,v]) => (
+                <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"3px 0"}}>
+                  <span style={{color:"var(--text-mute)"}}>{k}</span>
+                  <span style={{color:"var(--accent)"}}>{v}</span>
+                </div>
+              ))}
+              <div style={{marginTop:6,color:"var(--text-mute)",fontSize:11}}>reference: ann_hw_compat_info.txt</div>
+            </div>
+          </>
+        )}
+        <div style={{marginTop:18,padding:"10px 0",borderTop:"1px dashed var(--line)",fontSize:12,color:"var(--text-mute)"}}>
+          Click any block in the diagram to inspect its internals.
+        </div>
+      </div>
+    );
+  }
+  const b = BLOCKS[blockId];
+  const phaseState = phase?.state?.[blockId];
+  const isActive = phase?.active?.includes(blockId);
+  return (
+    <div className="inspect">
+      <h3>Block {isActive && <span className="pill live">active</span>}</h3>
+      <h2>{b.title}</h2>
+      <div className="row"><span className="k">subtitle</span><span className="v">{b.sub}</span></div>
+      <div className="row"><span className="k">RTL file</span><span className="v">{b.rtl}</span></div>
+      <h3 style={{marginTop:16}}>Specs</h3>
+      {b.specs.map(([k,v]) => (
+        <div className="row" key={k}><span className="k">{k}</span><span className="v">{v}</span></div>
+      ))}
+      {phaseState && (
+        <>
+          <h3 style={{marginTop:16}}>Live state · phase {phase.t}</h3>
+          {phaseState.map(([k,v]) => (
+            <div className="row" key={k}>
+              <span className="k">{k}</span>
+              <span className="v" style={{color:"var(--accent)"}}>{v}</span>
+            </div>
+          ))}
+        </>
+      )}
+      <div className="note">{b.note}</div>
+    </div>
+  );
+}
+
+function LogPanel({ scenario, upto }){
+  const entries = [];
+  for (let i = 0; i < scenario.phases.length && i <= upto; i++){
+    const p = scenario.phases[i];
+    entries.push({
+      cyc: `${String(p.cycle).padStart(5," ")}`,
+      ev: p.log,
+      active: p.active
+    });
+  }
+  return (
+    <div className="log">
+      {entries.map((e,i) => (
+        <div className="line" key={i}>
+          <span className="cyc">{e.cyc}</span>
+          <span className="ev">
+            <span className="block">[{e.active?.[0] || "soc"}]</span> {e.ev}
+          </span>
+        </div>
+      ))}
+      {entries.length === 0 && <div style={{color:"var(--text-mute)"}}>No events yet — press play.</div>}
+    </div>
+  );
+}
+
+function VerifyPanel(){
+  const { VERIFY } = window.AEGIS;
+  return (
+    <div className="verify">
+      <h4>Coverage summary</h4>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+        <SumCard k="modules verified" v={VERIFY.summary.modules}/>
+        <SumCard k="testbenches" v={VERIFY.summary.testbenches}/>
+        <SumCard k="blocks → RTL mapped" v={`${VERIFY.summary.blocks_mapped}/12`}/>
+        <SumCard k="open findings" v={VERIFY.summary.anomalies}/>
+      </div>
+
+      <h4>Diagram ↔ RTL mapping</h4>
+      {VERIFY.mapping.map((m,i) => (
+        <div className="row2" key={i}>
+          <div className="l">
+            {m.block}
+            <small>{m.file} · {m.spec}</small>
+            <small style={{color:"var(--text-dim)"}}>{m.note}</small>
+          </div>
+          <span className={`badge ${m.status}`}>{m.status}</span>
+        </div>
+      ))}
+
+      <h4>Findings · design docs + RTL review</h4>
+      {VERIFY.findings.map((f,i) => (
+        <div className="row2" key={i}>
+          <div className="l">
+            {f.title}
+            <small>{f.file}</small>
+            <small style={{color:"var(--text-dim)"}}>{f.detail}</small>
+          </div>
+          <span className={`badge ${f.sev==="warn"?"warn":f.sev==="ok"?"ok":"info"}`}>{f.sev}</span>
+        </div>
+      ))}
+
+      <h4>Cross-referenced docs</h4>
+      <div style={{fontSize:12,color:"var(--text-dim)",lineHeight:1.6}}>
+        • System Architecture.pdf (doc/)<br/>
+        • isa_v2_1_wmma_4r4w.pdf — GPU opcode reference<br/>
+        • EE533 Lab 9 Report.pdf — CP10/DMA/GPU integration<br/>
+        • Floating-Point Operator v3.0.pdf — BF16 datapath<br/>
+        • model/ann_hw_compat_info.txt — golden logits
+      </div>
+    </div>
+  );
+}
+
+function SumCard({ k, v }){
+  return (
+    <div style={{background:"var(--bg-3)",border:"1px solid var(--line)",borderRadius:6,padding:"10px 12px"}}>
+      <div style={{fontSize:10,letterSpacing:".1em",textTransform:"uppercase",color:"var(--text-mute)",fontFamily:'"JetBrains Mono",monospace'}}>{k}</div>
+      <div style={{fontSize:22,fontWeight:600,marginTop:2}}>{v}</div>
+    </div>
+  );
+}
+
+window.Panels = { InspectPanel, LogPanel, VerifyPanel };
+</script>
+
+<script type="text/babel">
+/* ───── app.jsx ───── */
+/* Main app — orchestrates scenarios, phase playback, selection state */
+const { useState, useEffect, useRef } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "wires": true,
+  "token": true,
+  "speed": 1,
+  "accent": "mint"
+}/*EDITMODE-END*/;
+
+const PHASE_MS_BASE = 1600;
+
+function App(){
+  const { SCENARIOS } = window.AEGIS;
+  const scenarioIds = Object.keys(SCENARIOS);
+
+  const [scenarioId, setScenarioId] = useState(() => "hetero");
+  const [phaseIdx, setPhaseIdx] = useState(() => parseInt(localStorage.getItem("aegis.phase") || "0", 10));
+  const [playing, setPlaying] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [speed, setSpeed] = useState(1);
+  const [tweaksOpen, setTweaksOpen] = useState(false);
+  const [tw, setTw] = useState(TWEAK_DEFAULTS);
+
+  const scenario = SCENARIOS[scenarioId];
+  const total = scenario.phases.length;
+  const phase = scenario.phases[Math.min(phaseIdx, total-1)];
+
+  useEffect(() => { localStorage.setItem("aegis.scenario", scenarioId); }, [scenarioId]);
+  useEffect(() => { localStorage.setItem("aegis.phase", String(phaseIdx)); }, [phaseIdx]);
+
+  const timerRef = useRef(null);
+  useEffect(() => {
+    clearInterval(timerRef.current);
+    if (!playing) return;
+    const tick = () => {
+      setPhaseIdx(i => {
+        if (i >= total - 1){ setPlaying(false); return i; }
+        return i + 1;
+      });
+    };
+    timerRef.current = setInterval(tick, PHASE_MS_BASE / speed / tw.speed);
+    return () => clearInterval(timerRef.current);
+  }, [playing, speed, total, tw.speed]);
+
+  useEffect(() => {
+    const h = (e) => {
+      if (e.key === " "){ e.preventDefault(); setPlaying(p => !p); }
+      else if (e.key === "ArrowRight"){ setPhaseIdx(i => Math.min(i+1, total-1)); }
+      else if (e.key === "ArrowLeft"){ setPhaseIdx(i => Math.max(i-1, 0)); }
+      else if (e.key === "Escape"){ setSelected(null); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [total]);
+
+  useEffect(() => { if (phaseIdx >= total) setPhaseIdx(0); }, [scenarioId]);
+
+  useEffect(() => {
+    const h = (ev) => {
+      if (ev.data?.type === "__activate_edit_mode") setTweaksOpen(true);
+      else if (ev.data?.type === "__deactivate_edit_mode") setTweaksOpen(false);
+    };
+    window.addEventListener("message", h);
+    window.parent.postMessage({type:"__edit_mode_available"}, "*");
+    return () => window.removeEventListener("message", h);
+  }, []);
+  const setTweak = (k, v) => {
+    setTw(prev => {
+      const next = {...prev, [k]: v};
+      window.parent.postMessage({type:"__edit_mode_set_keys", edits:{[k]:v}}, "*");
+      return next;
+    });
+  };
+
+  const active = phase?.active || [];
+  const wires = phase?.wires || [];
+  const tokens = phase?.tokens || [];
+
+  useEffect(() => {
+    const el = document.getElementById("scenariobar");
+    el.innerHTML = "";
+    scenarioIds.forEach(id => {
+      const b = document.createElement("button");
+      b.textContent = SCENARIOS[id].title;
+      b.className = id === scenarioId ? "active" : "";
+      b.onclick = () => { setScenarioId(id); setPhaseIdx(0); setPlaying(false); setSelected(null); };
+      el.appendChild(b);
+    });
+  }, [scenarioId]);
+
+  useEffect(() => {
+    const el = document.getElementById("phasebar");
+    el.innerHTML = "";
+    // one-line phase strip: use short labels (fallback to first 2 words of full label)
+    const shortLabel = (p) => p.short || p.label.split(/[ ·•\-]/).filter(Boolean).slice(0,2).join(" ");
+    scenario.phases.forEach((p, i) => {
+      const d = document.createElement("div");
+      d.className = "p " + (i === phaseIdx ? "active" : (i < phaseIdx ? "done":""));
+      d.title = p.label;
+      d.innerHTML = `<span class="n">φ${String(i+1).padStart(2,"0")}</span><span class="lbl">${shortLabel(p)}</span>`;
+      d.onclick = () => setPhaseIdx(i);
+      d.style.cursor = "pointer";
+      el.appendChild(d);
+    });
+  }, [scenarioId, phaseIdx]);
+
+  useEffect(() => {
+    const el = document.getElementById("foot");
+    const lastCyc = scenario.phases[scenario.phases.length - 1]?.cycle ?? 0;
+    const latency = `~${(lastCyc * 8 / 1000).toFixed(1)}`;
+    const cards = [
+      { k:"CYCLE",   v: phase?.cycle ?? 0,            d: `≈ ${((phase?.cycle ?? 0)*8/1000).toFixed(2)} µs @ 125 MHz` },
+      { k:"PHASE",   v: `${phaseIdx+1}/${total}`,     d: phase?.label || "" },
+      { k:"LATENCY", v: latency, u:"µs",              d: "end-to-end · HW scheduler 77,632 cyc · 36 tiles (L1 24 + L2 11 + L3 1)" },
+      { k:"RATE",    v: "8", u:"Gbps",                d: "NetFPGA · 64b @ 125 MHz · ~1,590 inf/s" }
+    ];
+    el.innerHTML = cards.map(c => `
+      <div class="card">
+        <div class="k">${c.k}</div>
+        <div class="v">${c.v}${c.u?`<span class="u">${c.u}</span>`:""}</div>
+        <div class="d">${c.d}</div>
+      </div>`).join("");
+  }, [phaseIdx, scenarioId]);
+
+  useEffect(() => {
+    document.getElementById("scrub-fill").style.width = `${((phaseIdx+1)/total)*100}%`;
+    document.getElementById("stepreadout").textContent = `phase ${phaseIdx+1}/${total} · cyc ${phase?.cycle ?? 0}`;
+    document.getElementById("btn-play").textContent = playing ? "❚❚" : "▶";
+    const mk = document.getElementById("scrub-markers");
+    mk.innerHTML = "";
+    for (let i=0;i<total;i++){
+      const m = document.createElement("div"); m.className="m";
+      m.style.left = `${(i/(total-1))*100}%`;
+      mk.appendChild(m);
+    }
+  }, [phaseIdx, total, playing]);
+
+  useEffect(() => {
+    document.getElementById("btn-play").onclick = () => setPlaying(p => !p);
+    document.getElementById("btn-prev").onclick = () => setPhaseIdx(i => Math.max(0, i-1));
+    document.getElementById("btn-next").onclick = () => setPhaseIdx(i => Math.min(total-1, i+1));
+    document.getElementById("btn-reset").onclick = () => { setPhaseIdx(0); setPlaying(false); setSelected(null); };
+    document.getElementById("scrub").onclick = (e) => {
+      const r = e.currentTarget.getBoundingClientRect();
+      const pct = (e.clientX - r.left)/r.width;
+      setPhaseIdx(Math.max(0, Math.min(total-1, Math.round(pct*(total-1)))));
+    };
+    document.getElementById("speed").onchange = (e) => setSpeed(parseFloat(e.target.value));
+    document.getElementById("btn-tweaks").onclick = () => setTweaksOpen(o => !o);
+    const twEl = document.getElementById("tweaks");
+    twEl.classList.toggle("open", tweaksOpen);
+    document.getElementById("tw-wires").checked = tw.wires;
+    document.getElementById("tw-wires").onchange = (e) => setTweak("wires", e.target.checked);
+    document.getElementById("tw-token").checked = tw.token;
+    document.getElementById("tw-token").onchange = (e) => setTweak("token", e.target.checked);
+    document.getElementById("tw-speed").value = tw.speed;
+    document.getElementById("tw-speed").onchange = (e) => setTweak("speed", parseFloat(e.target.value));
+    document.getElementById("tw-accent").value = tw.accent;
+    document.getElementById("tw-accent").onchange = (e) => {
+      setTweak("accent", e.target.value);
+      const map = { mint:"#7cf0c7", blue:"#8ab6ff", amber:"#ffcb6b" };
+      document.documentElement.style.setProperty("--accent", map[e.target.value]);
+    };
+  }, [total, tweaksOpen, tw]);
+
+  const Diagram = window.Diagram;
+
+  return (
+    <>
+      {ReactDOM.createPortal(
+        <Diagram selected={selected} activeBlocks={active} activeWires={wires}
+                 tokens={tokens} onSelect={setSelected}
+                 showWires={tw.wires} showToken={tw.token}
+                 phaseLabel={phase?.label || ""}/>,
+        document.getElementById("board")
+      )}
+    </>
+  );
+}
+
+const __host = document.createElement("div");
+__host.style.display = "none";
+document.body.appendChild(__host);
+ReactDOM.createRoot(__host).render(<App/>);
+</script>
+</body>
+</html>
