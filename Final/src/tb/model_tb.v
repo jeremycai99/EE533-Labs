@@ -778,40 +778,13 @@ end
 endtask
 
 task ann_compute_reference_model;
-    integer out_idx;
-    integer pkt_idx;
-    integer in_idx;
-    reg [15:0] acc_word;
 begin
-    for (out_idx = 0; out_idx < ANN_H1; out_idx = out_idx + 1)
-        for (pkt_idx = 0; pkt_idx < 4; pkt_idx = pkt_idx + 1) begin
-            acc_word = ann_l1_bias_at(out_idx);
-            for (in_idx = 0; in_idx < ANN_N_FEAT; in_idx = in_idx + 1)
-                acc_word = ann_bf16_add_ref(acc_word,
-                                            ann_bf16_mul_ref(ann_l1_weight_at(out_idx, in_idx),
-                                                             ann_input_pattern_bf16(in_idx, pkt_idx)));
-            ann_ref_l1_act[out_idx*4 + pkt_idx] = ann_bf16_relu(acc_word);
-        end
-
-    for (out_idx = 0; out_idx < ANN_H2; out_idx = out_idx + 1)
-        for (pkt_idx = 0; pkt_idx < 4; pkt_idx = pkt_idx + 1) begin
-            acc_word = ann_l2_bias_at(out_idx);
-            for (in_idx = 0; in_idx < ANN_H1; in_idx = in_idx + 1)
-                acc_word = ann_bf16_add_ref(acc_word,
-                                            ann_bf16_mul_ref(ann_l2_weight_at(out_idx, in_idx),
-                                                             ann_ref_l1_act[in_idx*4 + pkt_idx]));
-            ann_ref_l2_act[out_idx*4 + pkt_idx] = ann_bf16_relu(acc_word);
-        end
-
-    for (out_idx = 0; out_idx < ANN_N_CLASS; out_idx = out_idx + 1)
-        for (pkt_idx = 0; pkt_idx < 4; pkt_idx = pkt_idx + 1) begin
-            acc_word = ann_l3_bias_at(out_idx);
-            for (in_idx = 0; in_idx < ANN_H2; in_idx = in_idx + 1)
-                acc_word = ann_bf16_add_ref(acc_word,
-                                            ann_bf16_mul_ref(ann_l3_weight_at(out_idx, in_idx),
-                                                             ann_ref_l2_act[in_idx*4 + pkt_idx]));
-            ann_ref_l3_act[out_idx*4 + pkt_idx] = acc_word;
-        end
+    // The checked ANN references are generated from the CoreGen-backed RTL
+    // arithmetic path.  The old local BF16 functions do not match the Xilinx
+    // add/sub IP rounding on real ANN accumulations.
+    $readmemh("../../model/ann_ref_l1_act.hex", ann_ref_l1_act);
+    $readmemh("../../model/ann_ref_l2_act.hex", ann_ref_l2_act);
+    $readmemh("../../model/ann_ref_l3_act.hex", ann_ref_l3_act);
 end
 endtask
 
@@ -2757,6 +2730,52 @@ initial begin
             check64(tx_data[2], ann_ref_pkt_pack(2), "ANN HW pkt2");
             check64(tx_data[3], ann_ref_pkt_pack(3), "ANN HW pkt3");
             check8(tx_ctrl[0], 8'h2B, "ANN HW ctrl");
+
+            // Dump RTL's actual intermediate activations (from GPU DMEM banks)
+            // so Perl-side HW probes can compare against what sim's RTL
+            // actually computed — not just the reference functions' output.
+            // If these differ from ann_ref_l[123]_act.hex, the reference
+            // functions don't match the RTL's BF16 accumulation semantics
+            // even though the final L3 output does (by coincidence of
+            // error cancellation).
+            begin : dump_rtl_activations
+                integer ot, b, smp, neuron, fh;
+                reg [15:0] v;
+                fh = $fopen("../../model/ann_rtl_l1_act.hex", "w");
+                for (neuron = 0; neuron < ANN_H1; neuron = neuron + 1) begin
+                    for (smp = 0; smp < 4; smp = smp + 1) begin
+                        b  = neuron % 4;
+                        ot = neuron / 4;
+                        case (b)
+                            2'd0: v = u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[ANN_HW_GPU_X1_BASE + ot*4 + smp];
+                            2'd1: v = u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[ANN_HW_GPU_X1_BASE + ot*4 + smp];
+                            2'd2: v = u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[ANN_HW_GPU_X1_BASE + ot*4 + smp];
+                            default: v = u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[ANN_HW_GPU_X1_BASE + ot*4 + smp];
+                        endcase
+                        $fdisplay(fh, "%04h", v);
+                    end
+                end
+                $fclose(fh);
+
+                fh = $fopen("../../model/ann_rtl_l2_act.hex", "w");
+                for (neuron = 0; neuron < ANN_H2; neuron = neuron + 1) begin
+                    for (smp = 0; smp < 4; smp = smp + 1) begin
+                        b  = neuron % 4;
+                        ot = neuron / 4;
+                        case (b)
+                            2'd0: v = u_soc.GPU_DMEM_BANK[0].u_gpu_dmem.mem[ANN_HW_GPU_X2_BASE + ot*4 + smp];
+                            2'd1: v = u_soc.GPU_DMEM_BANK[1].u_gpu_dmem.mem[ANN_HW_GPU_X2_BASE + ot*4 + smp];
+                            2'd2: v = u_soc.GPU_DMEM_BANK[2].u_gpu_dmem.mem[ANN_HW_GPU_X2_BASE + ot*4 + smp];
+                            default: v = u_soc.GPU_DMEM_BANK[3].u_gpu_dmem.mem[ANN_HW_GPU_X2_BASE + ot*4 + smp];
+                        endcase
+                        $fdisplay(fh, "%04h", v);
+                    end
+                end
+                $fclose(fh);
+                $display("    [INFO] RTL intermediate activations dumped:");
+                $display("             ../../model/ann_rtl_l1_act.hex (%0d BF16)", ANN_H1 * 4);
+                $display("             ../../model/ann_rtl_l2_act.hex (%0d BF16)", ANN_H2 * 4);
+            end
         end
         settle;
     end

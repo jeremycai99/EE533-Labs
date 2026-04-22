@@ -1,7 +1,7 @@
 /* file: pplbf16mult.v
  Description: Wrapper around bf16mult IP for GPU integration.
  IP latency = 1 cycle. Wrapper pipelines valid to match.
- For simulation: compile with test_bf16mult.v (behavioral model).
+ For simulation: compile with test_bf16mult.v (CoreGen-backed model).
  For synthesis:  Xilinx IP netlist provides bf16mult.
  Author: Jeremy Cai
  Date: Mar. 5, 2026
@@ -22,7 +22,7 @@ module pplbf16mult (
     output reg valid_out
 );
 
-    test_bf16mult u_bf16mult (
+    bf16mult u_bf16mult (
         .clk(clk),
         .a(operand_a),
         .b(operand_b),

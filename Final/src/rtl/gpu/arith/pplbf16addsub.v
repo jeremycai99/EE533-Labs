@@ -1,7 +1,7 @@
 /* file: pplbf16addsub.v
  Description: Wrapper around bf16addsub IP for GPU integration.
  IP latency = 2 cycles. Wrapper pipelines valid to match.
- For simulation: compile with test_bf16addsub.v (behavioral model).
+ For simulation: compile with test_bf16addsub.v (CoreGen-backed model).
  For synthesis:  Xilinx IP netlist provides bf16addsub.
  Author: Jeremy Cai
  Date: Mar. 5, 2026
@@ -25,7 +25,7 @@ module pplbf16addsub (
 
     wire [5:0] operation = {5'b00000, sub}; // 000000=add, 000001=sub
 
-    test_bf16addsub u_bf16addsub (
+    bf16addsub u_bf16addsub (
         .clk(clk),
         .operation(operation),
         .a(operand_a),

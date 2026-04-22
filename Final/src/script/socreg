@@ -1,0 +1,677 @@
+#!/usr/bin/perl -w
+# socreg.pl v3.0 — NetFPGA SoC HW test suite (40 tests)
+# Skips T2 (MUL) and T7 (MLA) — CPU mult removed.
+# All encodings verified against soc_tb.v v6.0.
+use strict;
+use Time::HiRes qw(usleep gettimeofday tv_interval);
+
+my $SW_DATA_HI  = 0x2000200; my $SW_DATA_LO  = 0x2000204;
+my $SW_CTRL     = 0x2000208; my $SW_CMD       = 0x200020c;
+my $HW_ST       = 0x2000210;
+my $HW_W0H      = 0x2000214; my $HW_W0L      = 0x2000218;
+my $HW_W1H      = 0x200021c; my $HW_W1L      = 0x2000220;
+my $NOP = 0xE1A00000; my $HALT = 0xEAFFFFFE;
+my ($pass,$fail,$txn,$err) = (0,0,0,0);
+my ($ps,$wc,$V) = (0,0,1);
+
+sub rw { my($a,$v)=@_; $v&=0xFFFFFFFF; $txn++; system(sprintf("regwrite 0x%08x 0x%08x >/dev/null 2>&1",$a,$v)); }
+sub rr { my($a)=@_; $txn++; my @o=`regread 0x${\sprintf("%08x",$a)} 2>/dev/null`; for(@o){return hex($1) if/:\s+(0x[0-9a-f]+)/i} $err++; return 0; }
+sub ds { my($s,$l)=@_; printf("    [%s] st=%08x rdy=%d buf=%d dr=%d drd=%d txa=%d txd=%d txw=%d pkt=%d\n",$l,$s,($s>>7)&1,($s>>8)&0x3F,($s>>4)&1,($s>>5)&1,($s>>3)&1,($s>>2)&1,($s>>16)&0x3F,$s&3) if $V; }
+sub rs { my $s=rr($HW_ST); ds($s,$_[0]||"st"); $s }
+sub ic { rw($SW_CMD,0x06); usleep(10000); rw($SW_CMD,0x02); usleep(1000); $ps=0; $wc=0; }
+sub iw { my($h,$l,$c)=@_; rw($SW_DATA_HI,$h); rw($SW_DATA_LO,$l); rw($SW_CTRL,$c); $ps^=1; rw($SW_CMD,0x02|$ps); usleep(500); $wc++; }
+sub id { printf("  [DRAIN] %d words\n",$wc); rw($SW_CMD,0x0A|$ps); usleep(1000); for(0..19){usleep(5000);my$s=rr($HW_ST);last if($s>>5)&1} }
+sub np { iw($NOP,$NOP,0); }
+sub cw { my($o,$a,$n,$p)=@_; ((($o&0xF)<<28)|(($a&0xFFF)<<16)|($n&0xFFFF), $p&0xFFFFFFFF) }
+sub pt { my($n,$ms)=@_; $n||=200; $ms||=50; for(0..$n-1){usleep($ms*1000);my$s=rr($HW_ST);if(($s>>2)&1){printf("  [POLL] done @ %d\n",$_+1);return 1}} print "  [TIMEOUT]\n"; 0 }
+sub cr { my@w; for my$r($HW_W0H,$HW_W0L,$HW_W1H,$HW_W1L){push@w,rr($r)} printf("  TX[0]=%08X_%08X TX[1]=%08X_%08X\n",@w); @w }
+sub c4 { my($l,$d,$g0,$g1,$g2,$g3,$e0,$e1,$e2,$e3)=@_;
+  if(!$d){print "  [FAIL] $l timeout\n";$fail++;return}
+  for([0,$g0,$g1,$e0,$e1],[1,$g2,$g3,$e2,$e3]){my($i,$gh,$gl,$eh,$el)=@$_;
+    if($gh==$eh&&$gl==$el){printf("  [PASS] $l TX[%d]={%X,%X}\n",$i,$gh,$gl);$pass++}
+    else{printf("  [FAIL] $l TX[%d]={%X,%X} exp {%X,%X}\n",$i,$gh,$gl,$eh,$el);$fail++}}}
+sub banner { print "\n" . "=" x 60 . "\n  $_[0]\n" . "=" x 60 . "\n\n" }
+
+# ── Compact GPU ARM template ──────────────────────────────────
+# Generates LOAD_IMEM + ARM program for: D_IMEM(16) → [D_UNPACK] → GPU → D_PACK
+# D_IMEM always transfers 16 words (matching send_gpu_imem count=8 DWs)
+sub gpu_arm {
+  my($ctrl,$du,$dsrc,$dlen,$gnop)=@_;  # dunpack_len(0=skip), dpack_src, dpack_len, gpu_nop_pairs
+  my $has_u = $du>0 ? 1 : 0;
+  my $dws = 4 + $has_u*4 + 3+$gnop + 6;
+  my @c=cw(1,0,$dws,0); iw($c[0],$c[1],$ctrl);
+  # D_IMEM: CR0=0,CR1=0,CR2=16,CR3=5
+  iw(0xEE000A10,0xE3A00000,0); iw(0xE3A01010,0xEE010A10,0);
+  iw(0xE3A02005,0xEE021A10,0); iw($NOP,0xEE032A10,0);
+  if($has_u){ # D_UNPACK: CR0=16,CR1=0,CR2=du,CR3=65
+    iw(0xEE000A10,0xE3A00010,0); iw(0xEE011A10,0xE3A01000,0);
+    iw(0xEE022A10,0xE3A02000|($du&0xFF),0); iw(0xEE033A10,0xE3A03041,0);
+  }
+  # GPU launch: CR4=0,CR7=15,CR5=1
+  iw(0xEE040A10,0xE3A00000,0); iw(0xEE071A10,0xE3A0100F,0);
+  iw(0xEE052A10,0xE3A02001,0);
+  for(1..$gnop){np()}
+  # D_PACK: CR0=src,CR1=32,CR2=dlen,CR3=67
+  iw(0xEE000A10,0xE3A00000|($dsrc&0xFF),0); iw(0xEE011A10,0xE3A01020,0);
+  iw(0xEE022A10,0xE3A02000|($dlen&0xFF),0); iw(0xEE033A10,0xE3A03043,0);
+  np(); iw($NOP,$HALT,0);
+}
+
+# ── Tail: zero readback + 3 action commands ───────────────────
+sub tail { my($ra,$rc)=@_;  # readback_addr, readback_dw_count
+  my@c=cw(2,$ra,$rc,0); iw($c[0],$c[1],0);
+  for(1..$rc){iw(0,0,0)}
+  @c=cw(3,0,0,0);     iw($c[0],$c[1],0);
+  @c=cw(4,$ra,$rc,0); iw($c[0],$c[1],0);
+  @c=cw(5,0,0,0);     iw($c[0],$c[1],0);
+}
+
+# ══════════════════════════════════════════════════════════════
+#  T1: CPU ADD (10+20=30)
+# ══════════════════════════════════════════════════════════════
+sub t1 { banner("T1: CPU ADD (10+20=30)"); ic(); my@c;
+  @c=cw(1,0,3,0); iw($c[0],$c[1],0x04);
+  iw(0xE5901000,0xE3A00000,0); iw(0xE0813002,0xE5902004,0); iw($HALT,0xE5803008,0);
+  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0x00000014,0x0000000A,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T1",pt(),cr(),0x14,0x0A,0,0x1E); }
+
+# T3: CPU MCR/MRC CP10
+sub t3 { banner("T3: CPU MCR/MRC CP10 (CR8=42)"); ic(); my@c;
+  @c=cw(1,0,3,0); iw($c[0],$c[1],0x02);
+  iw(0xEE081A10,0xE3A0102A,0); iw(0xE3A00000,0xEE182A10,0); iw($HALT,0xE5802000,0);
+  @c=cw(2,0,1,0); iw($c[0],$c[1],0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,1,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); my@r=cr(); c4("T3",pt(),@r,0,0x2A,0,0); }
+
+# T4: CPU CMP+BEQ taken
+sub t4 { banner("T4: CPU CMP+BEQ (R1==5 -> EQ path, R2=2)"); ic(); my@c;
+  @c=cw(1,0,5,0); iw($c[0],$c[1],0x10);
+  iw(0xE5901000,0xE3A00000,0); iw(0x0A000001,0xE3510005,0); iw(0xEA000000,0xE3A02001,0);
+  iw(0xE5802004,0xE3A02002,0); iw($NOP,$HALT,0);
+  @c=cw(2,0,1,0); iw($c[0],$c[1],0); iw(0,5,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,1,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T4",pt(),cr(),2,5,0,0); }
+
+# T5: GPU round-trip (100+200=300)
+sub t5 { banner("T5: GPU round-trip (100+200=300)"); ic(); my@c;
+  @c=cw(1,0,33,0); iw($c[0],$c[1],0x20);
+  iw(0xEE000A10,0xE3A00000,0); iw(0xE3A01008,0xEE010A10,0);
+  iw(0xE3A02005,0xEE021A10,0); iw($NOP,0xEE032A10,0);
+  for(1..4){np()} iw(0xEE040A10,$NOP,0);
+  iw(0xEE073A10,0xE3A0300F,0); iw(0xEE054A10,0xE3A04001,0);
+  for(1..12){np()} iw(0xEE000A10,$NOP,0);
+  iw(0xEE015A10,0xE3A05020,0); iw(0xEE026A10,0xE3A06001,0); iw(0xEE037A10,0xE3A07043,0);
+  for(1..5){np()} iw($NOP,$HALT,0);
+  @c=cw(2,0,4,0); iw($c[0],$c[1],0);
+  iw(0x202000C8,0x20100064,0); iw(0x20400000,0x30312000,0);
+  iw(0x20500000,0x08340000,0); iw(0xC8000000,0x08540001,0);
+  @c=cw(2,0x020,2,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0x020,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T5",pt(300),cr(),0x012C,0x012C,0x012C,0x012C); }
+
+# T6A: Back-to-back A (100+200=300)
+sub t6a { banner("T6A: Back-to-back A (100+200=300)"); ic(); my@c;
+  @c=cw(1,0,3,0); iw($c[0],$c[1],0x04);
+  iw(0xE5901000,0xE3A00000,0); iw(0xE0813002,0xE5902004,0); iw($HALT,0xE5803008,0);
+  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0xC8,0x64,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T6A",pt(),cr(),0xC8,0x64,0,0x12C); }
+
+# T6B: Back-to-back B (1000+2000=3000) - reuses IMEM from T6A
+sub t6b { banner("T6B: Back-to-back B (1000+2000=3000)"); ic(); my@c;
+  # Reload IMEM for standalone safety
+  @c=cw(1,0,3,0); iw($c[0],$c[1],0x40);
+  iw(0xE5901000,0xE3A00000,0); iw(0xE0813002,0xE5902004,0); iw($HALT,0xE5803008,0);
+  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0x7D0,0x3E8,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T6B",pt(),cr(),0x7D0,0x3E8,0,0xBB8); }
+
+# T8: CPU loop sum [10,20,30,40]=100
+sub t8 { banner("T8: CPU loop sum (10+20+30+40=100)"); ic(); my@c;
+  @c=cw(1,0,7,0); iw($c[0],$c[1],0x04);
+  iw(0xE3A01000,0xE3A00000,0); iw(0xE3A03010,0xE3A02000,0);
+  iw(0xAA000003,0xE1520003,0); iw(0xE0811004,0xE7904002,0);
+  iw(0xEAFFFFF9,0xE2822004,0); iw($HALT,0xE5801010,0); iw($NOP,$NOP,0);
+  @c=cw(2,0,3,0); iw($c[0],$c[1],0);
+  iw(0x14,0x0A,0); iw(0x28,0x1E,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,3,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T8",pt(),cr(),0x14,0x0A,0x28,0x1E); }
+  # Note: TX[2]={0,100} not captured by HW snoop (only TX[0..1])
+
+# T9: Multiple CP10 registers
+sub t9 { banner("T9: CP10 multi-reg (CR0..CR8)"); ic(); my@c;
+  @c=cw(1,0,9,0); iw($c[0],$c[1],0x02);
+  iw(0xEE001A10,0xE3A01C05,0); iw(0xEE012A10,0xE3A02C06,0);
+  iw(0xEE043A10,0xE3A030FF,0); iw(0xEE084A10,0xE3A04C01,0);
+  iw(0xEE116A10,0xEE105A10,0); iw(0xEE188A10,0xEE147A10,0);
+  iw(0xE5805000,0xE3A00000,0); iw(0xE5807008,0xE5806004,0); iw($HALT,0xE580800C,0);
+  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T9",pt(),cr(),0x600,0x500,0x100,0xFF); }
+
+# T10: NOP command skip
+sub t10 { banner("T10: NOP command skip"); ic(); my@c;
+  @c=cw(1,0,3,0); iw($c[0],$c[1],0x08);
+  iw(0xE5901000,0xE3A00000,0); iw(0xE0813002,0xE5902004,0); iw($HALT,0xE5803008,0);
+  @c=cw(0,0,0,0); iw($c[0],$c[1],0); @c=cw(0,0,0,0); iw($c[0],$c[1],0);
+  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(3,7,0); iw(0,0,0);
+  @c=cw(0,0,0,0); iw($c[0],$c[1],0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T10",pt(),cr(),3,7,0,0x0A); }
+
+# T11: Large DMEM load
+sub t11 { banner("T11: Large DMEM (16 words)"); ic(); my@c;
+  @c=cw(1,0,4,0); iw($c[0],$c[1],0x01);
+  iw(0xE5901000,0xE3A00000,0); iw(0xE0813002,0xE5902004,0); iw($HALT,0xE5803020,0); iw($NOP,$NOP,0);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x2000,0x1000,0); iw(0xDEAD,0xDEAD,0); iw(0xDEAD,0xDEAD,0); iw(0xDEAD,0xDEAD,0);
+  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,5,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T11",pt(),cr(),0x2000,0x1000,0xDEAD,0xDEAD); }
+  # TX[2..4] not captured by HW snoop
+
+# T12: CPU BEQ not-taken (NE path)
+sub t12 { banner("T12: CPU BEQ not-taken (R1=99!=5)"); ic(); my@c;
+  @c=cw(1,0,5,0); iw($c[0],$c[1],0x10);
+  iw(0xE5901000,0xE3A00000,0); iw(0x0A000001,0xE3510005,0); iw(0xEA000000,0xE3A02001,0);
+  iw(0xE5802004,0xE3A02002,0); iw($NOP,$HALT,0);
+  @c=cw(2,0,1,0); iw($c[0],$c[1],0); iw(0,0x63,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,1,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T12",pt(),cr(),1,0x63,0,0); }
+
+# ══════════════════════════════════════════════════════════════
+#  GPU Kernel Tests (using compact ARM template)
+# ══════════════════════════════════════════════════════════════
+
+# T13: GPU LD/ADD/ST with D_UNPACK
+sub t13 { banner("T13: GPU LD/ADD/ST + D_UNPACK"); ic(); my@c;
+  gpu_arm(0x04, 2, 0, 2, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x10100000,0x20000000,0); iw(0x30312000,0x10200001,0);
+  iw(0x20400000,0x08300002,0); iw(0xC8000000,0x08400003,0);
+  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(2,0x010,4,0); iw($c[0],$c[1],0);
+  iw(0,0x00C80064,0); iw(0,0x00C80064,0); iw(0,0x00C80064,0); iw(0,0x00C80064,0);
+  tail(0x020,4);
+  id(); c4("T13",pt(300),cr(),0x012C,0x00C80064,0x012C,0x00C80064); }
+
+# T14: GPU WMMA.MMA (1*1+0=4.0, bf16 0x4080)
+sub t14 { banner("T14: GPU WMMA.MMA (all 1.0, D=4.0)"); ic(); my@c;
+  gpu_arm(0x20, 0, 0, 2, 15);  # no D_UNPACK, 15 NOP pairs for WMMA
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x20103F80,0x20003F80,0); iw(0x20303F80,0x20203F80,0);
+  iw(0x20503F80,0x20403F80,0); iw(0x20703F80,0x20603F80,0);
+  iw(0x20900000,0x20800000,0); iw(0x20B00000,0x20A00000,0);
+  iw(0x20000000,0xECC04800,0); iw(0xC8000000,0xFCC00000,0);
+  tail(0x020,4);
+  id(); c4("T14",pt(300),cr(),0x40804080,0x40804080,0x40804080,0x40804080); }
+
+# T15: GPU per-thread TID (100+TID)
+sub t15 { banner("T15: GPU TID (100+TID per bank)"); ic(); my@c;
+  gpu_arm(0x08, 0, 0, 1, 4);  # no D_UNPACK
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x20100064,0x1C000000,0); iw(0x20300000,0x30201000,0);
+  iw(0x20400000,0x08230000,0); iw(0xC8000000,0x08430001,0);
+  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  tail(0x020,2);
+  id(); c4("T15",pt(300),cr(),0x65,0x64,0x67,0x66); }
+
+# T16: GPU K1 vec_add (10+20=30)
+sub t16 { banner("T16: GPU vec_add int16 (10+20=30)"); ic(); my@c;
+  gpu_arm(0x04, 1, 0, 1, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x10100000,0x20000000,0); iw(0x30312000,0x10200001,0);
+  iw(0x20400000,0x08300000,0); iw(0xC8000000,0x08400001,0);
+  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
+  iw(0x0014000A,0x0014000A,0); iw(0x0014000A,0x0014000A,0);
+  tail(0x020,2);
+  id(); c4("T16",pt(300),cr(),0x1E,0x1E,0x1E,0x1E); }
+
+# T17: GPU K2 vec_sub (100-30=70)
+sub t17 { banner("T17: GPU vec_sub int16 (100-30=70)"); ic(); my@c;
+  gpu_arm(0x04, 1, 0, 1, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x10100000,0x20000000,0); iw(0x38312000,0x10200001,0);
+  iw(0x20400000,0x08300000,0); iw(0xC8000000,0x08400001,0);
+  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
+  iw(0x001E0064,0x001E0064,0); iw(0x001E0064,0x001E0064,0);
+  tail(0x020,2);
+  id(); c4("T17",pt(300),cr(),0x46,0x46,0x46,0x46); }
+
+# T18: GPU K3 bf16_mul (2.0*3.0=6.0=0x40C0)
+sub t18 { banner("T18: GPU bf16_mul (2*3=6.0)"); ic(); my@c;
+  gpu_arm(0x04, 1, 0, 1, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x14100000,0x20000000,0); iw(0x44312000,0x14200001,0);
+  iw(0x20400000,0x0C300000,0); iw(0xC8000000,0x08400001,0);
+  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
+  iw(0x40404000,0x40404000,0); iw(0x40404000,0x40404000,0);
+  tail(0x020,2);
+  id(); c4("T18",pt(300),cr(),0x40C0,0x40C0,0x40C0,0x40C0); }
+
+# T19: GPU K4 bf16_fma (2*3+1=7.0=0x40E0)
+sub t19 { banner("T19: GPU bf16_fma (2*3+1=7.0)"); ic(); my@c;
+  gpu_arm(0x04, 2, 0, 1, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x14100000,0x20000000,0); iw(0x14300002,0x14200001,0);
+  iw(0x0C300000,0x4C312000,0); iw(0xC8000000,0x08000001,0);
+  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(2,0x010,4,0); iw($c[0],$c[1],0);
+  iw(0x00003F80,0x40404000,0); iw(0x00003F80,0x40404000,0);
+  iw(0x00003F80,0x40404000,0); iw(0x00003F80,0x40404000,0);
+  tail(0x020,2);
+  id(); c4("T19",pt(300),cr(),0x40E0,0x40E0,0x40E0,0x40E0); }
+
+# T20: GPU K5 relu bf16 (per-bank: -1->0, 2->2, -3->0, 5->5)
+sub t20 { banner("T20: GPU relu bf16 (per-bank)"); ic(); my@c;
+  gpu_arm(0x04, 1, 0, 1, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x14100000,0x20000000,0); iw(0x54312000,0x20200000,0);
+  iw(0x08000001,0x0C300000,0); iw(0xC8000000,0x00000000,0);
+  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
+  iw(0x00004000,0x0000BF80,0); iw(0x000040A0,0x0000C040,0);
+  tail(0x020,2);
+  id(); c4("T20",pt(300),cr(),0x4000,0,0x40A0,0); }
+
+# T21: GPU K6 WMMA matmul (I * 2.0 = 2.0)
+sub t21 { banner("T21: GPU WMMA (I*2.0=2.0)"); ic(); my@c;
+  gpu_arm(0x20, 4, 0, 2, 8);  # dunpack=4, dpack=2, 8 NOP for WMMA
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x20100004,0x20000000,0); iw(0xF4810000,0xF4400000,0);
+  iw(0x20D00000,0x20C00000,0); iw(0x20F00000,0x20E00000,0);
+  iw(0x20000000,0xECC48C00,0); iw(0xC8000000,0xFCC00000,0);
+  iw(0,0,0); iw(0,0,0);
+  # Per-bank data: A=identity row, B=all-2.0
+  @c=cw(2,0x010,8,0); iw($c[0],$c[1],0);
+  iw(0,0x00003F80,0); iw(0x40004000,0x40004000,0);  # bank0: A={1,0,0,0}
+  iw(0,0x3F800000,0); iw(0x40004000,0x40004000,0);  # bank1: A={0,1,0,0}
+  iw(0x00003F80,0,0); iw(0x40004000,0x40004000,0);  # bank2: A={0,0,1,0}
+  iw(0x3F800000,0,0); iw(0x40004000,0x40004000,0);  # bank3: A={0,0,0,1}
+  tail(0x020,4);
+  id(); c4("T21",pt(300),cr(),0x40004000,0x40004000,0x40004000,0x40004000); }
+
+# T43: BF16 ADD.f operand pair that distinguishes Xilinx IP rounding
+sub t43 { banner("T43: GPU ADD.f IP rounding (BF65+3E1F=BF3D)"); ic(); my@c;
+  gpu_arm(0x04, 1, 0, 1, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x14100000,0x20000000,0); iw(0x34312000,0x14200001,0);
+  iw(0x20400000,0x0C300000,0); iw(0xC8000000,0x08400001,0);
+  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
+  iw(0x3E1FBF65,0x3E1FBF65,0); iw(0x3E1FBF65,0x3E1FBF65,0);
+  tail(0x020,2);
+  id(); c4("T43",pt(300),cr(),0xBF3D,0xBF3D,0xBF3D,0xBF3D); }
+
+# ══════════════════════════════════════════════════════════════
+#  T22: Full Heterogeneous (int, +5 -> x2 -> +10 -> +7)
+# ══════════════════════════════════════════════════════════════
+sub t22 { banner("T22: Full heterogeneous int pipeline\n  [10,20,30,40]+5->x2->+10->+7=[47,67,87,107]"); ic(); my@c;
+  # Compact ARM: 42 DWs
+  @c=cw(1,0,42,0); iw($c[0],$c[1],0x04);
+  # Phase 1: CPU +5 (7 DW)
+  iw(0xE5901000,0xE3A00040,0); iw(0xE5801000,0xE2811005,0);
+  iw(0xE2811005,0xE5901004,0); iw(0xE5901008,0xE5801004,0);
+  iw(0xE5801008,0xE2811005,0); iw(0xE2811005,0xE590100C,0); iw($NOP,0xE580100C,0);
+  # Phase 2: D_IMEM 16 words (4 DW)
+  iw(0xEE000A10,0xE3A00000,0); iw(0xE3A01010,0xEE010A10,0);
+  iw(0xE3A02005,0xEE021A10,0); iw($NOP,0xEE032A10,0);
+  # Phase 3: D_UNPACK (4 DW)
+  iw(0xEE000A10,0xE3A00010,0); iw(0xEE011A10,0xE3A01000,0);
+  iw(0xEE022A10,0xE3A02001,0); iw(0xEE033A10,0xE3A03041,0);
+  # Phase 4: GPU K1 pc=0 (3+4=7 DW)
+  iw(0xEE040A10,0xE3A00000,0); iw(0xEE071A10,0xE3A0100F,0);
+  iw(0xEE052A10,0xE3A02001,0); for(1..4){np()}
+  # Phase 5: GPU K2 pc=8 (3+4=7 DW)
+  iw(0xEE040A10,0xE3A00008,0); iw(0xEE071A10,0xE3A0100F,0);
+  iw(0xEE052A10,0xE3A02001,0); for(1..4){np()}
+  # Phase 6: D_PACK (4 DW)
+  iw(0xEE000A10,0xE3A00000,0); iw(0xEE011A10,0xE3A01018,0);
+  iw(0xEE022A10,0xE3A02001,0); iw(0xEE033A10,0xE3A03043,0);
+  # Phase 7: CPU +7 (8+1=9 DW incl NOP pair for D_PACK margin)
+  np();
+  iw(0xE3A02080,0xE3A00060,0); iw(0xE2811007,0xE5901000,0);
+  iw(0xE5901004,0xE5821000,0); iw(0xE5821004,0xE2811007,0);
+  iw(0xE2811007,0xE5901008,0); iw(0xE590100C,0xE5821008,0);
+  iw(0xE582100C,0xE2811007,0); iw($NOP,$HALT,0);
+  # K1 int x2: LD->ADD R,R->ST
+  @c=cw(2,0,4,0); iw($c[0],$c[1],0);
+  iw(0x10100000,0x20000000,0); iw(0x08200000,0x30211000,0);
+  iw(0x08300001,0x20300000,0); iw(0xC8000000,0x00000000,0);
+  # K2 int +10: LD->MOVI 10->ADD->ST
+  @c=cw(2,8,4,0); iw($c[0],$c[1],0);
+  iw(0x10100000,0x20000000,0); iw(0x30312000,0x2020000A,0);
+  iw(0x20400000,0x08300000,0); iw(0xC8000000,0x08400001,0);
+  # Input [10,20,30,40]
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0); iw(0x14,0x0A,0); iw(0x28,0x1E,0);
+  # Zero readback
+  @c=cw(2,0x020,2,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0x020,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T22",pt(400),cr(),0x43,0x2F,0x6B,0x57); }
+
+# T23: CVT round-trip (different regs, 15->bf16->15)
+sub t23 { banner("T23: CVT round-trip (R1->R2->R3, expect 15)"); ic(); my@c;
+  gpu_arm(0x04, 1, 0, 1, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x2010000F,0x20000000,0); iw(0x28320000,0x2C210000,0);
+  iw(0x20400000,0x08300000,0); iw(0xC8000000,0x08400001,0);
+  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
+  iw(0xBEEF,0xBEEF,0); iw(0xBEEF,0xBEEF,0);
+  tail(0x020,2);
+  id(); c4("T23",pt(300),cr(),0xF,0xF,0xF,0xF); }
+
+# T24: CVT self-ref rD==rA (deadlock test)
+sub t24 { banner("T24: CVT self-ref rD==rA (15 or 0xBEEF if deadlock)"); ic(); my@c;
+  gpu_arm(0x04, 1, 0, 1, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x2010000F,0x20000000,0); iw(0x28110000,0x2C110000,0);
+  iw(0x20200000,0x08100000,0); iw(0xC8000000,0x08200001,0);
+  iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
+  iw(0xBEEF,0xBEEF,0); iw(0xBEEF,0xBEEF,0);
+  tail(0x020,2);
+  id(); c4("T24",pt(300),cr(),0xF,0xF,0xF,0xF); }
+
+# T25: Full heterogeneous CVT pipeline
+sub t25 { banner("T25: Full heterogeneous CVT pipeline\n  [10,20,30,40]+5->CVTx2->CVT+10->+7=[47,67,87,107]"); ic(); my@c;
+  @c=cw(1,0,42,0); iw($c[0],$c[1],0x04);
+  # Phase 1-7 same as T22
+  iw(0xE5901000,0xE3A00040,0); iw(0xE5801000,0xE2811005,0);
+  iw(0xE2811005,0xE5901004,0); iw(0xE5901008,0xE5801004,0);
+  iw(0xE5801008,0xE2811005,0); iw(0xE2811005,0xE590100C,0); iw($NOP,0xE580100C,0);
+  iw(0xEE000A10,0xE3A00000,0); iw(0xE3A01010,0xEE010A10,0);
+  iw(0xE3A02005,0xEE021A10,0); iw($NOP,0xEE032A10,0);
+  iw(0xEE000A10,0xE3A00010,0); iw(0xEE011A10,0xE3A01000,0);
+  iw(0xEE022A10,0xE3A02001,0); iw(0xEE033A10,0xE3A03041,0);
+  iw(0xEE040A10,0xE3A00000,0); iw(0xEE071A10,0xE3A0100F,0);
+  iw(0xEE052A10,0xE3A02001,0); for(1..4){np()}
+  iw(0xEE040A10,0xE3A00008,0); iw(0xEE071A10,0xE3A0100F,0);
+  iw(0xEE052A10,0xE3A02001,0); for(1..4){np()}
+  iw(0xEE000A10,0xE3A00000,0); iw(0xEE011A10,0xE3A01018,0);
+  iw(0xEE022A10,0xE3A02001,0); iw(0xEE033A10,0xE3A03043,0);
+  np();
+  iw(0xE3A02080,0xE3A00060,0); iw(0xE2811007,0xE5901000,0);
+  iw(0xE5901004,0xE5821000,0); iw(0xE5821004,0xE2811007,0);
+  iw(0xE2811007,0xE5901008,0); iw(0xE590100C,0xE5821008,0);
+  iw(0xE582100C,0xE2811007,0); iw($NOP,$HALT,0);
+  # K1 CVT x2
+  @c=cw(2,0,4,0); iw($c[0],$c[1],0);
+  iw(0x10100000,0x20000000,0); iw(0x20304000,0x2C210000,0);
+  iw(0x28540000,0x44423000,0); iw(0xC8000000,0x08500000,0);
+  # K2 CVT +10
+  @c=cw(2,8,4,0); iw($c[0],$c[1],0);
+  iw(0x10100000,0x20000000,0); iw(0x20304120,0x2C210000,0);
+  iw(0x28540000,0x34423000,0); iw(0xC8000000,0x08500000,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0); iw(0x14,0x0A,0); iw(0x28,0x1E,0);
+  @c=cw(2,0x020,2,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0x020,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T25",pt(400),cr(),0x43,0x2F,0x6B,0x57); }
+
+# ══════════════════════════════════════════════════════════════
+#  Network Mode Tests
+# ══════════════════════════════════════════════════════════════
+
+# T26: Network passthrough (EtherType=0x0800)
+sub t26 { banner("T26: Network passthrough (non-SoC)"); ic();
+  iw(0x00010002,0x00030004,0x04); iw(0xFFFFFFFF,0xFFFF0011,0);
+  iw(0x22334455,0x08000000,0);    iw(0xDEADBEEF,0xCAFEBABE,0);
+  iw(0x12345678,0x9ABCDEF0,0);
+  id(); c4("T26",pt(),cr(),0x00010002,0x00030004,0xFFFFFFFF,0xFFFF0011); }
+
+# T27: Network SoC (EtherType=0x88B5, CPU ADD)
+sub t27 { banner("T27: Network SoC packet (10+20=30)"); ic(); my@c;
+  iw(0x00010002,0x0005000D,0x04); iw(0xFFFFFFFF,0xFFFF0011,0);
+  iw(0x22334455,0x88B50000,0);
+  @c=cw(1,0,3,0); iw($c[0],$c[1],0);
+  iw(0xE5901000,0xE3A00000,0); iw(0xE0813002,0xE5902004,0); iw($HALT,0xE5803008,0);
+  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0x14,0x0A,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T27",pt(),cr(),0x00010002,0x0005000D,0xFFFFFFFF,0xFFFF0011); }
+  # Note: readback at TX[3..4] not captured by HW snoop
+
+# ══════════════════════════════════════════════════════════════
+#  ARM ISA Coverage (T28-T34)
+# ══════════════════════════════════════════════════════════════
+
+# T28: SUB, RSB
+sub t28 { banner("T28: SUB(100-30=70), RSB(30-100=-70)"); ic(); my@c;
+  @c=cw(1,0,4,0); iw($c[0],$c[1],0x04);
+  iw(0xE5901000,0xE3A00000,0); iw(0xE0413002,0xE5902004,0);
+  iw(0xE5803008,0xE0614002,0); iw($HALT,0xE580400C,0);
+  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0x1E,0x64,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T28",pt(),cr(),0x1E,0x64,0xFFFFFFBA,0x46); }
+
+# T29: AND, ORR, EOR, BIC, MVN
+sub t29 { banner("T29: AND/ORR/EOR/BIC/MVN"); ic(); my@c;
+  @c=cw(1,0,7,0); iw($c[0],$c[1],0x04);
+  iw(0xE5901000,0xE3A00000,0); iw(0xE0013002,0xE5902004,0);
+  iw(0xE0215002,0xE1814002,0); iw(0xE1E07002,0xE1C16002,0);
+  iw(0xE580400C,0xE5803008,0); iw(0xE5806014,0xE5805010,0); iw($HALT,0xE5807018,0);
+  @c=cw(2,0,4,0); iw($c[0],$c[1],0);
+  iw(0x0F0F0F0F,0xFF00FF00,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,4,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T29",pt(),cr(),0x0F0F0F0F,0xFF00FF00,0xFF0FFF0F,0x0F000F00); }
+
+# T30: Barrel shifter LSL/LSR/ASR/ROR
+sub t30 { banner("T30: Barrel shifter (LSL/LSR/ASR/ROR)"); ic(); my@c;
+  @c=cw(1,0,7,0); iw($c[0],$c[1],0x04);
+  iw(0xE5901000,0xE3A00000,0); iw(0xE1A03401,0xE1A02201,0);
+  iw(0xE1A050A4,0xE5904004,0); iw(0xE1A07264,0xE1A060C4,0);
+  iw(0xE580300C,0xE5802008,0); iw(0xE5806014,0xE5805010,0); iw($HALT,0xE5807018,0);
+  @c=cw(2,0,4,0); iw($c[0],$c[1],0);
+  iw(0x80000001,0x0F,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,4,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T30",pt(),cr(),0x80000001,0x0F,0xF00,0xF0); }
+
+# T31: ADC, SBC (carry chain)
+sub t31 { banner("T31: ADDS/ADC/SUBS/SBC"); ic(); my@c;
+  @c=cw(1,0,8,0); iw($c[0],$c[1],0x04);
+  iw(0xE3A01000,0xE3A00000,0); iw(0xE3A02001,0xE1E01001,0);
+  iw(0xE3A04005,0xE0913002,0); iw(0xE0A46005,0xE3A05003,0);
+  iw(0xE0C48005,0xE0557004,0); iw(0xE5806004,0xE5803000,0);
+  iw(0xE580800C,0xE5807008,0); iw($NOP,$HALT,0);
+  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T31",pt(),cr(),9,0,1,0xFFFFFFFE); }
+
+# T32: Condition codes EQ/NE/MI/PL/LT/GE
+sub t32 { banner("T32: Condition codes (EQ/NE/MI/PL/LT/GE)"); ic(); my@c;
+  @c=cw(1,0,13,0); iw($c[0],$c[1],0x04);
+  iw(0xE3A03000,0xE3A00000,0); iw(0xE3A05000,0xE3A04000,0);
+  iw(0xE3A07000,0xE3A06000,0); iw(0xE3A0100A,0xE3A08000,0);
+  iw(0xE1510002,0xE3A0200A,0); iw(0x13A04001,0x03A03001,0);
+  iw(0xE1510002,0xE3A01005,0); iw(0x53A06001,0x43A05001,0);
+  iw(0xA3A08001,0xB3A07001,0); iw(0xE5804004,0xE5803000,0);
+  iw(0xE580600C,0xE5805008,0); iw(0xE5808014,0xE5807010,0); iw($NOP,$HALT,0);
+  @c=cw(2,0,3,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,3,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T32",pt(),cr(),0,1,0,1); }
+
+# T33: Shifted register ALU + immediate
+sub t33 { banner("T33: Shifted reg ALU + immediate"); ic(); my@c;
+  @c=cw(1,0,7,0); iw($c[0],$c[1],0x04);
+  iw(0xE3A01005,0xE3A00000,0); iw(0xE0813102,0xE3A02003,0);
+  iw(0xE2415001,0xE0414102,0); iw(0xE0017102,0xE2616000,0);
+  iw(0xE580400C,0xE5803008,0); iw(0xE5806014,0xE5805010,0); iw($HALT,0xE5807018,0);
+  @c=cw(2,0,4,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,4,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T33",pt(),cr(),0,0,0xFFFFFFF9,0x11); }
+
+# T34: TST, TEQ, CMN
+sub t34 { banner("T34: TST/TEQ/CMN (flag-only ops)"); ic(); my@c;
+  @c=cw(1,0,10,0); iw($c[0],$c[1],0x04);
+  iw(0xE3A03000,0xE3A00000,0); iw(0xE3A05000,0xE3A04000,0);
+  iw(0xE3A02005,0xE3A01003,0); iw(0x13A03001,0xE1110002,0);
+  iw(0xE3A020FF,0xE3A010FF,0); iw(0x03A04001,0xE1310002,0);
+  iw(0xE1E02002,0xE3A01001,0); iw(0x43A05001,0xE1710002,0);
+  iw(0xE5804004,0xE5803000,0); iw($HALT,0xE5805008,0);
+  @c=cw(2,0,2,0); iw($c[0],$c[1],0); iw(0,0,0); iw(0,0,0);
+  @c=cw(3,0,0,0); iw($c[0],$c[1],0); @c=cw(4,0,2,0); iw($c[0],$c[1],0); @c=cw(5,0,0,0); iw($c[0],$c[1],0);
+  id(); c4("T34",pt(),cr(),1,1,0,1); }
+
+# ══════════════════════════════════════════════════════════════
+#  GPU ISA Coverage (T35-T42)
+# ══════════════════════════════════════════════════════════════
+
+# T35: AND, OR, XOR (int16)
+sub t35 { banner("T35: GPU AND/OR/XOR"); ic(); my@c;
+  gpu_arm(0x04, 1, 0, 2, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x10100000,0x20000000,0); iw(0x70312000,0x10200001,0);
+  iw(0x80512000,0x78412000,0); iw(0x08400001,0x08300000,0);
+  iw(0x20600000,0x08500002,0); iw(0xC8000000,0x08600003,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
+  iw(0x0F0FFF00,0x0F0FFF00,0); iw(0x0F0FFF00,0x0F0FFF00,0);
+  tail(0x020,4);
+  id(); c4("T35",pt(300),cr(),0x0000F00F,0xFF0F0F00,0x0000F00F,0xFF0F0F00); }
+  # TX[0]=bank0 {XOR=F00F,OR=FF0F,AND=0F00,0} → HW captures {DMEM[1],DMEM[0]} wait...
+  # Actually nw=4: TX[0]={DMEM[3],DMEM[2],DMEM[1],DMEM[0]}=64'h0000F00FFF0F0F00
+  # HW snoop: W0H=0000F00F, W0L=FF0F0F00
+
+# T36: SHL, SHR, ADDI, MULI
+sub t36 { banner("T36: GPU SHL/SHR/ADDI/MULI (input=5)"); ic(); my@c;
+  gpu_arm(0x04, 1, 0, 2, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x10100000,0x20000000,0); iw(0x90310001,0x88210003,0);
+  iw(0xA0510007,0x9841000A,0); iw(0x08300001,0x08200000,0);
+  iw(0x08500003,0x08400002,0); iw(0xC8000000,0x00000000,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
+  iw(0x00000005,0x00000005,0); iw(0x00000005,0x00000005,0);
+  tail(0x020,4);
+  id(); c4("T36",pt(300),cr(),0x0023000F,0x00020028,0x0023000F,0x00020028); }
+
+# T37: ABS, NEG, MIN (per-bank)
+sub t37 { banner("T37: GPU ABS/NEG/MIN (per-bank)"); ic(); my@c;
+  gpu_arm(0x04, 1, 0, 2, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x10100000,0x20000000,0); iw(0x60310000,0x10200001,0);
+  iw(0x58512000,0x68420000,0); iw(0x08400001,0x08300000,0);
+  iw(0x20600000,0x08500002,0); iw(0xC8000000,0x08600003,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
+  iw(0x000AFFEC,0x0014FFF6,0); iw(0x0005FFE2,0x001EFFF1,0);
+  tail(0x020,4);
+  # TX[0]=bank0: {0,MIN=-10=FFF6,NEG=-20=FFEC,ABS=10=000A}
+  id(); c4("T37",pt(300),cr(),0x0000FFF6,0xFFEC000A,0x0000FFEC,0xFFF60014); }
+
+# T38: SUB.f, NEG.f, ABS.f, MIN.f
+sub t38 { banner("T38: GPU SUB.f/NEG.f/ABS.f/MIN.f"); ic(); my@c;
+  gpu_arm(0x04, 1, 0, 2, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x14100000,0x20000000,0); iw(0x3C312000,0x14200001,0);
+  iw(0x64530000,0x6C410000,0); iw(0x0C400001,0x5C612000,0);
+  iw(0x0C500002,0x0C300000,0); iw(0xC8000000,0x0C600003,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
+  iw(0x40A04040,0x40A04040,0); iw(0x40A04040,0x40A04040,0);
+  tail(0x020,4);
+  # {MIN=4040,ABS=4000,NEG=C040,SUB=C000}
+  id(); c4("T38",pt(300),cr(),0x40404000,0xC040C000,0x40404000,0xC040C000); }
+
+# T39: BRA (unconditional branch, skip canary)
+sub t39 { banner("T39: GPU BRA (skip canary, R1=42)"); ic(); my@c;
+  gpu_arm(0x04, 1, 0, 1, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x2010002A,0x20000000,0); iw(0x20100063,0xB8000005,0);
+  iw(0x08100000,0x20100058,0); iw(0x08200001,0x20200000,0);
+  iw(0xC8000000,0x00000000,0); iw(0,0,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
+  iw(0xBEEF,0xBEEF,0); iw(0xBEEF,0xBEEF,0);
+  tail(0x020,2);
+  id(); c4("T39",pt(300),cr(),0x2A,0x2A,0x2A,0x2A); }
+
+# T40: MOV reg, SETP LT, SELP
+sub t40 { banner("T40: GPU MOV/SETP/SELP (100<200 -> SELP=100)"); ic(); my@c;
+  gpu_arm(0x04, 1, 0, 1, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x10100000,0x20000000,0); iw(0x18310000,0x10200001,0);
+  iw(0x00000000,0xAA012000,0); iw(0x00000000,0x00000000,0);
+  iw(0x08300000,0xB0412000,0); iw(0xC8000000,0x08400001,0); iw(0,0,0); iw(0,0,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
+  iw(0x00C80064,0x00C80064,0); iw(0x00C80064,0x00C80064,0);
+  tail(0x020,2);
+  id(); c4("T40",pt(300),cr(),0x00640064,0x00640064,0x00640064,0x00640064); }
+
+# T41: SET + SELP
+sub t41 { banner("T41: GPU SET+SELP (P0=1->AAAA, P0=0->BBBB)"); ic(); my@c;
+  gpu_arm(0x04, 1, 0, 1, 4);
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x2010AAAA,0x20000000,0); iw(0xD0000001,0x2020BBBB,0);
+  iw(0x00000000,0x00000000,0); iw(0xB0312000,0x00000000,0);
+  iw(0x00000000,0xD0000000,0); iw(0x00000000,0x00000000,0);
+  iw(0x08300000,0xB0412000,0); iw(0xC8000000,0x08400001,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
+  iw(0xDEAD,0xDEAD,0); iw(0xDEAD,0xDEAD,0);
+  tail(0x020,2);
+  id(); c4("T41",pt(300),cr(),0xBBBBAAAA,0xBBBBAAAA,0xBBBBAAAA,0xBBBBAAAA); }
+
+# T42: PBRA divergence + SIMT reconvergence
+sub t42 { banner("T42: GPU PBRA diverge+reconverge\n  T0,T1->AAAA (taken), T2,T3->BBBB (fall)"); ic(); my@c;
+  gpu_arm(0x04, 1, 0, 1, 6);  # 6 NOP for PBRA diverge timing
+  @c=cw(2,0,8,0); iw($c[0],$c[1],0);
+  iw(0x1C100000,0x20000000,0); iw(0xAA013000,0x20300002,0);
+  iw(0xC000900C,0x00000000,0); iw(0x08200000,0x2020BBBB,0);
+  iw(0x2020AAAA,0xB800000C,0); iw(0x00000000,0x08200000,0);
+  iw(0x08300001,0x20300000,0); iw(0x00000000,0xC8000000,0);
+  @c=cw(2,0x010,2,0); iw($c[0],$c[1],0);
+  iw(0xDEAD,0xDEAD,0); iw(0xDEAD,0xDEAD,0);
+  tail(0x020,2);
+  id(); c4("T42",pt(400),cr(),0xAAAA,0xAAAA,0xBBBB,0xBBBB); }
+
+# ══════════════════════════════════════════════════════════════
+#  Summary + Dispatch
+# ══════════════════════════════════════════════════════════════
+sub summary {
+  print "\n" . "=" x 50 . "\n";
+  printf("  PASSED: %d  FAILED: %d  TOTAL: %d\n",$pass,$fail,$pass+$fail);
+  printf("  MMIO: %d txns, %d errors\n",$txn,$err);
+  print "=" x 50 . "\n";
+  print($fail==0&&$pass>0 ? ">>> ALL TESTS PASSED <<<\n" : ">>> SOME TESTS FAILED <<<\n") if $pass+$fail>0;
+  print "\n";
+}
+
+$V=1;
+if(grep{$_ eq '-q'}@ARGV){$V=0;@ARGV=grep{$_ ne '-q'}@ARGV}
+my $c=$ARGV[0]||"help";
+
+my %tests = (
+  test1=>[\&t1], test3=>[\&t3], test4=>[\&t4], test5=>[\&t5],
+  test6a=>[\&t6a], test6b=>[\&t6a,\&t6b],
+  test8=>[\&t8], test9=>[\&t9], test10=>[\&t10], test11=>[\&t11], test12=>[\&t12],
+  test13=>[\&t13], test14=>[\&t14], test15=>[\&t15],
+  test16=>[\&t16], test17=>[\&t17], test18=>[\&t18], test19=>[\&t19],
+  test20=>[\&t20], test21=>[\&t21], test43=>[\&t43],
+  test22=>[\&t22], test23=>[\&t23], test24=>[\&t24], test25=>[\&t25],
+  test26=>[\&t26], test27=>[\&t27],
+  test28=>[\&t28], test29=>[\&t29], test30=>[\&t30], test31=>[\&t31],
+  test32=>[\&t32], test33=>[\&t33], test34=>[\&t34],
+  test35=>[\&t35], test36=>[\&t36], test37=>[\&t37], test38=>[\&t38],
+  test39=>[\&t39], test40=>[\&t40], test41=>[\&t41], test42=>[\&t42],
+);
+
+if(exists $tests{$c}){ for(@{$tests{$c}}){$_->()} summary(); }
+elsif($c eq "cpu"){ t1();t3();t4();t5();t6a();t6b();t8();t9();t10();t11();t12(); summary(); }
+elsif($c eq "gpu"){ t13();t14();t15();t16();t17();t18();t19();t20();t21();t43(); summary(); }
+elsif($c eq "isa"){ t28();t29();t30();t31();t32();t33();t34(); summary(); }
+elsif($c eq "gpuisa"){ t35();t36();t37();t38();t39();t40();t41();t42(); summary(); }
+elsif($c eq "net"){ t26();t27(); summary(); }
+elsif($c eq "hetero"){ t22();t23();t24();t25(); summary(); }
+elsif($c eq "all"){ t1();t3();t4();t5();t6a();t6b();t8();t9();t10();t11();t12();
+  t13();t14();t15();t16();t17();t18();t19();t20();t21();t43();
+  t22();t23();t24();t25();t26();t27();
+  t28();t29();t30();t31();t32();t33();t34();
+  t35();t36();t37();t38();t39();t40();t41();t42(); summary(); }
+elsif($c eq "status"){ my$s=rr($HW_ST); ds($s,"status"); }
+elsif($c eq "result"){ cr(); }
+elsif($c eq "clear"){ rw($SW_CMD,0x04);usleep(10000);rw($SW_CMD,0);print"Cleared\n"; }
+else {
+  print "\nUsage: perl socreg.pl <command> [-q]\n\n";
+  print "Individual: test1 test3..test43 (skip t2/t7 MUL)\n";
+  print "Groups:     cpu gpu isa gpuisa net hetero\n";
+  print "Full:       all (41 tests)\n";
+  print "Utils:      status result clear\n\n";
+}

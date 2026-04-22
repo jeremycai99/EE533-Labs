@@ -70,6 +70,11 @@ Final/model/ann_weights_raw_dmem_t*.hex
 Final/model/top32_feat_idx.npy
 Final/model/lgbm_top32_feat_idx.npy
 
+# Sim-generated activation reference dumps (regenerate by re-running sim).
+Final/model/ann_ref_l1_act.hex
+Final/model/ann_ref_l2_act.hex
+Final/model/ann_ref_l3_act.hex
+
 # Local training datasets
 Final/model/iec104_train_test/
 Final/model/iec104_train_test_csvs
