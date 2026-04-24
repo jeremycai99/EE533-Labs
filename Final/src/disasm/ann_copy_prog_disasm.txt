@@ -1,0 +1,27 @@
+
+/Users/jeremycai/Desktop/USC/Courses/Processing/EE533/Repo/EE533-Labs/Final/src/build/arm/ann_copy_prog/ann_copy_prog.elf:     file format elf32-littlearm
+
+
+Disassembly of section .text:
+
+00000000 <_start>:
+   0:	ee1aba10 	vmov	fp, s20
+   4:	e35b0000 	cmp	fp, #0
+   8:	1a00000d 	bne	44 <_start+0x44>
+   c:	e3a01010 	mov	r1, #16
+  10:	ee001a10 	vmov	s0, r1
+  14:	e3a00000 	mov	r0, #0
+  18:	e5902000 	ldr	r2, [r0]
+  1c:	e5903004 	ldr	r3, [r0, #4]
+  20:	ee012a10 	vmov	s2, r2
+  24:	ee023a10 	vmov	s4, r3
+  28:	e3a04041 	mov	r4, #65	@ 0x41
+  2c:	ee034a10 	vmov	s6, r4
+  30:	e1a06103 	lsl	r6, r3, #2
+  34:	e2866010 	add	r6, r6, #16
+  38:	ee195a10 	vmov	r5, s18
+  3c:	e1550006 	cmp	r5, r6
+  40:	1afffffc 	bne	38 <_start+0x38>
+  44:	eafffffe 	b	44 <_start+0x44>
+  48:	eafffffe 	b	48 <_start+0x48>
+  4c:	e1a00000 	nop			@ (mov r0, r0)

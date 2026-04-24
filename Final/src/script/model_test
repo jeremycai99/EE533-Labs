@@ -139,25 +139,100 @@ my $copy_prog_len  = 0;
 my $gpu_prog_len   = 0;
 my $sched_prog_len = 0;
 my $final_dmem_words = 0;
+my $transport = $ENV{SOC_TRANSPORT} || "mmio";
+my $emit_path = $ENV{SOC_EMIT_PATH} || "socnet_frames.txt";
+my $emit_fh;
+my @emit_words;
+my $emit_pkt_idx = 0;
+
+# Network-emission mode writes the same 64-bit pkt_proc command words that
+# the MMIO path injects, one logical packet per FRAME line.  The sender script
+# wraps each FRAME with Ethernet dst/src/type=0x88B5 and the required 2-byte
+# alignment pad so pkt_proc sees commands starting at FIFO word 3.
+sub is_emit { $transport eq "emit" }
+
+sub emit_enable {
+    my ($default_path) = @_;
+    $transport = "emit";
+    $emit_path = $ENV{SOC_EMIT_PATH} || $default_path || $emit_path;
+    @emit_words = ();
+    $emit_pkt_idx = 0;
+}
+
+sub emit_open {
+    return if defined $emit_fh;
+    open($emit_fh, ">", $emit_path) or die "Can't open $emit_path for write: $!\n";
+    print $emit_fh "# SOCNET_FRAMES_V1\n";
+    print $emit_fh "# Each FRAME contains 64-bit pkt_proc command-stream words.\n";
+    print $emit_fh "# net_model_send.py adds Ethernet header, EtherType 0x88B5, and 2-byte pad.\n";
+}
+
+sub emit_scan_packet {
+    my ($words_ref) = @_;
+    my ($expect_tx, $cpu_start, $rb_words) = (0, 0, 0);
+    for (my $i = 0; $i < scalar(@$words_ref); $i++) {
+        my $w = $words_ref->[$i];
+        my $op = hex(substr($w, 0, 1));
+        my $cnt = hex(substr($w, 4, 4));
+        $expect_tx = 1 if $op == 5;
+        $cpu_start = 1 if $op == 3;
+        $rb_words += $cnt if $op == 4;
+        if ($op == 1 || $op == 2) {
+            $i += $cnt;   # LOAD_IMEM/LOAD_DMEM payload words are not commands.
+        }
+    }
+    return ($expect_tx, $cpu_start, $rb_words);
+}
+
+sub emit_begin_packet {
+    emit_open();
+    emit_end_packet() if @emit_words;
+    @emit_words = ();
+}
+
+sub emit_word {
+    my ($h, $l) = @_;
+    emit_open();
+    push @emit_words, sprintf("%08X%08X", $h & 0xFFFFFFFF, $l & 0xFFFFFFFF);
+}
+
+sub emit_end_packet {
+    return unless @emit_words;
+    my ($expect_tx, $cpu_start, $rb_words) = emit_scan_packet(\@emit_words);
+    printf $emit_fh "FRAME %d expect=%d cpu=%d rb=%d words=%d %s\n",
+        $emit_pkt_idx++, $expect_tx, $cpu_start, $rb_words, scalar(@emit_words),
+        join(" ", @emit_words);
+    @emit_words = ();
+}
+
+sub emit_close {
+    return unless defined $emit_fh;
+    emit_end_packet();
+    close($emit_fh);
+    undef $emit_fh;
+    printf("  [EMIT] wrote %d Ethernet command frames to %s\n", $emit_pkt_idx, $emit_path) if $V;
+}
 
 # ══════════════════════════════════════════════════════════════
 #  MMIO primitives
 # ══════════════════════════════════════════════════════════════
-sub rw { my($a,$v)=@_; $v &= 0xFFFFFFFF; $txn++;
+sub rw { my($a,$v)=@_; return if is_emit(); $v &= 0xFFFFFFFF; $txn++;
     system(sprintf("regwrite 0x%08x 0x%08x >/dev/null 2>&1",$a,$v)); }
-sub rr { my($a)=@_; $txn++;
+sub rr { my($a)=@_; return 0 if is_emit(); $txn++;
     my @o=`regread 0x${\sprintf("%08x",$a)} 2>/dev/null`;
     for(@o){return hex($1) if/:\s+(0x[0-9a-f]+)/i}
     $err++; return 0; }
-sub dump_st { my ($lbl) = @_; my $s = rr($HW_ST);
+sub dump_st { my ($lbl) = @_; return 0 if is_emit(); my $s = rr($HW_ST);
     printf("    [%-12s] ST=%08X rdy=%d buf=%2d dr=%d drd=%d txa=%d txd=%d txw=%2d pkt=%d\n",
         $lbl, $s, ($s>>7)&1, ($s>>8)&0x3F, ($s>>4)&1, ($s>>5)&1,
         ($s>>3)&1, ($s>>2)&1, ($s>>16)&0x3F, $s&3) if $V;
     return $s; }
-sub ic  { rw($SW_CMD, $CMD_CLEAR | $CMD_ENABLE); usleep(10000);
+sub ic  { if (is_emit()) { emit_begin_packet(); $ps = 0; $wc = 0; return; }
+          rw($SW_CMD, $CMD_CLEAR | $CMD_ENABLE); usleep(10000);
           rw($SW_CMD, $CMD_ENABLE);              usleep(1000);
           $ps = 0; $wc = 0; }
 sub hard_reset {
+    if (is_emit()) { $ps = 0; $wc = 0; return; }
     rw($SW_CMD, $CMD_DRAIN | $CMD_ENABLE); usleep(20000);
     rw($SW_CMD, 0);                         usleep(5000);
     rw($SW_CMD, $CMD_CLEAR);                usleep(20000);
@@ -168,9 +243,11 @@ sub hard_reset {
     dump_st("reset");
 }
 sub iw { my($h,$l,$c) = @_;
+    if (is_emit()) { emit_word($h, $l); $wc++; return; }
     rw($SW_DATA_HI, $h); rw($SW_DATA_LO, $l); rw($SW_CTRL, $c);
     $ps ^= 1; rw($SW_CMD, $CMD_ENABLE | $ps); usleep(500); $wc++; }
 sub id {
+    if (is_emit()) { emit_end_packet(); return; }
     printf("  [DRAIN wc=%d]\n", $wc) if $V;
     rw($SW_CMD, $CMD_DRAIN | $CMD_ENABLE | $ps); usleep(1000);
     for my $i (0..29) { usleep(5000); my $s = rr($HW_ST);
@@ -180,6 +257,7 @@ sub np { iw($NOP, $NOP, 0); }
 sub cw { my($o,$a,$n,$p) = @_;
     ((($o&0xF)<<28) | (($a&0xFFF)<<16) | ($n&0xFFFF), $p & 0xFFFFFFFF) }
 sub pt { my($n,$ms) = @_; $n ||= 600; $ms ||= 50;
+    return 1 if is_emit();
     my $start_st = rr($HW_ST);
     printf("  [POLL] start ST=0x%08X (pkt=%d drd=%d txd=%d)\n",
         $start_st, $start_st & 3, ($start_st>>5)&1, ($start_st>>2)&1);
@@ -195,10 +273,26 @@ sub pt { my($n,$ms) = @_; $n ||= 600; $ms ||= 50;
         }
     }
     print "  [POLL] TIMEOUT\n"; 0 }
-sub cr { my @w; for my $r ($HW_W0H,$HW_W0L,$HW_W1H,$HW_W1L) { push @w, rr($r) }
+sub cr { return (0, 0, 0, 0) if is_emit(); my @w; for my $r ($HW_W0H,$HW_W0L,$HW_W1H,$HW_W1L) { push @w, rr($r) }
     printf("  TX[0]=%08X_%08X TX[1]=%08X_%08X\n", @w); @w }
 sub banner { print "\n" . "=" x 64 . "\n  $_[0]\n" . "=" x 64 . "\n\n" }
 sub phase  { printf("  ── %s ──\n", $_[0]) if $V }
+sub load_hex_words {
+    my ($path) = @_;
+    open(my $fh, "<", $path) or die "Can't open hex program '$path': $!\n";
+    my @words;
+    while (my $ln = <$fh>) {
+        $ln =~ s{//.*$}{};
+        $ln =~ s/#.*$//;
+        while ($ln =~ /\b(?:0x)?([0-9a-fA-F]{8})\b/g) {
+            push @words, hex($1) & 0xFFFFFFFF;
+        }
+    }
+    close $fh;
+    die "Hex program '$path' did not contain any 32-bit words\n" unless @words;
+    printf("  [HEX] loaded %d words from %s\n", scalar(@words), $path) if $V;
+    return @words;
+}
 
 # ══════════════════════════════════════════════════════════════
 #  ARM instruction encoders (port of model_tb arm_* functions)
@@ -1446,6 +1540,11 @@ sub ann_run_inference {
     @c = cw(4, $ANN_HW_READBACK_CPU_BASE, 4, 0);            iw($c[0], $c[1], 0x00);
     @c = cw(5, 0, 0, 0);                                    iw($c[0], $c[1], 0x00);
     id();
+    if (is_emit()) {
+        print "  [EMIT] inference frame stream includes one READBACK response with all 4 logit packets\n" if $V;
+        $input_mode = $old_mode;
+        return;
+    }
     my $done = pt(1200, 100);    # ~120s budget (sim runs in ~77k cycles)
     dump_st("post-poll");
     my @tx = cr();
@@ -2547,6 +2646,11 @@ elsif ($c eq "load"  || $c eq "preload")                 { ann_load_weights(); s
 elsif ($c eq "run"   || $c eq "infer")                   { ann_run_inference(); summary(); }
 elsif ($c eq "classes" || $c eq "run_classes")           { ann_run_inference("classes"); summary(); }
 elsif ($c eq "model_classes" || $c eq "ann_classes")     { ann_load_weights(); ann_run_inference("classes"); summary(); }
+elsif ($c eq "emit_load")                                { emit_enable("socnet_ann_load.frames"); ann_load_weights(); emit_close(); summary(); }
+elsif ($c eq "emit_run")                                 { emit_enable("socnet_ann_run.frames"); ann_run_inference(); emit_close(); summary(); }
+elsif ($c eq "emit_classes")                             { emit_enable("socnet_ann_classes.frames"); ann_run_inference("classes"); emit_close(); summary(); }
+elsif ($c eq "emit_model" || $c eq "emit_ann")           { emit_enable("socnet_ann_model.frames"); tann_full(); emit_close(); summary(); }
+elsif ($c eq "emit_model_classes")                       { emit_enable("socnet_ann_model_classes.frames"); ann_load_weights(); ann_run_inference("classes"); emit_close(); summary(); }
 elsif ($c eq "classdefs" || $c eq "labels")              { print_class_definitions(); }
 elsif ($c eq "diag")                                      { ann_diag();          summary(); }
 elsif ($c eq "probe" || $c eq "tile1")                   { ann_probe();         summary(); }
@@ -2569,6 +2673,13 @@ else {
     print "  model_classes      load weights, then run the 4-class real-row demo\n";
     print "  classdefs | labels show class IDs and preprocessing definition\n";
     print "  model | tann | ann full pipeline (= load + run)   [default]\n\n";
+    print "Network frame generation:\n";
+    print "  emit_load          write Ethernet command frames for ANN weight preload\n";
+    print "  emit_run           write Ethernet command frames for synthetic inference\n";
+    print "  emit_classes       write Ethernet command frames for 4 real class rows\n";
+    print "  emit_model         write preload + synthetic inference frames\n";
+    print "  emit_model_classes write preload + class-demo inference frames\n";
+    print "                     override output with SOC_EMIT_PATH=/tmp/file.frames\n\n";
     print "Diagnostics:\n";
     print "  probe | tile1      5-scenario WMMA bisection · fault-pattern signature\n";
     print "  probe_k            K-loop WMMA chain-accum (K=1,2,5,10,11)\n";
@@ -2587,4 +2698,8 @@ else {
     print "  sw/model_test run        # as many times as you want\n\n";
     print "Environment:\n";
     print "  MODEL_DIR    dir with ann_weights_dmem_t[0-3].hex (default: sw/model)\n\n";
+    print "  SOC_TRANSPORT=emit and SOC_EMIT_PATH also work with normal commands\n";
+    print "  net_model_send.py sends emitted frames on a Linux raw Ethernet socket\n\n";
 }
+
+END { emit_close() if is_emit(); }
