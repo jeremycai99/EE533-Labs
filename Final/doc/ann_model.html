@@ -1,0 +1,2052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Neural Network Training — 40→96→42→4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fafaf7;
+    --surface: #ffffff;
+    --ink: #0f1419;
+    --ink-muted: #5c6370;
+    --ink-faint: #9ca3af;
+    --line: #e5e7eb;
+    --line-soft: #f0f0eb;
+    --accent: #1a4d8f;
+    --accent-soft: #e8f0fa;
+    --warm: #c9542a;
+    --warm-soft: #fbeee7;
+    --positive: #2d6a4f;
+    --positive-soft: #e3f2eb;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --sans: 'Inter', system-ui, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  .header {
+    border-bottom: 1px solid var(--line);
+    padding: 20px 40px;
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: baseline;
+    gap: 24px;
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: var(--ink);
+    text-transform: uppercase;
+  }
+
+  .title {
+    font-size: 14px;
+    color: var(--ink-muted);
+    font-weight: 400;
+  }
+
+  .arch-tag {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+    padding: 4px 10px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 3px;
+    font-weight: 500;
+  }
+
+  /* Step indicator */
+  .step-bar {
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    padding: 16px 40px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  .step-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 20px 8px 0;
+    color: var(--ink-faint);
+    font-size: 13px;
+    font-weight: 500;
+    position: relative;
+    transition: color 0.3s;
+  }
+
+  .step-item:not(:last-child)::after {
+    content: '';
+    width: 24px;
+    height: 1px;
+    background: var(--line);
+    margin-left: 20px;
+  }
+
+  .step-item.active { color: var(--ink); }
+  .step-item.done { color: var(--positive); }
+
+  .step-num {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--surface);
+  }
+
+  .step-item.active .step-num {
+    background: var(--ink);
+    color: var(--surface);
+    border-color: var(--ink);
+  }
+
+  .step-item.done .step-num {
+    background: var(--positive);
+    color: var(--surface);
+    border-color: var(--positive);
+  }
+
+  /* Main + 16:9 slide stage */
+  main {
+    flex: 1;
+    padding: 24px 24px 96px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .slide-stage {
+    position: relative;
+    width: min(100%, 1600px, calc((100vh - 240px) * 16 / 9));
+    aspect-ratio: 16 / 9;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 6px 28px rgba(15, 20, 25, 0.06);
+  }
+
+  .slide-content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1600px;
+    height: 900px;
+    transform-origin: top left;
+  }
+
+  .step-content {
+    position: absolute;
+    inset: 0;
+    padding: 40px 64px 32px;
+    display: none;
+    overflow: hidden;
+    flex-direction: column;
+  }
+
+  .step-content.active { display: flex; animation: fade 0.4s ease; }
+
+  .step-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 14px;
+  }
+  .step-body > * { margin-top: 0; margin-bottom: 0; }
+
+  /* Step 2 (Forward Pass): top-align so equation sits directly under the header */
+  .step-content[data-step="1"] .step-body {
+    justify-content: flex-start;
+    gap: 18px;
+  }
+
+  @keyframes fade {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .step-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  h1 {
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+    line-height: 1.1;
+  }
+
+  .lede {
+    font-size: 14px;
+    color: var(--ink-muted);
+    max-width: 980px;
+    margin-bottom: 20px;
+    line-height: 1.55;
+  }
+
+  /* Architecture diagram */
+  .canvas-wrap {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  canvas { display: block; max-width: 100%; }
+
+  /* Layer info cards */
+  .layer-info {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .layer-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 14px 16px;
+  }
+
+  .layer-card-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 4px;
+  }
+
+  .layer-card h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .layer-card .count {
+    font-family: var(--mono);
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .layer-card .desc {
+    font-size: 11px;
+    color: var(--ink-muted);
+    line-height: 1.4;
+  }
+
+  /* Matrix display */
+  .matmul-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* Continuous matmul flow: x · W₁ᵀ → h₁ · W₂ᵀ → h₂ · W₃ᵀ → ŷ (Step 2) */
+  .matmul-flow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    flex-wrap: nowrap;
+  }
+  .matmul-flow .matrix-block-name { font-size: 16px; margin-bottom: 8px; }
+  .matmul-flow .matrix-dim { font-size: 12px; margin-top: 8px; }
+  .matmul-flow .matrix-op { font-size: 26px; padding: 0 4px; }
+
+  .matmul-flow [data-seg] {
+    transition: opacity 0.4s ease, color 0.4s ease;
+  }
+  .matmul-flow.has-active [data-seg] { opacity: 0.35; }
+  .matmul-flow.has-active [data-seg].active { opacity: 1; }
+  .matmul-flow [data-seg].active .matrix-block-name { color: var(--accent); }
+  .matmul-flow [data-seg].active .matrix-grid {
+    box-shadow: 0 0 0 2px var(--accent), 0 0 14px rgba(26, 77, 143, 0.18);
+    border-radius: 4px;
+  }
+  .matmul-flow [data-seg].active.matrix-op { color: var(--accent); font-weight: 600; }
+
+  .matmul-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: var(--mono);
+    color: var(--ink-muted);
+    gap: 4px;
+    min-width: 48px;
+  }
+  .matmul-arrow .arrow-glyph {
+    font-size: 30px;
+    line-height: 1;
+    color: var(--ink-faint);
+  }
+  .matmul-arrow .arrow-act {
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+  .matmul-flow .matmul-arrow.active .arrow-glyph { color: var(--accent); }
+  .matmul-flow .matmul-arrow.active .arrow-act { color: var(--accent); font-weight: 600; }
+
+  .matrix-block {
+    text-align: center;
+  }
+
+  .matrix-block-label {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+    margin-bottom: 6px;
+    letter-spacing: 0.05em;
+  }
+
+  .matrix-block-name {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 8px;
+  }
+
+  .matrix-grid {
+    display: inline-grid;
+    gap: 2px;
+    padding: 6px;
+    background: var(--line-soft);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+  }
+
+  .matrix-cell {
+    width: 30px;
+    height: 30px;
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--ink);
+    transition: background 0.6s, color 0.6s;
+  }
+
+  .matrix-cell.active {
+    background: var(--ink) !important;
+    color: var(--surface) !important;
+  }
+
+  .matrix-cell.product {
+    background: var(--accent) !important;
+    color: var(--surface) !important;
+  }
+
+  .matrix-op {
+    font-family: var(--mono);
+    font-size: 32px;
+    font-weight: 400;
+    color: var(--ink-muted);
+    padding: 0 8px;
+  }
+
+  .matrix-dim {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    margin-top: 8px;
+  }
+
+  /* Equations */
+  .equation {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 2px;
+    padding: 12px 18px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.7;
+    margin: 12px 0;
+  }
+
+  .equation .var { color: var(--accent); font-weight: 600; }
+  .equation .op { color: var(--ink-muted); }
+  .equation .comment { color: var(--ink-faint); font-style: italic; }
+
+  /* Forward pass calculation panel */
+  .calc-panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 24px;
+    margin-top: 24px;
+  }
+
+  .calc-row {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line-soft);
+    align-items: center;
+  }
+
+  .calc-row:last-child { border-bottom: none; }
+
+  .calc-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-muted);
+    letter-spacing: 0.05em;
+  }
+
+  .calc-value {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink);
+  }
+
+  /* Loss display */
+  .metric-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 14px;
+    background: var(--surface);
+  }
+
+  .metric {
+    padding: 12px 16px;
+    border-right: 1px solid var(--line);
+  }
+
+  .metric:last-child { border-right: none; }
+
+  .metric-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-muted);
+    margin-bottom: 4px;
+  }
+
+  .metric-value {
+    font-size: 20px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+
+  .metric-value.loss { color: var(--warm); }
+  .metric-value.acc { color: var(--positive); }
+
+  /* Class output bars */
+  .output-display {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 16px 20px;
+    margin-top: 14px;
+  }
+
+  .output-display h3 {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .class-row {
+    display: grid;
+    grid-template-columns: 120px 1fr 80px;
+    align-items: center;
+    gap: 16px;
+    padding: 5px 0;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .class-name { color: var(--ink); font-weight: 500; }
+
+  .class-bar-bg {
+    height: 8px;
+    background: var(--line-soft);
+    border-radius: 1px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .class-bar-fill {
+    height: 100%;
+    background: var(--ink);
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .class-bar-fill.predicted { background: var(--accent); }
+  .class-bar-fill.target { background: var(--positive); }
+
+  .class-value {
+    text-align: right;
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Backward-pass two-column layout (Step 3) */
+  .back-grid {
+    display: grid;
+    grid-template-columns: 960px 1fr;
+    gap: 16px;
+    align-items: center;
+  }
+
+  /* Backward pass */
+  .gradient-flow-display {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 14px 20px;
+  }
+
+  .gradient-step {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 16px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line-soft);
+    align-items: center;
+  }
+
+  .gradient-step:last-child { border-bottom: none; }
+
+  .gradient-step-num {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--warm-soft);
+    color: var(--warm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .gradient-step-content h4 {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .gradient-step-content p {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-muted);
+  }
+
+  .gradient-step-formula {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 4px 10px;
+    border-radius: 2px;
+  }
+
+  /* Weight matrices */
+  .weight-grid-container {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .weight-display {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 14px 16px;
+  }
+
+  .weight-display-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 16px;
+  }
+
+  .weight-display-title {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .weight-display-dim {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-muted);
+  }
+
+  .weight-canvas-wrap {
+    background: #fafafa;
+    border: 1px solid var(--line);
+    padding: 8px;
+    border-radius: 2px;
+  }
+
+  .weight-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .weight-stat {
+    text-align: center;
+  }
+
+  .weight-stat-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .weight-stat-value {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  /* Comparison */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 12px;
+  }
+
+  .compare-col {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 14px 18px;
+  }
+
+  .compare-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-bottom: 8px;
+  }
+
+  .compare-col.before .compare-tag { color: var(--warm); }
+  .compare-col.after .compare-tag { color: var(--positive); }
+
+  /* Navigation */
+  .nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    padding: 16px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 100;
+  }
+
+  .nav-info {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+
+  .nav-info b { color: var(--ink); font-weight: 600; }
+
+  .nav-buttons { display: flex; gap: 8px; }
+
+  button {
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 20px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  button:hover:not(:disabled) {
+    background: var(--ink);
+    color: var(--surface);
+    border-color: var(--ink);
+  }
+
+  button.primary {
+    background: var(--ink);
+    color: var(--surface);
+    border-color: var(--ink);
+  }
+
+  button.primary:hover:not(:disabled) {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  button .arrow {
+    font-family: var(--mono);
+    font-size: 16px;
+  }
+
+  /* Loss curve */
+  .loss-chart-wrap {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 14px 18px;
+    margin-top: 12px;
+  }
+
+  .loss-chart-wrap h3 {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Animation playback controls */
+  .playback {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+
+  .playback-btn {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-family: var(--mono);
+  }
+
+  /* Section divider */
+  .divider {
+    text-align: center;
+    margin: 14px 0;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .divider::before, .divider::after {
+    content: '';
+    display: inline-block;
+    width: 60px;
+    height: 1px;
+    background: var(--line);
+    vertical-align: middle;
+    margin: 0 16px;
+  }
+
+  /* Header/nav small-viewport tweaks (slide content scales itself) */
+  @media (max-width: 900px) {
+    .header { padding: 14px 18px; }
+    .step-bar { padding: 10px 18px; overflow-x: auto; }
+    .nav { padding: 10px 18px; }
+    main { padding: 16px 12px 88px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <span class="logo">ANN/Visualizer</span>
+    <span class="title">IEC104 Network Traffic Classifier — Training Cycle</span>
+  </div>
+  <span class="arch-tag">40 → 96 → 42 → 4</span>
+</div>
+
+<div class="step-bar" id="stepBar">
+  <div class="step-item active" data-step="0">
+    <div class="step-num">1</div>
+    <span>Architecture</span>
+  </div>
+  <div class="step-item" data-step="1">
+    <div class="step-num">2</div>
+    <span>Forward Pass</span>
+  </div>
+  <div class="step-item" data-step="2">
+    <div class="step-num">3</div>
+    <span>Backpropagation</span>
+  </div>
+  <div class="step-item" data-step="3">
+    <div class="step-num">4</div>
+    <span>Weight Update</span>
+  </div>
+  <div class="step-item" data-step="4">
+    <div class="step-num">5</div>
+    <span>Trained Weights</span>
+  </div>
+</div>
+
+<main>
+<div class="slide-stage" id="slideStage">
+<div class="slide-content" id="slideContent">
+
+  <!-- STEP 1: ARCHITECTURE -->
+  <section class="step-content active" data-step="0">
+    <div class="step-label">Step 01 — Topology</div>
+    <h1>The architecture</h1>
+    <p class="lede">Four-layer feedforward net. 8,182 trainable parameters.</p>
+
+    <div class="step-body">
+    <div class="canvas-wrap">
+      <canvas id="archCanvas" width="1440" height="460"></canvas>
+    </div>
+
+    <div class="layer-info">
+      <div class="layer-card">
+        <div class="layer-card-tag">L0 — Input</div>
+        <h3>Features</h3>
+        <div class="count">40</div>
+        <div class="desc">IEC104 protocol features.</div>
+      </div>
+      <div class="layer-card">
+        <div class="layer-card-tag">L1 — Hidden</div>
+        <h3>FC1 + ReLU</h3>
+        <div class="count">96</div>
+        <div class="desc">3,840 weights + 96 biases.</div>
+      </div>
+      <div class="layer-card">
+        <div class="layer-card-tag">L2 — Hidden</div>
+        <h3>FC2 + ReLU</h3>
+        <div class="count">42</div>
+        <div class="desc">4,032 weights + 42 biases.</div>
+      </div>
+      <div class="layer-card">
+        <div class="layer-card-tag">L3 — Output</div>
+        <h3>FC3 + Softmax</h3>
+        <div class="count">4</div>
+        <div class="desc">4 classes · 168 weights + 4 biases.</div>
+      </div>
+    </div>
+    </div>
+  </section>
+
+  <!-- STEP 2: FORWARD PASS -->
+  <section class="step-content" data-step="1">
+    <div class="step-label">Step 02 — Forward Pass</div>
+    <h1>Matrix multiplication</h1>
+    <p class="lede">Linear transform + nonlinearity, layer by layer.</p>
+
+    <div class="step-body">
+    <div class="equation">
+      <span class="comment"># Forward pass equations</span><br>
+      <span class="var">h₁</span> <span class="op">=</span> ReLU(<span class="var">x</span> · <span class="var">W₁ᵀ</span> <span class="op">+</span> <span class="var">b₁</span>) &nbsp; <span class="comment"># [40] → [96]</span><br>
+      <span class="var">h₂</span> <span class="op">=</span> ReLU(<span class="var">h₁</span> · <span class="var">W₂ᵀ</span> <span class="op">+</span> <span class="var">b₂</span>) &nbsp; <span class="comment"># [96] → [42]</span><br>
+      <span class="var">ŷ</span>  <span class="op">=</span> Softmax(<span class="var">h₂</span> · <span class="var">W₃ᵀ</span> <span class="op">+</span> <span class="var">b₃</span>) &nbsp; <span class="comment"># [42] → [4]</span>
+    </div>
+
+    <div class="matmul-flow">
+      <div class="matrix-block" data-seg="0">
+        <div class="matrix-block-name">x</div>
+        <div class="matrix-grid" id="matX" style="grid-template-columns: 1fr;"></div>
+        <div class="matrix-dim">40 × 1</div>
+      </div>
+      <div class="matrix-op" data-seg="0">·</div>
+      <div class="matrix-block" data-seg="0">
+        <div class="matrix-block-name">W₁ᵀ</div>
+        <div class="matrix-grid" id="matW1"></div>
+        <div class="matrix-dim">40 × 96</div>
+      </div>
+      <div class="matmul-arrow" data-seg="0">
+        <span class="arrow-glyph">→</span>
+        <span class="arrow-act">ReLU</span>
+      </div>
+      <div class="matrix-block" data-seg="0,1">
+        <div class="matrix-block-name">h₁</div>
+        <div class="matrix-grid" id="matH1" style="grid-template-columns: 1fr;"></div>
+        <div class="matrix-dim">96 × 1</div>
+      </div>
+      <div class="matrix-op" data-seg="1">·</div>
+      <div class="matrix-block" data-seg="1">
+        <div class="matrix-block-name">W₂ᵀ</div>
+        <div class="matrix-grid" id="matW2"></div>
+        <div class="matrix-dim">96 × 42</div>
+      </div>
+      <div class="matmul-arrow" data-seg="1">
+        <span class="arrow-glyph">→</span>
+        <span class="arrow-act">ReLU</span>
+      </div>
+      <div class="matrix-block" data-seg="1,2">
+        <div class="matrix-block-name">h₂</div>
+        <div class="matrix-grid" id="matH2" style="grid-template-columns: 1fr;"></div>
+        <div class="matrix-dim">42 × 1</div>
+      </div>
+      <div class="matrix-op" data-seg="2">·</div>
+      <div class="matrix-block" data-seg="2">
+        <div class="matrix-block-name">W₃ᵀ</div>
+        <div class="matrix-grid" id="matW3"></div>
+        <div class="matrix-dim">42 × 4</div>
+      </div>
+      <div class="matmul-arrow" data-seg="2">
+        <span class="arrow-glyph">→</span>
+        <span class="arrow-act">Softmax</span>
+      </div>
+      <div class="matrix-block" data-seg="2">
+        <div class="matrix-block-name">ŷ</div>
+        <div class="matrix-grid" id="matY" style="grid-template-columns: 1fr;"></div>
+        <div class="matrix-dim">4 × 1</div>
+      </div>
+    </div>
+    </div>
+  </section>
+
+  <!-- STEP 3: BACKPROPAGATION -->
+  <section class="step-content" data-step="2">
+    <div class="step-label">Step 03 — Backprop</div>
+    <h1>Gradients flow backward</h1>
+    <p class="lede">Chain rule: propagate ∂L/∂· from output back to input.</p>
+
+    <div class="step-body">
+    <div class="back-grid">
+    <div class="canvas-wrap" style="margin-bottom:0;">
+      <canvas id="backwardCanvas" width="920" height="620"></canvas>
+    </div>
+
+    <div class="gradient-flow-display">
+      <div class="gradient-step">
+        <div class="gradient-step-num">1</div>
+        <div class="gradient-step-content"><h4>Output gradient</h4></div>
+        <div class="gradient-step-formula">∂L/∂ŷ = ŷ − y</div>
+      </div>
+      <div class="gradient-step">
+        <div class="gradient-step-num">2</div>
+        <div class="gradient-step-content"><h4>Through FC3</h4></div>
+        <div class="gradient-step-formula">∂L/∂h₂ = (∂L/∂ŷ) · W₃</div>
+      </div>
+      <div class="gradient-step">
+        <div class="gradient-step-num">3</div>
+        <div class="gradient-step-content"><h4>Through ReLU</h4></div>
+        <div class="gradient-step-formula">∂L/∂z₂ = ∂L/∂h₂ ⊙ 𝟙[z₂ &gt; 0]</div>
+      </div>
+      <div class="gradient-step">
+        <div class="gradient-step-num">4</div>
+        <div class="gradient-step-content"><h4>Weight gradients</h4></div>
+        <div class="gradient-step-formula">∂L/∂W₂ = (∂L/∂z₂) ⊗ h₁</div>
+      </div>
+      <div class="gradient-step">
+        <div class="gradient-step-num">5</div>
+        <div class="gradient-step-content"><h4>Back to input</h4></div>
+        <div class="gradient-step-formula">∂L/∂W₁ = (∂L/∂z₁) ⊗ x</div>
+      </div>
+    </div>
+    </div>
+    </div>
+  </section>
+
+  <!-- STEP 4: WEIGHT UPDATE -->
+  <section class="step-content" data-step="3">
+    <div class="step-label">Step 04 — Update</div>
+    <h1>Updating the weights</h1>
+    <p class="lede">Step every weight against its gradient. Repeat.</p>
+
+    <div class="step-body">
+    <div class="equation">
+      <span class="comment"># Gradient descent update rule (AdamW in practice)</span><br>
+      <span class="var">W</span><sub>new</sub> <span class="op">=</span> <span class="var">W</span><sub>old</sub> <span class="op">−</span> <span class="var">η</span> · <span class="op">∂L/∂W</span><br>
+      <span class="comment"># η = learning rate (0.001), gradients scale the update direction</span>
+    </div>
+
+    <div class="loss-chart-wrap">
+      <h3>Training Loss Over Time</h3>
+      <canvas id="lossCanvas" width="1440" height="380"></canvas>
+    </div>
+
+    <div class="metric-strip" style="margin-top: 12px;">
+      <div class="metric">
+        <div class="metric-label">Epoch</div>
+        <div class="metric-value" id="updEpoch">1</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Loss</div>
+        <div class="metric-value loss" id="updLoss">1.386</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Accuracy</div>
+        <div class="metric-value acc" id="updAcc">25%</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Learning Rate</div>
+        <div class="metric-value" id="updLR">1.0e-3</div>
+      </div>
+    </div>
+    </div>
+  </section>
+
+  <!-- STEP 5: TRAINED WEIGHTS -->
+  <section class="step-content" data-step="4">
+    <div class="step-label">Step 05 — Result</div>
+    <h1>Trained weight matrices</h1>
+    <p class="lede">After 5,000 epochs. Each pixel = one weight.</p>
+
+    <div class="step-body">
+    <div class="weight-grid-container">
+      <div class="weight-display">
+        <div class="weight-display-header">
+          <span class="weight-display-title">W₁ — FC1</span>
+          <span class="weight-display-dim">96 × 40</span>
+        </div>
+        <div class="weight-canvas-wrap">
+          <canvas id="w1Canvas" width="420" height="320"></canvas>
+        </div>
+        <div class="weight-stats">
+          <div class="weight-stat">
+            <div class="weight-stat-label">params</div>
+            <div class="weight-stat-value">3,840</div>
+          </div>
+          <div class="weight-stat">
+            <div class="weight-stat-label">μ</div>
+            <div class="weight-stat-value" id="w1Mean">0.00</div>
+          </div>
+          <div class="weight-stat">
+            <div class="weight-stat-label">σ</div>
+            <div class="weight-stat-value" id="w1Std">0.18</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="weight-display">
+        <div class="weight-display-header">
+          <span class="weight-display-title">W₂ — FC2</span>
+          <span class="weight-display-dim">42 × 96</span>
+        </div>
+        <div class="weight-canvas-wrap">
+          <canvas id="w2Canvas" width="420" height="320"></canvas>
+        </div>
+        <div class="weight-stats">
+          <div class="weight-stat">
+            <div class="weight-stat-label">params</div>
+            <div class="weight-stat-value">4,032</div>
+          </div>
+          <div class="weight-stat">
+            <div class="weight-stat-label">μ</div>
+            <div class="weight-stat-value" id="w2Mean">0.00</div>
+          </div>
+          <div class="weight-stat">
+            <div class="weight-stat-label">σ</div>
+            <div class="weight-stat-value" id="w2Std">0.15</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="weight-display">
+        <div class="weight-display-header">
+          <span class="weight-display-title">W₃ — FC3</span>
+          <span class="weight-display-dim">4 × 42</span>
+        </div>
+        <div class="weight-canvas-wrap">
+          <canvas id="w3Canvas" width="420" height="320"></canvas>
+        </div>
+        <div class="weight-stats">
+          <div class="weight-stat">
+            <div class="weight-stat-label">params</div>
+            <div class="weight-stat-value">168</div>
+          </div>
+          <div class="weight-stat">
+            <div class="weight-stat-label">μ</div>
+            <div class="weight-stat-value" id="w3Mean">0.00</div>
+          </div>
+          <div class="weight-stat">
+            <div class="weight-stat-label">σ</div>
+            <div class="weight-stat-value" id="w3Std">0.22</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider">Before vs After Training</div>
+
+    <div class="compare-grid">
+      <div class="compare-col before">
+        <div class="compare-tag">Initial — Epoch 0</div>
+        <div style="font-size: 12px; color: var(--ink-muted); margin-bottom: 10px;">
+          Random uniform init. No structure.
+        </div>
+        <div class="metric-strip" style="margin-bottom: 0;">
+          <div class="metric" style="border-right: 1px solid var(--line);">
+            <div class="metric-label">Loss</div>
+            <div class="metric-value loss">1.386</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Accuracy</div>
+            <div class="metric-value">25%</div>
+          </div>
+        </div>
+      </div>
+      <div class="compare-col after">
+        <div class="compare-tag">Trained — Epoch 5000</div>
+        <div style="font-size: 12px; color: var(--ink-muted); margin-bottom: 10px;">
+          Feature detectors emerge. Classes separable.
+        </div>
+        <div class="metric-strip" style="margin-bottom: 0;">
+          <div class="metric" style="border-right: 1px solid var(--line);">
+            <div class="metric-label">Loss</div>
+            <div class="metric-value acc">0.045</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Accuracy</div>
+            <div class="metric-value acc">97%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+  </section>
+
+</div>
+</div>
+</main>
+
+<nav class="nav">
+  <div class="nav-info">
+    Step <b id="navStep">1</b> of <b>5</b> · <span id="navTitle">Architecture</span>
+  </div>
+  <div class="nav-buttons">
+    <button id="prevBtn" onclick="prev()" disabled>
+      <span class="arrow">←</span> Previous
+    </button>
+    <button id="nextBtn" onclick="next()" class="primary">
+      Next <span class="arrow">→</span>
+    </button>
+  </div>
+</nav>
+
+<script>
+  // ==================== STATE ====================
+  const ARCH = [40, 96, 42, 4];
+  const LAYER_NAMES = ['Input', 'Hidden 1', 'Hidden 2', 'Output'];
+  const CLASSES = ['DoS', 'NORMAL', 'c_ci_na_1', 'c_se_na_1'];
+  const STEP_TITLES = ['Architecture', 'Forward Pass', 'Backpropagation', 'Weight Update', 'Trained Weights'];
+
+  let currentStep = 0;
+  let weights = { W1: null, W2: null, W3: null };
+  let weightsTrained = { W1: null, W2: null, W3: null };
+  let activations = [null, null, null, null];
+  let trainingState = {
+    epoch: 1,
+    loss: 1.386,
+    acc: 0.25,
+    lr: 0.001,
+    history: [{ epoch: 1, loss: 1.386, acc: 0.25 }],
+    isPlaying: false,
+    intervalId: null
+  };
+
+  // Seeded random for reproducibility
+  function seededRandom(seed) {
+    let s = seed;
+    return () => {
+      s = (s * 9301 + 49297) % 233280;
+      return s / 233280;
+    };
+  }
+  const rand = seededRandom(42);
+
+  // ==================== INIT ====================
+  function initWeights() {
+    function randMat(r, c, scale = 0.5) {
+      const m = [];
+      for (let i = 0; i < r; i++) {
+        const row = [];
+        for (let j = 0; j < c; j++) row.push((rand() - 0.5) * scale);
+        m.push(row);
+      }
+      return m;
+    }
+    weights.W1 = randMat(96, 40, 0.6);
+    weights.W2 = randMat(42, 96, 0.5);
+    weights.W3 = randMat(4, 42, 0.7);
+
+    // Trained weights = structured patterns (simulated)
+    weightsTrained.W1 = randMat(96, 40, 0.6).map((row, i) =>
+      row.map((v, j) => v * 0.3 + Math.sin((i * 0.3 + j * 0.2)) * 0.4));
+    weightsTrained.W2 = randMat(42, 96, 0.5).map((row, i) =>
+      row.map((v, j) => v * 0.3 + Math.cos((i * 0.4 + j * 0.15)) * 0.4));
+    weightsTrained.W3 = randMat(4, 42, 0.7).map((row, i) =>
+      row.map((v, j) => v * 0.3 + ((i + j) % 4 === 0 ? 0.5 : -0.2)));
+  }
+
+  function relu(x) { return Math.max(0, x); }
+  function softmax(arr) {
+    const max = Math.max(...arr);
+    const exp = arr.map(v => Math.exp(v - max));
+    const sum = exp.reduce((a, b) => a + b, 0);
+    return exp.map(v => v / sum);
+  }
+
+  function forwardPass() {
+    const x = Array.from({ length: 40 }, () => rand());
+    activations[0] = x;
+
+    const h1 = weights.W1.map((row, i) => {
+      let s = 0;
+      for (let j = 0; j < 40; j++) s += row[j] * x[j];
+      return relu(s);
+    });
+    activations[1] = h1;
+
+    const h2 = weights.W2.map((row, i) => {
+      let s = 0;
+      for (let j = 0; j < 96; j++) s += row[j] * h1[j];
+      return relu(s);
+    });
+    activations[2] = h2;
+
+    const z3 = weights.W3.map((row, i) => {
+      let s = 0;
+      for (let j = 0; j < 42; j++) s += row[j] * h2[j];
+      return s;
+    });
+    activations[3] = softmax(z3);
+  }
+
+  // ==================== ARCHITECTURE CANVAS ====================
+  function drawArchitecture() {
+    const canvas = document.getElementById('archCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const padX = 100, padY = 60;
+    const usableW = W - 2 * padX;
+    const usableH = H - 2 * padY;
+
+    const layerX = ARCH.map((_, i) => padX + (i / (ARCH.length - 1)) * usableW);
+    const colors = ['#1a4d8f', '#2d6a4f', '#c9542a', '#0f1419'];
+
+    // Compute neuron positions (cap visible neurons)
+    const visible = ARCH.map(n => Math.min(n, n === 4 ? 4 : 16));
+    const positions = ARCH.map((n, l) => {
+      const v = visible[l];
+      const spacing = Math.min(usableH / Math.max(v + 1, 2), 22);
+      const totalH = (v - 1) * spacing;
+      const startY = (H - totalH) / 2;
+      return Array.from({ length: v }, (_, i) => ({ x: layerX[l], y: startY + i * spacing }));
+    });
+
+    // Draw connections (sampled) — distinct color per band
+    const wireRGBA = [
+      'rgba(26, 77, 143, 0.22)',   // L0→L1 blue
+      'rgba(45, 106, 79, 0.22)',   // L1→L2 green
+      'rgba(201, 84, 42, 0.22)',   // L2→L3 orange
+    ];
+    ctx.lineWidth = 1.4;
+    for (let l = 0; l < ARCH.length - 1; l++) {
+      ctx.strokeStyle = wireRGBA[l];
+      const from = positions[l], to = positions[l + 1];
+      for (const f of from) {
+        for (const t of to) {
+          ctx.beginPath();
+          ctx.moveTo(f.x, f.y);
+          ctx.lineTo(t.x, t.y);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Draw "⋮" indicator for truncated neuron columns
+    for (let l = 0; l < ARCH.length; l++) {
+      if (ARCH[l] > visible[l]) {
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = '500 12px JetBrains Mono';
+        ctx.textAlign = 'center';
+        ctx.fillText('⋮', layerX[l], positions[l][positions[l].length - 1].y + 22);
+      }
+    }
+
+    // Draw neurons
+    for (let l = 0; l < ARCH.length; l++) {
+      ctx.fillStyle = colors[l];
+      for (const p of positions[l]) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+
+    // Layer labels (top)
+    ctx.textAlign = 'center';
+    for (let l = 0; l < ARCH.length; l++) {
+      ctx.font = '600 11px JetBrains Mono';
+      ctx.fillStyle = '#9ca3af';
+      ctx.fillText(`L${l}`, layerX[l], 22);
+      ctx.font = '600 14px Inter';
+      ctx.fillStyle = '#0f1419';
+      ctx.fillText(LAYER_NAMES[l], layerX[l], 42);
+      ctx.font = '500 11px JetBrains Mono';
+      ctx.fillStyle = colors[l];
+      ctx.fillText(`${ARCH[l]} neurons`, layerX[l], 58);
+    }
+
+    // Connection labels (combined Wn + activation, between columns at bottom)
+    ctx.fillStyle = '#5c6370';
+    ctx.font = '500 11px JetBrains Mono';
+    ctx.textAlign = 'center';
+    for (let l = 0; l < ARCH.length - 1; l++) {
+      const x = (layerX[l] + layerX[l + 1]) / 2;
+      const act = l < ARCH.length - 2 ? 'ReLU' : 'Softmax';
+      ctx.fillText(`W${l + 1} (${ARCH[l + 1]}×${ARCH[l]}) + ${act}`, x, H - 14);
+    }
+  }
+
+  // ==================== FORWARD CANVAS ====================
+  let forwardActiveLayer = -1;
+  function drawForward() {
+    const canvas = document.getElementById('forwardCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const padX = 100, padY = 50;
+    const layerX = ARCH.map((_, i) => padX + (i / (ARCH.length - 1)) * (W - 2 * padX));
+    const colors = ['#1a4d8f', '#2d6a4f', '#c9542a', '#0f1419'];
+
+    const visible = ARCH.map(n => Math.min(n, n === 4 ? 4 : 14));
+    const positions = ARCH.map((n, l) => {
+      const v = visible[l];
+      const spacing = Math.min((H - 2 * padY) / Math.max(v, 2), 22);
+      const totalH = (v - 1) * spacing;
+      const startY = (H - totalH) / 2;
+      return Array.from({ length: v }, (_, i) => ({ x: layerX[l], y: startY + i * spacing }));
+    });
+
+    // Connections — distinct color per band, brighter when active
+    const wireBase = [
+      [26, 77, 143],   // L0→L1 blue
+      [45, 106, 79],   // L1→L2 green
+      [201, 84, 42],   // L2→L3 orange
+    ];
+    for (let l = 0; l < ARCH.length - 1; l++) {
+      const isActive = forwardActiveLayer === l;
+      const [r, g, b] = wireBase[l];
+      ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${isActive ? 0.8 : 0.22})`;
+      ctx.lineWidth = isActive ? 2.4 : 1.4;
+      const from = positions[l], to = positions[l + 1];
+      for (const f of from) {
+        for (const t of to) {
+          ctx.beginPath();
+          ctx.moveTo(f.x, f.y);
+          ctx.lineTo(t.x, t.y);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Neurons
+    for (let l = 0; l < ARCH.length; l++) {
+      const isActive = forwardActiveLayer === l;
+      const isPast = forwardActiveLayer > l;
+      for (const p of positions[l]) {
+        if (isActive) {
+          // Pulse glow
+          const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 18);
+          glow.addColorStop(0, colors[l] + 'aa');
+          glow.addColorStop(1, colors[l] + '00');
+          ctx.fillStyle = glow;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 18, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = isActive ? colors[l] : (isPast ? colors[l] : '#d1d5db');
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, isActive ? 7 : 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      // Layer label
+      ctx.fillStyle = forwardActiveLayer === l ? colors[l] : '#5c6370';
+      ctx.font = '600 12px JetBrains Mono';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${LAYER_NAMES[l]} [${ARCH[l]}]`, layerX[l], H - 18);
+    }
+
+    // Flow arrow on active connection
+    if (forwardActiveLayer >= 0 && forwardActiveLayer < ARCH.length - 1) {
+      const x1 = layerX[forwardActiveLayer], x2 = layerX[forwardActiveLayer + 1];
+      ctx.fillStyle = '#1a4d8f';
+      ctx.font = '600 13px JetBrains Mono';
+      ctx.textAlign = 'center';
+      ctx.fillText(`W${forwardActiveLayer + 1}`, (x1 + x2) / 2, 30);
+    }
+  }
+
+  // ==================== BACKWARD CANVAS ====================
+  let backwardAnimT = 0;
+  function drawBackward() {
+    const canvas = document.getElementById('backwardCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const padX = 100, padY = 50;
+    const layerX = ARCH.map((_, i) => padX + (i / (ARCH.length - 1)) * (W - 2 * padX));
+    const colors = ['#1a4d8f', '#2d6a4f', '#c9542a', '#0f1419'];
+
+    const visible = ARCH.map(n => Math.min(n, n === 4 ? 4 : 14));
+    const positions = ARCH.map((n, l) => {
+      const v = visible[l];
+      const spacing = Math.min((H - 2 * padY) / Math.max(v, 2), 22);
+      const totalH = (v - 1) * spacing;
+      const startY = (H - totalH) / 2;
+      return Array.from({ length: v }, (_, i) => ({ x: layerX[l], y: startY + i * spacing }));
+    });
+
+    // Reverse connections in warm/red
+    for (let l = ARCH.length - 1; l > 0; l--) {
+      ctx.strokeStyle = 'rgba(201, 84, 42, 0.40)';
+      ctx.lineWidth = 1.6;
+      const from = positions[l], to = positions[l - 1];
+      for (const f of from) {
+        for (const t of to) {
+          ctx.beginPath();
+          ctx.moveTo(f.x, f.y);
+          ctx.lineTo(t.x, t.y);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Neurons (intensity = gradient strength)
+    for (let l = 0; l < ARCH.length; l++) {
+      const intensity = (ARCH.length - l) / ARCH.length;
+      for (const p of positions[l]) {
+        // Glow on output side stronger
+        const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 14);
+        glow.addColorStop(0, `rgba(201, 84, 42, ${intensity * 0.6})`);
+        glow.addColorStop(1, 'rgba(201, 84, 42, 0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#c9542a';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      // Label
+      ctx.fillStyle = '#5c6370';
+      ctx.font = '600 12px JetBrains Mono';
+      ctx.textAlign = 'center';
+      ctx.fillText(`∇${l === 0 ? 'x' : (l === 3 ? 'L' : 'h' + l)}`, layerX[l], H - 18);
+    }
+
+    // Flow direction arrows (top)
+    const t = (backwardAnimT % 1);
+    for (let l = ARCH.length - 1; l > 0; l--) {
+      const x1 = layerX[l], x2 = layerX[l - 1];
+      const xMid = x2 + (x1 - x2) * (1 - t);
+      ctx.fillStyle = '#c9542a';
+      ctx.font = '600 14px JetBrains Mono';
+      ctx.textAlign = 'center';
+      ctx.fillText('◀', xMid, 30);
+    }
+
+    // "Gradient flow" header arrow line
+    ctx.strokeStyle = 'rgba(201, 84, 42, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(layerX[ARCH.length - 1] - 30, 30);
+    ctx.lineTo(layerX[0] + 30, 30);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = '#5c6370';
+    ctx.font = '500 11px JetBrains Mono';
+    ctx.textAlign = 'left';
+    ctx.fillText('gradient flow', layerX[0] - 30, 14);
+  }
+
+  let backwardAnimId = null;
+  function animateBackward() {
+    if (currentStep !== 2) {
+      cancelAnimationFrame(backwardAnimId);
+      return;
+    }
+    backwardAnimT += 0.012;
+    drawBackward();
+    backwardAnimId = requestAnimationFrame(animateBackward);
+  }
+
+  // ==================== MATRIX VISUALS (FORWARD STEP) ====================
+  function visibleDims(rows, cols, maxDim = 12) {
+    // Map (rows, cols) → (visRows, visCols) preserving aspect ratio.
+    // Vectors (cols === 1 or rows === 1) keep their single dimension.
+    if (cols === 1) return { visRows: Math.min(rows, maxDim), visCols: 1 };
+    if (rows === 1) return { visRows: 1, visCols: Math.min(cols, maxDim) };
+    if (rows >= cols) {
+      const visRows = Math.min(rows, maxDim);
+      const visCols = Math.max(2, Math.round(visRows * cols / rows));
+      return { visRows, visCols };
+    } else {
+      const visCols = Math.min(cols, maxDim);
+      const visRows = Math.max(2, Math.round(visCols * rows / cols));
+      return { visRows, visCols };
+    }
+  }
+  function buildMatrixGrid(elemId, rows, cols, getValue) {
+    const grid = document.getElementById(elemId);
+    if (!grid) return;
+    const { visRows, visCols } = visibleDims(rows, cols, 14);
+    grid.innerHTML = '';
+    grid.style.gridTemplateColumns = `repeat(${visCols}, 30px)`;
+    for (let i = 0; i < visRows; i++) {
+      for (let j = 0; j < visCols; j++) {
+        const cell = document.createElement('div');
+        cell.className = 'matrix-cell';
+        const v = getValue(i, j);
+        const intensity = Math.min(1, Math.abs(v));
+        if (v > 0) {
+          cell.style.background = `rgba(26, 77, 143, ${intensity * 0.4})`;
+        } else {
+          cell.style.background = `rgba(201, 84, 42, ${intensity * 0.4})`;
+        }
+        cell.dataset.row = i;
+        cell.dataset.col = j;
+        grid.appendChild(cell);
+      }
+    }
+  }
+
+  function buildForwardMatrices() {
+    if (!activations[0]) forwardPass();
+    // Vectors keep actual shape; W matrices are drawn TRANSPOSED to match the labels (W₁ᵀ, W₂ᵀ, W₃ᵀ).
+    buildMatrixGrid('matX',  40, 1, (i)    => activations[0][i] - 0.5);
+    buildMatrixGrid('matW1', 40, 96, (i, j) => weights.W1[j][i]);  // W₁ᵀ : 40 × 96
+    buildMatrixGrid('matH1', 96, 1, (i)    => activations[1][i] / 5);
+    buildMatrixGrid('matW2', 96, 42, (i, j) => weights.W2[j][i]);  // W₂ᵀ : 96 × 42
+    buildMatrixGrid('matH2', 42, 1, (i)    => activations[2][i] / 5);
+    buildMatrixGrid('matW3', 42, 4, (i, j) => weights.W3[j][i]);   // W₃ᵀ : 42 × 4
+    buildMatrixGrid('matY',   4, 1, (i)    => activations[3][i] - 0.25);
+  }
+
+  let forwardTimeout = null;
+  function stopForwardAnim() {
+    if (forwardTimeout) { clearTimeout(forwardTimeout); forwardTimeout = null; }
+    const flow = document.querySelector('.matmul-flow');
+    if (flow) {
+      flow.classList.remove('has-active');
+      flow.querySelectorAll('[data-seg].active').forEach(el => el.classList.remove('active'));
+    }
+  }
+  function activateMatmulRow(idx) {
+    const flow = document.querySelector('.matmul-flow');
+    if (!flow) return;
+    const els = flow.querySelectorAll('[data-seg]');
+    if (idx < 0) {
+      flow.classList.remove('has-active');
+      els.forEach(el => el.classList.remove('active'));
+      return;
+    }
+    flow.classList.add('has-active');
+    els.forEach(el => {
+      const segs = (el.dataset.seg || '').split(',').map(Number);
+      el.classList.toggle('active', segs.includes(idx));
+    });
+  }
+  function animateForward(layer) {
+    // Full pass (layer === -1) runs for exactly 10 seconds:
+    //   3000ms row 0 + 3000ms row 1 + 3000ms row 2 + 1000ms idle
+    stopForwardAnim();
+    if (layer === -1) {
+      const STEP = 3000;
+      const FINAL = 1000;
+      activateMatmulRow(0);
+      const advance = (l) => {
+        if (l < 3) {
+          activateMatmulRow(l);
+          forwardTimeout = setTimeout(() => advance(l + 1), STEP);
+        } else {
+          forwardTimeout = setTimeout(() => activateMatmulRow(-1), FINAL);
+        }
+      };
+      forwardTimeout = setTimeout(() => advance(1), STEP);
+    } else if (layer >= 0 && layer <= 2) {
+      activateMatmulRow(layer);
+      forwardTimeout = setTimeout(() => activateMatmulRow(-1), 2500);
+    }
+  }
+
+  // ==================== LOSS / OUTPUT DISPLAY ====================
+  function drawClassOutput() {
+    const container = document.getElementById('classOutput');
+    if (!container) return;
+    if (!activations[3]) forwardPass();
+    const probs = activations[3];
+    const trueIdx = 0; // Pretend "DoS" is the true label
+    container.innerHTML = '';
+    probs.forEach((p, i) => {
+      const row = document.createElement('div');
+      row.className = 'class-row';
+      const isPredicted = i === probs.indexOf(Math.max(...probs));
+      const isTrue = i === trueIdx;
+      row.innerHTML = `
+        <span class="class-name">${CLASSES[i]}${isTrue ? ' ✓' : ''}</span>
+        <div class="class-bar-bg"><div class="class-bar-fill ${isPredicted ? 'predicted' : ''} ${isTrue ? 'target' : ''}" style="width: ${(p * 100).toFixed(1)}%"></div></div>
+        <span class="class-value">${p.toFixed(4)}</span>
+      `;
+      container.appendChild(row);
+    });
+  }
+
+  // ==================== TRAINING SIMULATION ====================
+  function trainStep(steps = 1) {
+    for (let i = 0; i < steps; i++) {
+      trainingState.epoch++;
+      // Simulated loss curve: exp decay with some noise
+      const t = trainingState.epoch / 5000;
+      trainingState.loss = 1.386 * Math.exp(-3.3 * t) + 0.04 + (rand() - 0.5) * 0.015;
+      trainingState.loss = Math.max(0.04, trainingState.loss);
+      trainingState.acc = 0.97 - 0.72 * Math.exp(-3.5 * t) + (rand() - 0.5) * 0.01;
+      trainingState.acc = Math.min(0.97, Math.max(0.25, trainingState.acc));
+      trainingState.lr = 0.001 * Math.cos((Math.min(trainingState.epoch, 5000) / 5000) * Math.PI / 2);
+      trainingState.lr = Math.max(1e-5, trainingState.lr);
+
+      if (trainingState.epoch % 5 === 0 || trainingState.epoch < 50) {
+        trainingState.history.push({
+          epoch: trainingState.epoch,
+          loss: trainingState.loss,
+          acc: trainingState.acc
+        });
+      }
+      if (trainingState.history.length > 1500) trainingState.history.shift();
+    }
+    updateTrainingDisplay();
+    drawLossChart();
+  }
+
+  function updateTrainingDisplay() {
+    const el = id => document.getElementById(id);
+    el('updEpoch').textContent = trainingState.epoch;
+    el('updLoss').textContent = trainingState.loss.toFixed(3);
+    el('updAcc').textContent = (trainingState.acc * 100).toFixed(0) + '%';
+    el('updLR').textContent = trainingState.lr.toExponential(1).replace('e', 'e');
+  }
+
+  function toggleTrain() {
+    const btn = document.getElementById('trainBtn');
+    if (trainingState.isPlaying) {
+      clearInterval(trainingState.intervalId);
+      trainingState.isPlaying = false;
+      if (btn) { btn.textContent = '▶ Run Training'; btn.classList.add('primary'); }
+    } else {
+      trainingState.isPlaying = true;
+      if (btn) { btn.textContent = '⏸ Pause'; btn.classList.remove('primary'); }
+      trainingState.intervalId = setInterval(() => {
+        trainStep(20);
+        if (trainingState.epoch >= 5000) {
+          clearInterval(trainingState.intervalId);
+          trainingState.isPlaying = false;
+          if (btn) btn.textContent = '✓ Complete';
+        }
+      }, 50);
+    }
+  }
+
+  function resetTraining() {
+    clearInterval(trainingState.intervalId);
+    trainingState.isPlaying = false;
+    trainingState.epoch = 1;
+    trainingState.loss = 1.386;
+    trainingState.acc = 0.25;
+    trainingState.lr = 0.001;
+    trainingState.history = [{ epoch: 1, loss: 1.386, acc: 0.25 }];
+    const btn = document.getElementById('trainBtn');
+    if (btn) { btn.textContent = '▶ Run Training'; btn.classList.add('primary'); }
+    updateTrainingDisplay();
+    drawLossChart();
+  }
+
+  function drawLossChart() {
+    const canvas = document.getElementById('lossCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const padL = 50, padR = 60, padT = 20, padB = 36;
+    const cw = W - padL - padR, ch = H - padT - padB;
+    const hist = trainingState.history;
+    if (hist.length < 2) return;
+
+    const maxEpoch = 5000;
+
+    // Grid
+    ctx.strokeStyle = '#f0f0eb';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 5; i++) {
+      const y = padT + (i / 5) * ch;
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(W - padR, y);
+      ctx.stroke();
+    }
+
+    // Y-axis labels (loss, left)
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '500 10px JetBrains Mono';
+    ctx.textAlign = 'right';
+    for (let i = 0; i <= 5; i++) {
+      const v = 1.5 - (i / 5) * 1.5;
+      const y = padT + (i / 5) * ch + 4;
+      ctx.fillText(v.toFixed(2), padL - 8, y);
+    }
+
+    // Y-axis labels (acc, right)
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#9ca3af';
+    for (let i = 0; i <= 5; i++) {
+      const v = 1 - i / 5;
+      const y = padT + (i / 5) * ch + 4;
+      ctx.fillText(`${(v * 100).toFixed(0)}%`, W - padR + 8, y);
+    }
+
+    // X-axis labels
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#9ca3af';
+    for (let i = 0; i <= 5; i++) {
+      const x = padL + (i / 5) * cw;
+      const v = (i / 5) * maxEpoch;
+      ctx.fillText(v.toFixed(0), x, H - 14);
+    }
+
+    // Loss curve
+    ctx.strokeStyle = '#c9542a';
+    ctx.lineWidth = 3.5;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    hist.forEach((h, i) => {
+      const x = padL + (h.epoch / maxEpoch) * cw;
+      const y = padT + (1 - h.loss / 1.5) * ch;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Acc curve
+    ctx.strokeStyle = '#2d6a4f';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    hist.forEach((h, i) => {
+      const x = padL + (h.epoch / maxEpoch) * cw;
+      const y = padT + (1 - h.acc) * ch;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Current point markers
+    const last = hist[hist.length - 1];
+    const xCur = padL + (last.epoch / maxEpoch) * cw;
+    const yLoss = padT + (1 - last.loss / 1.5) * ch;
+    const yAcc = padT + (1 - last.acc) * ch;
+
+    ctx.fillStyle = '#c9542a';
+    ctx.beginPath();
+    ctx.arc(xCur, yLoss, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#2d6a4f';
+    ctx.beginPath();
+    ctx.arc(xCur, yAcc, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Legend
+    ctx.font = '500 11px JetBrains Mono';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#c9542a';
+    ctx.fillRect(padL, padT - 15, 16, 4);
+    ctx.fillText('Loss', padL + 22, padT - 8);
+    ctx.fillStyle = '#2d6a4f';
+    ctx.fillRect(padL + 76, padT - 15, 16, 4);
+    ctx.fillText('Accuracy', padL + 98, padT - 8);
+
+    // Axis labels
+    ctx.fillStyle = '#5c6370';
+    ctx.textAlign = 'center';
+    ctx.fillText('Epoch', padL + cw / 2, H - 2);
+  }
+
+  // ==================== WEIGHT MATRIX HEATMAPS ====================
+  function drawWeightMatrix(canvasId, matrix, statsPrefix) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const rows = matrix.length, cols = matrix[0].length;
+    const cellW = W / cols, cellH = H / rows;
+
+    // Compute stats
+    let sum = 0, sumSq = 0, count = 0;
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < cols; j++) {
+        sum += matrix[i][j];
+        sumSq += matrix[i][j] ** 2;
+        count++;
+      }
+    }
+    const mean = sum / count;
+    const variance = sumSq / count - mean ** 2;
+    const std = Math.sqrt(variance);
+
+    // Find max abs for scaling
+    let maxAbs = 0;
+    for (const row of matrix) for (const v of row) maxAbs = Math.max(maxAbs, Math.abs(v));
+    if (maxAbs === 0) maxAbs = 1;
+
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < cols; j++) {
+        const v = matrix[i][j];
+        const t = v / maxAbs;
+        // Diverging colormap: warm (negative) <-> light <-> cool (positive)
+        let r, g, b;
+        if (t > 0) {
+          // 0 → light, 1 → blue (#1a4d8f)
+          r = Math.round(250 + (26 - 250) * t);
+          g = Math.round(250 + (77 - 250) * t);
+          b = Math.round(247 + (143 - 247) * t);
+        } else {
+          // 0 → light, -1 → orange (#c9542a)
+          const tt = -t;
+          r = Math.round(250 + (201 - 250) * tt);
+          g = Math.round(250 + (84 - 250) * tt);
+          b = Math.round(247 + (42 - 247) * tt);
+        }
+        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        ctx.fillRect(j * cellW, i * cellH, Math.ceil(cellW), Math.ceil(cellH));
+      }
+    }
+
+    // Border
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, W, H);
+
+    // Update stats display
+    if (statsPrefix) {
+      const meanEl = document.getElementById(statsPrefix + 'Mean');
+      const stdEl = document.getElementById(statsPrefix + 'Std');
+      if (meanEl) meanEl.textContent = mean.toFixed(3);
+      if (stdEl) stdEl.textContent = std.toFixed(3);
+    }
+  }
+
+  function drawAllTrainedWeights() {
+    drawWeightMatrix('w1Canvas', weightsTrained.W1, 'w1');
+    drawWeightMatrix('w2Canvas', weightsTrained.W2, 'w2');
+    drawWeightMatrix('w3Canvas', weightsTrained.W3, 'w3');
+  }
+
+  // ==================== NAVIGATION ====================
+  function showStep(step) {
+    if (step < 0 || step >= 5) return;
+    currentStep = step;
+
+    document.querySelectorAll('.step-content').forEach(el => {
+      el.classList.toggle('active', parseInt(el.dataset.step) === step);
+    });
+    document.querySelectorAll('.step-item').forEach((el, i) => {
+      el.classList.remove('active', 'done');
+      if (i === step) el.classList.add('active');
+      else if (i < step) el.classList.add('done');
+    });
+
+    document.getElementById('navStep').textContent = step + 1;
+    document.getElementById('navTitle').textContent = STEP_TITLES[step];
+
+    document.getElementById('prevBtn').disabled = step === 0;
+    const nextBtn = document.getElementById('nextBtn');
+    if (step === 4) {
+      nextBtn.innerHTML = 'Restart <span class="arrow">↻</span>';
+    } else {
+      nextBtn.innerHTML = 'Next <span class="arrow">→</span>';
+    }
+
+    // Stop animations from previous step
+    cancelAnimationFrame(backwardAnimId);
+    stopForwardAnim();
+    if (trainingState.isPlaying) {
+      clearInterval(trainingState.intervalId);
+      trainingState.isPlaying = false;
+      const tb = document.getElementById('trainBtn');
+      if (tb) { tb.textContent = '▶ Run Training'; tb.classList.add('primary'); }
+    }
+
+    requestAnimationFrame(() => {
+      if (step === 0) drawArchitecture();
+      if (step === 1) {
+        buildForwardMatrices();
+        // Auto-play full forward pass (10 sec) over the matmul stack
+        forwardTimeout = setTimeout(() => animateForward(-1), 400);
+      }
+      if (step === 2) {
+        backwardAnimT = 0;
+        animateBackward();
+      }
+      if (step === 3) {
+        // Auto-train from epoch 1
+        resetTraining();
+        setTimeout(() => { if (currentStep === 3 && !trainingState.isPlaying) toggleTrain(); }, 400);
+      }
+      if (step === 4) {
+        drawAllTrainedWeights();
+      }
+    });
+  }
+
+  function next() {
+    if (currentStep === 4) {
+      showStep(0);
+    } else {
+      showStep(currentStep + 1);
+    }
+  }
+
+  function prev() { showStep(currentStep - 1); }
+
+  // Keyboard nav
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight') next();
+    if (e.key === 'ArrowLeft') prev();
+  });
+
+  // Step bar click
+  document.getElementById('stepBar').addEventListener('click', e => {
+    const item = e.target.closest('.step-item');
+    if (item) showStep(parseInt(item.dataset.step));
+  });
+
+  // ==================== 16:9 SLIDE FIT ====================
+  function fitSlide() {
+    const stage = document.getElementById('slideStage');
+    const content = document.getElementById('slideContent');
+    if (!stage || !content) return;
+    const scale = Math.min(stage.clientWidth / 1600, stage.clientHeight / 900);
+    content.style.transform = `scale(${scale})`;
+  }
+
+  // ==================== BOOT ====================
+  initWeights();
+  forwardPass();
+  showStep(0);
+  fitSlide();
+
+  // Redraw on resize
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    fitSlide();
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { showStep(currentStep); fitSlide(); }, 200);
+  });
+</script>
+
+</body>
+</html>

@@ -11,17 +11,17 @@
   :root{
     --bg:#ffffff;
     --bg-2:#ffffff;
-    --bg-3:#f0eee8;
-    --panel:#fbfaf6;
-    --line:#e3e0d8;
-    --line-2:#c9c5ba;
+    --bg-3:#eef2f8;
+    --panel:#f7f9fc;
+    --line:#dee3ec;
+    --line-2:#c0c8d6;
     --text:#1b1d20;
     --text-dim:#555a62;
     --text-mute:#8b8f97;
-    --accent:#1a7f5a;     /* forest */
-    --accent-2:#b4873c;   /* amber */
-    --accent-3:#3a63b8;   /* blue for data */
-    --accent-4:#7a4ea8;   /* violet for control */
+    --accent:#4A55B8;     /* indigo (primary) */
+    --accent-2:#88AED4;   /* sky blue (secondary) */
+    --accent-3:#3B47A6;   /* deep indigo for data */
+    --accent-4:#6B7DD0;   /* medium indigo for control */
     --danger:#b23b3b;
   }
   *{box-sizing:border-box}
@@ -34,12 +34,12 @@
   header.bar{
     display:flex;align-items:center;gap:18px;
     padding:14px 24px;border-bottom:1px solid var(--line);
-    background:#fbfaf6;
+    background:#f7f9fc;
   }
   .brand{display:flex;align-items:baseline;gap:10px}
   .brand .mark{
     width:22px;height:22px;border-radius:6px;
-    background:conic-gradient(from 120deg,#1a7f5a,#3a63b8,#7a4ea8,#b4873c,#1a7f5a);
+    background:conic-gradient(from 120deg,#4A55B8,#88AED4,#3B47A6,#6B7DD0,#4A55B8);
     position:relative;
   }
   .brand .mark::after{
@@ -62,7 +62,7 @@
   .main{display:grid;grid-template-columns:1fr;min-height:0}
   .stage{
     position:relative;background:
-      radial-gradient(1200px 600px at 30% -10%,#fdfcf8 0%,transparent 60%),
+      radial-gradient(1200px 600px at 30% -10%,#f5f8fc 0%,transparent 60%),
       var(--bg);
     padding:14px 28px 12px 28px;overflow:auto;
   }
@@ -136,7 +136,7 @@
   .phasebar .p .lbl{display:block;font-weight:500;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:none;letter-spacing:0;font-size:11px;margin-top:1px}
   .phasebar .p:last-child{border-right:0}
   .phasebar .p.done{color:var(--text-dim)}
-  .phasebar .p.active{color:var(--text);background:linear-gradient(180deg,rgba(26,127,90,.10),transparent)}
+  .phasebar .p.active{color:var(--text);background:linear-gradient(180deg,rgba(74,85,184,.10),transparent)}
   .phasebar .p.active::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--accent)}
   .phasebar .p .n{font-family:"JetBrains Mono",monospace;font-size:9px;color:var(--text-mute);display:block}
 
@@ -145,46 +145,46 @@
   .verify .row2 .l{font-size:13px}
   .verify .row2 .l small{display:block;color:var(--text-mute);font-family:"JetBrains Mono",monospace;font-size:11px;margin-top:2px}
   .verify .badge{font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:3px 8px;border-radius:4px;font-weight:600}
-  .verify .badge.ok{background:rgba(26,127,90,.12);color:var(--accent)}
-  .verify .badge.warn{background:rgba(180,135,60,.15);color:var(--accent-2)}
-  .verify .badge.info{background:rgba(58,99,184,.12);color:var(--accent-3)}
+  .verify .badge.ok{background:rgba(74,85,184,.12);color:var(--accent)}
+  .verify .badge.warn{background:rgba(136,174,212,.15);color:var(--accent-2)}
+  .verify .badge.info{background:rgba(59,71,166,.12);color:var(--accent-3)}
   .verify h4{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-mute);margin:22px 0 6px 0;font-weight:500}
   .verify h4:first-child{margin-top:0}
 
   /* diagram styling (for JSX components too) */
   .block{cursor:pointer;transition:filter .15s ease}
   .block:hover{filter:brightness(1.15)}
-  .block .body{fill:#ffffff;stroke:#c9c5ba;stroke-width:1}
+  .block .body{fill:#ffffff;stroke:#c0c8d6;stroke-width:1}
   .block.selected .body{stroke:var(--accent);stroke-width:2}
-  .block.active .body{stroke:var(--accent);stroke-width:1.5;filter:drop-shadow(0 0 6px rgba(26,127,90,.35))}
+  .block.active .body{stroke:var(--accent);stroke-width:1.5;filter:drop-shadow(0 0 6px rgba(74,85,184,.35))}
   .block .title{fill:#1b1d20;font-family:"Inter Tight",sans-serif;font-weight:600;font-size:13px;pointer-events:none}
   .block .sub{fill:#6b7079;font-family:"JetBrains Mono",monospace;font-size:10px;pointer-events:none}
 
-  .wire{stroke:#b7b2a5;stroke-width:1.5;fill:none}
+  .wire{stroke:#b8c0d0;stroke-width:1.5;fill:none}
   .wire.data{stroke:var(--accent-3)}
   .wire.ctrl{stroke:var(--accent-4)}
-  .wire.active{stroke:var(--accent);stroke-width:2.2;filter:drop-shadow(0 0 4px rgba(26,127,90,.35))}
+  .wire.active{stroke:var(--accent);stroke-width:2.2;filter:drop-shadow(0 0 4px rgba(74,85,184,.35))}
 
   .wire-label{display:none}
-  .wire-label.ctrl{fill:#7a4a2a}
-  .wire-label.active{fill:#0f5a3a;font-weight:600}
+  .wire-label.ctrl{fill:#3B47A6}
+  .wire-label.active{fill:#2E3A8C;font-weight:600}
 
   /* band labels + tensor core inset */
-  .band-label{fill:#8a8574;font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.2em;font-weight:600;pointer-events:none}
-  .tc-inset .tc-title{fill:#3a3a32;font-family:"Inter Tight",sans-serif;font-weight:600;font-size:12px;letter-spacing:.12em;pointer-events:none}
-  .tc-inset .tc-sub{fill:#8a8574;font-family:"JetBrains Mono",monospace;font-size:10px;pointer-events:none}
-  .tc-inset .tc-lbl{fill:#2a2a22;font-family:"Inter Tight",sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;pointer-events:none}
+  .band-label{fill:#8d92a3;font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.2em;font-weight:600;pointer-events:none}
+  .tc-inset .tc-title{fill:#2a2e3c;font-family:"Inter Tight",sans-serif;font-weight:600;font-size:12px;letter-spacing:.12em;pointer-events:none}
+  .tc-inset .tc-sub{fill:#8d92a3;font-family:"JetBrains Mono",monospace;font-size:10px;pointer-events:none}
+  .tc-inset .tc-lbl{fill:#1f2330;font-family:"Inter Tight",sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;pointer-events:none}
   .tc-inset .tc-note{fill:#6b7680;font-family:"JetBrains Mono",monospace;font-size:9.5px;pointer-events:none}
-  .tc-inset .tc-cell{fill:#3a3a32;font-family:"JetBrains Mono",monospace;font-size:9.5px;pointer-events:none}
-  .tc-inset .tc-mul{fill:#1a3b2a;font-family:"Inter Tight",sans-serif;font-weight:700;font-size:14px;pointer-events:none}
-  .tc-inset .tc-stage{fill:#2a2a22;font-family:"Inter Tight",sans-serif;font-weight:700;font-size:13px;letter-spacing:.08em;pointer-events:none}
-  .tc-inset .tc-stage-sub{fill:#8a8574;font-family:"JetBrains Mono",monospace;font-size:9px;pointer-events:none}
-  .tc-inset .tc-fu{fill:#1a3b2a;font-family:"JetBrains Mono",monospace;font-size:9.5px;font-weight:600;pointer-events:none}
+  .tc-inset .tc-cell{fill:#2a2e3c;font-family:"JetBrains Mono",monospace;font-size:9.5px;pointer-events:none}
+  .tc-inset .tc-mul{fill:#2E3A8C;font-family:"Inter Tight",sans-serif;font-weight:700;font-size:14px;pointer-events:none}
+  .tc-inset .tc-stage{fill:#1f2330;font-family:"Inter Tight",sans-serif;font-weight:700;font-size:13px;letter-spacing:.08em;pointer-events:none}
+  .tc-inset .tc-stage-sub{fill:#8d92a3;font-family:"JetBrains Mono",monospace;font-size:9px;pointer-events:none}
+  .tc-inset .tc-fu{fill:#2E3A8C;font-family:"JetBrains Mono",monospace;font-size:9.5px;font-weight:600;pointer-events:none}
   .tc-inset .tc-fu-dim{fill:#6b7680;font-weight:400}
-  .tc-inset .tc-lane{fill:#1a7f5a;font-family:"Inter Tight",sans-serif;font-weight:700;font-size:10.5px;letter-spacing:.14em;pointer-events:none}
+  .tc-inset .tc-lane{fill:#4A55B8;font-family:"Inter Tight",sans-serif;font-weight:700;font-size:10.5px;letter-spacing:.14em;pointer-events:none}
   .tc-inset.active .tc-title{fill:var(--accent)}
-  .tc-inset.active .tc-cell{fill:#0b3a28;font-weight:600}
-  .tc-inset.active .tc-mul{fill:#0b3a28}
+  .tc-inset.active .tc-cell{fill:#1F2A6E;font-weight:600}
+  .tc-inset.active .tc-mul{fill:#1F2A6E}
   .board{max-width:1450px !important}
 
   /* packet token */
@@ -193,7 +193,7 @@
 
   /* scrollbars */
   ::-webkit-scrollbar{width:10px;height:10px}
-  ::-webkit-scrollbar-thumb{background:#d6d2c5;border-radius:5px}
+  ::-webkit-scrollbar-thumb{background:#c0c8d6;border-radius:5px}
   ::-webkit-scrollbar-track{background:transparent}
 
   /* tweaks panel */
@@ -233,13 +233,13 @@
   .legend{max-width:1450px;margin:-6px auto 0 auto;display:flex;gap:22px;align-items:center;padding:2px 10px;font-size:11px;color:var(--text-mute);font-family:"JetBrains Mono",monospace}
   .legend .li{display:inline-flex;align-items:center;gap:6px}
   .legend .sw{display:inline-block;width:18px;height:2px;border-radius:1px}
-  .legend .sw.data{background:#2b6cb0}
-  .legend .sw.ctrl{background:#8b5cf6}
-  .legend .sw.dash{width:14px;height:14px;border-radius:3px;background:#fdfcf7;border:1px dashed #b9c2b2}
+  .legend .sw.data{background:#3B47A6}
+  .legend .sw.ctrl{background:#6B7DD0}
+  .legend .sw.dash{width:14px;height:14px;border-radius:3px;background:#f5f8fc;border:1px dashed #b8c0d0}
   .legend .dot{position:relative;width:10px;height:10px;display:inline-block}
   .legend .dot::before,.legend .dot>span{content:"";position:absolute;inset:0;margin:auto;border-radius:50%}
-  .legend .dot::before{width:10px;height:10px;background:#1a7f5a;opacity:.25}
-  .legend .dot>span{width:5px;height:5px;background:#1a7f5a}
+  .legend .dot::before{width:10px;height:10px;background:#4A55B8;opacity:.25}
+  .legend .dot>span{width:5px;height:5px;background:#4A55B8}
 </style>
 </head>
 <body>
@@ -729,36 +729,36 @@ function Diagram({ selected, activeBlocks, activeWires, tokens, onSelect, showWi
           <path d="M10,0 L0,5 L10,10 z" fill="#8b8f97"/>
         </marker>
         <marker id="arrow-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-          <path d="M0,0 L10,5 L0,10 z" fill="#1a7f5a"/>
+          <path d="M0,0 L10,5 L0,10 z" fill="#4A55B8"/>
         </marker>
         <marker id="arrow-a-start" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-          <path d="M10,0 L0,5 L10,10 z" fill="#1a7f5a"/>
+          <path d="M10,0 L0,5 L10,10 z" fill="#4A55B8"/>
         </marker>
         <marker id="arrow-tc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
           <path d="M0,0 L10,5 L0,10 z" fill="#6b7680"/>
         </marker>
         <marker id="arrow-tc-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-          <path d="M0,0 L10,5 L0,10 z" fill="#1a7f5a"/>
+          <path d="M0,0 L10,5 L0,10 z" fill="#4A55B8"/>
         </marker>
       </defs>
 
       <g className="bands">
-        <rect x="20" y="20" width="170" height="450" rx="6" fill="#eeece2" opacity=".55"/>
+        <rect x="20" y="20" width="170" height="450" rx="6" fill="#eef2f8" opacity=".55"/>
         <text x="105" y="14" textAnchor="middle" className="band-label">CPU  CORE</text>
 
-        <rect x="190" y="20" width="230" height="450" rx="6" fill="#f1efe6" opacity=".45"/>
+        <rect x="190" y="20" width="230" height="450" rx="6" fill="#f3f6fb" opacity=".45"/>
         <text x="305" y="14" textAnchor="middle" className="band-label">CPU  DOMAIN</text>
 
-        <rect x="480" y="30" width="140" height="95" rx="6" fill="#f1efe6" opacity=".45"/>
+        <rect x="480" y="30" width="140" height="95" rx="6" fill="#f3f6fb" opacity=".45"/>
         <text x="550" y="24" textAnchor="middle" className="band-label">NETFPGA  1GbE</text>
 
-        <rect x="480" y="200" width="140" height="225" rx="6" fill="#eeece2" opacity=".55"/>
+        <rect x="480" y="200" width="140" height="225" rx="6" fill="#eef2f8" opacity=".55"/>
         <text x="550" y="194" textAnchor="middle" className="band-label">DMA  BRIDGE</text>
 
-        <rect x="670" y="195" width="170" height="155" rx="6" fill="#eeece2" opacity=".55"/>
+        <rect x="670" y="195" width="170" height="155" rx="6" fill="#eef2f8" opacity=".55"/>
         <text x="755" y="189" textAnchor="middle" className="band-label">GPU  MEMS</text>
 
-        <rect x="860" y="20" width="460" height="500" rx="6" fill="#ebeadf" opacity=".65"/>
+        <rect x="860" y="20" width="460" height="500" rx="6" fill="#e9eef7" opacity=".65"/>
         <text x="1090" y="14" textAnchor="middle" className="band-label">GPU  SM  DOMAIN</text>
       </g>
 
@@ -829,8 +829,8 @@ function Diagram({ selected, activeBlocks, activeWires, tokens, onSelect, showWi
         }
         return (
           <g key={i} className="token on">
-            <circle cx={x} cy={y} r="8" fill="#1a7f5a" opacity=".2"/>
-            <circle cx={x} cy={y} r="3.8" fill="#1a7f5a"/>
+            <circle cx={x} cy={y} r="8" fill="#4A55B8" opacity=".2"/>
+            <circle cx={x} cy={y} r="3.8" fill="#4A55B8"/>
           </g>
         );
       })}
@@ -863,7 +863,7 @@ function Diagram({ selected, activeBlocks, activeWires, tokens, onSelect, showWi
               </>
             )}
             {act && (
-              <circle cx={rect.x + rect.w - 12} cy={rect.y + 12} r="4" fill="#1a7f5a">
+              <circle cx={rect.x + rect.w - 12} cy={rect.y + 12} r="4" fill="#4A55B8">
                 <animate attributeName="opacity" values="1;0.25;1" dur="1.2s" repeatCount="indefinite"/>
               </circle>
             )}
@@ -874,8 +874,8 @@ function Diagram({ selected, activeBlocks, activeWires, tokens, onSelect, showWi
       {(() => {
         const bandY = 52;
         const bandH = 116;
-        const bandStroke = tcActive ? "#1a7f5a" : "#a9ada3";
-        const fuStroke   = tcActive ? "#1a7f5a" : "#8a8f7a";
+        const bandStroke = tcActive ? "#4A55B8" : "#a8b1c2";
+        const fuStroke   = tcActive ? "#4A55B8" : "#8e95a8";
         const fuW = 118, fuH = 34, fuGap = 14, badgeW = 34, badgeGap = 14;
         const laneInnerW = 2*fuW + fuGap + badgeGap + badgeW;
         const laneW = laneInnerW + 24;
@@ -905,19 +905,19 @@ function Diagram({ selected, activeBlocks, activeWires, tokens, onSelect, showWi
         const coutX = fmaX;
         const coutY = fmaY + fmaSide + 8;
 
-        const cellFill  = tcActive ? "#fbf0c8" : "#f6ecd4";
-        const cellStk   = "#8a7a3a";
-        const mulFill   = tcActive ? "#c6ead4" : "#ede9d8";
-        const mulStk    = tcActive ? "#1a7f5a" : "#8e907f";
-        const outFill   = tcActive ? "#79ccab" : "#ebe9d6";
-        const outStk    = tcActive ? "#15633f" : "#7a7d6d";
+        const cellFill  = tcActive ? "#dde7f7" : "#e7eef8";
+        const cellStk   = "#6975a8";
+        const mulFill   = tcActive ? "#c5cdec" : "#e6ebf4";
+        const mulStk    = tcActive ? "#4A55B8" : "#8e95a8";
+        const outFill   = tcActive ? "#7287d4" : "#e6ebf4";
+        const outStk    = tcActive ? "#2E3A8C" : "#7a82a0";
         const mk = tcActive ? "url(#arrow-tc-a)" : "url(#arrow-tc)";
-        const wire = tcActive ? "#1a7f5a" : "#8a8f7a";
+        const wire = tcActive ? "#4A55B8" : "#8e95a8";
 
         return (
           <g className={`tc-inset ${tcActive?"active":""}`} transform={`translate(${gpu.x}, ${gpu.y})`}>
             <rect x="10" y={bandY} width={gpu.w-20} height={bandH} rx="8"
-                  fill="#fdfcf7" stroke="#b9c2b2" strokeDasharray="3 3"/>
+                  fill="#f5f8fc" stroke="#b8c0d0" strokeDasharray="3 3"/>
             <text x={gpu.w/2} y={bandY+20} textAnchor="middle" className="tc-title">
               SP  LANE  ·  scalar  compute
             </text>
@@ -926,24 +926,24 @@ function Diagram({ selected, activeBlocks, activeWires, tokens, onSelect, showWi
               <rect key={`laneshadow-${k}`}
                     x={laneX + k*4} y={laneY + k*4}
                     width={laneW} height={laneH} rx="8"
-                    fill="#fdfcf7" stroke={bandStroke} strokeDasharray="3 3" opacity={0.35 - k*0.08}/>
+                    fill="#f5f8fc" stroke={bandStroke} strokeDasharray="3 3" opacity={0.35 - k*0.08}/>
             ))}
             <rect x={laneX} y={laneY} width={laneW} height={laneH} rx="8"
-                  fill="#faf7ea" stroke={bandStroke} strokeWidth="1.1"/>
+                  fill="#f0f3fa" stroke={bandStroke} strokeWidth="1.1"/>
 
             <rect x={fuAx} y={fuY} width={fuW} height={fuH} rx="6"
-                  fill={tcActive?"#e2dcc7":"#ece9d8"}
+                  fill={tcActive?"#d6deec":"#e3e8f1"}
                   stroke={fuStroke} strokeWidth="1"/>
             <text x={fuAx + fuW/2} y={fuY + fuH/2 + 4} textAnchor="middle" className="tc-stage" style={{fontSize:12}}>INT16 ALU</text>
 
             <rect x={fuBx} y={fuY} width={fuW} height={fuH} rx="6"
-                  fill={tcActive?"#e2dcc7":"#ece9d8"}
+                  fill={tcActive?"#d6deec":"#e3e8f1"}
                   stroke={fuStroke} strokeWidth="1"/>
             <text x={fuBx + fuW/2} y={fuY + fuH/2 + 4} textAnchor="middle" className="tc-stage" style={{fontSize:12}}>BF16 FPU</text>
 
             <g transform={`translate(${badgeX}, ${fuY})`}>
               <rect x="0" y="0" width={badgeW} height={fuH} rx="5"
-                    fill={tcActive?"#d7efe0":"#ece9d8"}
+                    fill={tcActive?"#c8d2eb":"#e3e8f1"}
                     stroke={fuStroke} strokeWidth="1.1"/>
               <text x={badgeW/2} y={fuH/2 + 4} textAnchor="middle" className="tc-stage" style={{fontSize:12}}>× 4</text>
             </g>
@@ -958,7 +958,7 @@ function Diagram({ selected, activeBlocks, activeWires, tokens, onSelect, showWi
             </g>
 
             <rect x="10" y={tcY} width={gpu.w-20} height={tcH} rx="8"
-                  fill="#fdfcf7" stroke="#b9c2b2" strokeDasharray="3 3"/>
+                  fill="#f5f8fc" stroke="#b8c0d0" strokeDasharray="3 3"/>
             <text x={gpu.w/2} y={tcY+22} textAnchor="middle" className="tc-title">
               TENSOR  CORE  ·  4×4  WMMA.MMA  (BF16)
             </text>
@@ -970,7 +970,7 @@ function Diagram({ selected, activeBlocks, activeWires, tokens, onSelect, showWi
                   <rect x={tileAx + j*cellA} y={tileAbY + i*cellA} width={cellA} height={cellA}
                         fill={cellFill} stroke={cellStk} strokeWidth="0.8"/>
                   <text x={tileAx + j*cellA + cellA/2} y={tileAbY + i*cellA + cellA/2 + 3.5}
-                        textAnchor="middle" className="tc-cell" fill="#3a2e15">a{i}{j}</text>
+                        textAnchor="middle" className="tc-cell" fill="#1F2A6E">a{i}{j}</text>
                 </g>
               ))
             )}
@@ -982,7 +982,7 @@ function Diagram({ selected, activeBlocks, activeWires, tokens, onSelect, showWi
                   <rect x={tileBx + j*cellA} y={tileAbY + i*cellA} width={cellA} height={cellA}
                         fill={cellFill} stroke={cellStk} strokeWidth="0.8"/>
                   <text x={tileBx + j*cellA + cellA/2} y={tileAbY + i*cellA + cellA/2 + 3.5}
-                        textAnchor="middle" className="tc-cell" fill="#3a2e15">b{i}{j}</text>
+                        textAnchor="middle" className="tc-cell" fill="#1F2A6E">b{i}{j}</text>
                 </g>
               ))
             )}
@@ -1001,7 +1001,7 @@ function Diagram({ selected, activeBlocks, activeWires, tokens, onSelect, showWi
                   <rect x={tileCx + j*cellA} y={tileCy + i*cellA} width={cellA} height={cellA}
                         fill={cellFill} stroke={cellStk} strokeWidth="0.8"/>
                   <text x={tileCx + j*cellA + cellA/2} y={tileCy + i*cellA + cellA/2 + 3.5}
-                        textAnchor="middle" className="tc-cell" fill="#3a2e15">c{i}{j}</text>
+                        textAnchor="middle" className="tc-cell" fill="#1F2A6E">c{i}{j}</text>
                 </g>
               ))
             )}
@@ -1375,7 +1375,7 @@ function App(){
     document.getElementById("tw-accent").value = tw.accent;
     document.getElementById("tw-accent").onchange = (e) => {
       setTweak("accent", e.target.value);
-      const map = { mint:"#7cf0c7", blue:"#8ab6ff", amber:"#ffcb6b" };
+      const map = { mint:"#4A55B8", blue:"#3B47A6", amber:"#88AED4" };
       document.documentElement.style.setProperty("--accent", map[e.target.value]);
     };
   }, [total, tweaksOpen, tw]);
